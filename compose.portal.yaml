@@ -32,7 +32,7 @@ services:
     pids_limit: 96
     tmpfs: ["/tmp:size=32m,mode=1777", "/run:size=4m"]
     volumes:
-      - /docker/${COMPOSE_PROJECT_NAME}:/docker/${COMPOSE_PROJECT_NAME}
+      - /docker/${COMPOSE_PROJECT_NAME:?Compose project name is required}:/docker/${COMPOSE_PROJECT_NAME:?Compose project name is required}
       - /var/run/docker.sock:/var/run/docker.sock
       - /var/lib/buzz-agents-v2:/var/lib/buzz-agents-v2
       - /var/lib/buzz-agents-easy-scheduler:/var/lib/buzz-agents-easy-scheduler

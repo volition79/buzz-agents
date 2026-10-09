@@ -92,3 +92,5 @@ Acceptance still requires the real hPanel response to include setup-route and a
 non-null entrypoint_url, then Open must reach the existing trusted HTTPS portal.
 CI Compose visibility/TLS fixtures cannot prove hPanel's private selection logic.
 AI authentication and the original Windows-off fresh task remain unverified.
+
+Final broker image build [CI37912336094](https://github.com/volition79/buzz-agents/actions/runs/37912336094) passed image source a1f82117471dfbdf6d9ff0d5d413f13900da5c83: 134 Python tests, retained Go race/vet gates, new installs with shared and host-mode real Traefik, and legacy helper migration through broker-only replacement. Compose ps/down includes route; portal container identity, dollar-containing environment and existing Relay/Traefik remain unchanged. Portal/runtime image digests are retained. Sole auditor's rollback findings were corrected and regression-tested; final review found no further blocker. New broker digest: 56d45e699381baf6e79bc16934d24f64713be6b6e6a3bf21fef52f7a82df73c8. Final Raw-URL artifact smoke follows; actual hPanel Open remains unverified.

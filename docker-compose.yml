@@ -13,7 +13,7 @@ services:
     mem_limit: 64m
     pids_limit: 16
   broker:
-    image: ghcr.io/volition79/buzz-agents-broker@sha256:00c183b8e229e5f0627fa9fcb43eecc3c9bb7c97c42104078f90004ee8126145
+    image: ghcr.io/volition79/buzz-agents-broker@sha256:56d45e699381baf6e79bc16934d24f64713be6b6e6a3bf21fef52f7a82df73c8
     depends_on:
       runtime-image:
         condition: service_completed_successfully
@@ -32,6 +32,7 @@ services:
     pids_limit: 96
     tmpfs: ["/tmp:size=32m,mode=1777", "/run:size=4m"]
     volumes:
+      - /docker/${COMPOSE_PROJECT_NAME:?Compose project name is required}:/docker/${COMPOSE_PROJECT_NAME:?Compose project name is required}
       - /var/run/docker.sock:/var/run/docker.sock
       - /var/lib/buzz-agents-v2:/var/lib/buzz-agents-v2
       - /var/lib/buzz-agents-easy-scheduler:/var/lib/buzz-agents-easy-scheduler
