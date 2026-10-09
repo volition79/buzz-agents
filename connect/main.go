@@ -4,6 +4,7 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"crypto/sha256"
 	_ "embed"
 	"encoding/json"
 	"errors"
@@ -36,6 +37,21 @@ type Connection struct {
 }
 
 var tokenPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{32,100}$`)
+
+// Exact hashes from these public candidate manifests. web-provider source is
+// unchanged across these releases (8ae5df6d57c1..25672286bcee). Preserve the
+// approved installed binary, never execute or overwrite an unknown one.
+var compatibleProviders = map[string]bool{
+	"1540596853ef1154e52c73f18cc78b1d4f8c71faaca0e0f0b5bcee8a7eb0d357": true, // a1f82117471d-11-1
+	"f705df98f3daecac76556a2ad8747728e2e859e3aba3b737a14dd163c25259d9": true, // a404be735bc9-10-1
+	"9ff1923b3a8dc76afcf3602403b2ea2cf924b1269b51316d847d8ed069180d4c": true, // 9d6683aea675-6-1 (installed portal image)
+	"3bf50e248155fed4ac4c00bb59e0b00428006e4d0be93512f85f56268d142a09": true, // 3518e79bc21a-3-1
+	"b7c680d2612f575b4c7fdae192a2391612cf1ae50522029891a092615de68709": true, // 8ae5df6d57c1-1-1
+}
+
+func compatibleProvider(data []byte) bool {
+	return bytes.Equal(data, provider) || compatibleProviders[fmt.Sprintf("%x", sha256.Sum256(data))]
+}
 
 func validate(p Pairing) error {
 	u, e := url.Parse(p.Endpoint)
@@ -157,7 +173,7 @@ func installConnection(p Pairing, home string, client *http.Client, replace bool
 	}
 	bin := filepath.Join(home, ".local", "bin")
 	target := filepath.Join(bin, "buzz-backend-hostinger-https.exe")
-	if oldBytes, err := os.ReadFile(target); err == nil && !bytes.Equal(oldBytes, provider) {
+	if oldBytes, err := os.ReadFile(target); err == nil && !compatibleProvider(oldBytes) {
 		return errors.New("다른 버전의 HTTPS 연결기가 있어 자동으로 덮어쓰지 않습니다.")
 	} else if err != nil && !os.IsNotExist(err) {
 		return err

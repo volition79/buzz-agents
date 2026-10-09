@@ -19,7 +19,7 @@ def main():
     go = os.environ.get('BUZZ_BUILD_GO', 'go')
     for module, destination in [('web-provider', assets/'buzz-backend-hostinger-https.exe'),
                                 ('connect', assets/'Buzz-VPS-Connect.exe')]:
-        subprocess.run([go, 'build', '-trimpath', '-ldflags=-s -w', '-o', str(destination), '.'],
+        subprocess.run([go, 'build', '-buildvcs=false', '-trimpath', '-ldflags=-s -w', '-o', str(destination), '.'],
                        cwd=ROOT/module, env=env, check=True)
     for filename in ('Buzz-VPS-Connect.exe', 'buzz-backend-hostinger-https.exe'):
         shutil.copyfile(assets/filename, output/filename)

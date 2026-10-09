@@ -1,7 +1,9 @@
 package main
 
 import (
+	"crypto/sha256"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -217,5 +219,31 @@ func TestHealthyConnectionCheckDoesNotConsumePairing(t *testing.T) {
 	defer server.Close()
 	if !deviceRequest(Connection{server.URL, token, id}, "check", server.Client()) {
 		t.Fatal("healthy connection not recognized")
+	}
+}
+
+func TestReviewedCompatibleProviderIsKept(t *testing.T) {
+	home := t.TempDir()
+	bin := filepath.Join(home, ".local", "bin")
+	os.MkdirAll(bin, 0700)
+	old := []byte("reviewed-compatible-provider-fixture")
+	hash := fmt.Sprintf("%x", sha256.Sum256(old))
+	compatibleProviders[hash] = true
+	defer delete(compatibleProviders, hash)
+	target := filepath.Join(bin, "buzz-backend-hostinger-https.exe")
+	os.WriteFile(target, old, 0600)
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		io.WriteString(w, `{"ok":true,"token":"`+strings.Repeat("t", 43)+`","device_id":"aaaaaaaaaaaaaaaaaaaaaaaa"}`)
+	}))
+	defer server.Close()
+	if err := install(Pairing{1, server.URL, strings.Repeat("p", 43)}, home, server.Client()); err != nil {
+		t.Fatal(err)
+	}
+	after, _ := os.ReadFile(target)
+	if string(after) != string(old) {
+		t.Fatal("reviewed provider overwritten")
+	}
+	if compatibleProvider(append(old, byte('!'))) {
+		t.Fatal("modified provider accepted")
 	}
 }
