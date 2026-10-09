@@ -235,7 +235,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header('X-Content-Type-Options', 'nosniff')
         self.send_header('Referrer-Policy', 'no-referrer')
         self.send_header('X-Frame-Options', 'DENY')
-        self.send_header('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
+        self.send_header('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'")
         if not self.server.app.local:
             self.send_header('Strict-Transport-Security', 'max-age=31536000')
         if cookie is not None:
@@ -280,6 +280,10 @@ class Handler(BaseHTTPRequestHandler):
                   '/guide/community.png': ('guide/community.png', 'image/png'),
                   '/guide/join-address.png': ('guide/join-address.png', 'image/png'),
                   }
+        if self.command == 'GET' and self.path == '/setup.js':
+            # One dependency-ordered request fits retained two-slot setup bridges.
+            bundle = (WEB / 'i18n.js').read_bytes() + b'\n;\n' + (WEB / 'app.js').read_bytes()
+            return self.respond(200, bundle, 'text/javascript; charset=utf-8')
         if self.command == 'GET' and self.path in static:
             file, content_type = static[self.path]
             return self.respond(200, (WEB / file).read_bytes(), content_type)

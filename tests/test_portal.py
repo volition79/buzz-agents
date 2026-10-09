@@ -136,11 +136,23 @@ class PortalHTTPTests(unittest.TestCase):
         self.assertEqual(self.call('/api/hello')[0], 403)
         self.assertEqual(self.call('/api/hello', headers={'X-Forwarded-Proto': 'https'})[0], 200)
 
+    def test_single_setup_script_preserves_dependency_order(self):
+        status, raw, headers = self.call('/setup.js')
+        self.assertEqual(status, 200)
+        self.assertTrue(headers['Content-Type'].startswith('text/javascript'))
+        from buzz_agents.portal import WEB
+        self.assertEqual(raw, (WEB/'i18n.js').read_bytes()+b'\n;\n'+(WEB/'app.js').read_bytes())
+        page = self.call('/')[1]
+        self.assertIn(b'src="/setup.js"', page)
+        self.assertNotIn(b'src="/i18n.js"', page)
+        self.assertNotIn(b'src="/app.js"', page)
+
     def test_public_page_security_headers_and_no_secrets(self):
         status, raw, headers = self.call('/')
         self.assertEqual(status, 200)
         self.assertEqual(headers['Cache-Control'], 'no-store')
         self.assertIn("frame-ancestors 'none'", headers['Content-Security-Policy'])
+        self.assertIn("form-action 'none'", headers['Content-Security-Policy'])
         self.assertNotIn(self.app.setup_code.encode(), raw)
         self.assertIn('root 비밀번호'.encode(), raw)
 

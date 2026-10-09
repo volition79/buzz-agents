@@ -107,6 +107,7 @@ async function boot(){try{
     else message(hello.claimed?t('이미 설정된 서버입니다. 기존 비밀번호로 로그인하세요.'):t('아직 최초 설정 전입니다. 최신 setup code로 시작하세요.'));
     accessFragment=null;
   }
+  $('startupNote').hidden=true;$('loginSubmit').disabled=false;
   if(hello.authenticated&&$('recoveryForm').hidden)await enter();
 }catch(e){message(e.message,true);}}
 window.addEventListener('hashchange',()=>{accessFragment=takeAccessFragment();if(accessFragment)boot();});

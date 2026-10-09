@@ -2,6 +2,7 @@
 // Korean source copy is the message key. Add another catalog to support another locale.
 (() => {
   const catalogs = {en: {
+  "화면을 준비하고 있습니다. 버튼이 활성화되지 않으면 새로고침하세요.": "Preparing setup. If the button stays disabled, refresh this page.",
   "Buzz · VPS 연결": "Buzz · VPS Setup",
   "Buzz 연결 처음으로": "Back to Buzz setup",
   "컴퓨터를 꺼도,": "Even when your PC is off,",
