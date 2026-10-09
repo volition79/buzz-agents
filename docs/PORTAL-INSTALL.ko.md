@@ -9,7 +9,7 @@ v0.4 공개 개발 후보입니다. GitHub에서 이미지 빌드·임시 Compos
 한국어·영어 자동 표시와 재시작 안내를 포함한 Docker Manager **컴포즈 → URL에서 Compose** 주소:
 
 ```text
-https://raw.githubusercontent.com/volition79/buzz-agents/01d385829515df2870af5d6925e53c22a6d81183/docker-compose.yml
+https://raw.githubusercontent.com/volition79/buzz-agents/89f7ff848cbb250086a5e57146e174fcb89b073c/docker-compose.yml
 ```
 
 도메인 환경변수를 요구하지 않는 자동 초기 설정 후보입니다. 기존 **Hostinger 기본 도메인의 Buzz Relay와 Traefik**이 먼저 실행되어 있어야 합니다.

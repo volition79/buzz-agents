@@ -2,6 +2,8 @@
 
 This candidate adds automatic Korean/English UI selection (132 entries), English fallback, and project-menu restart instructions for initial setup codes. Chrome locale tests cover Korean, US/UK English, French fallback, localized static/dynamic text, recovery and unmodified user/provider content. Desktop/mobile checks and the existing browser connection flow passed; portal unit tests: 25 passed. The new i18n script is served through the same protected static handler. These are local fixture results; live VPS update and original real-AI/Windows-off acceptance are separate.
 
+Published source `4dda974a8239b2c21b1b7fd1c3c5ef7ebb4c81a2`: [candidate CI37933477258](https://github.com/volition79/buzz-agents/actions/runs/37933477258) passed 142 Python tests, scoped Go race/vet, four Docker startup/upgrade fixtures and anonymous image checks. [Exact Raw CI37933975910](https://github.com/volition79/buzz-agents/actions/runs/37933975910) passed on install commit `89f7ff848cbb250086a5e57146e174fcb89b073c`. Compose SHA256: `13e2d270b7d1897894ef6619c7ce4ae4f7a9b5461daccdfc253a70729454c3b8`. Published build-context bytes match the tested web sources. The user will install; no VPS configuration was changed.
+
 The following sections describe earlier candidate evidence and history.
 
 # v0.4 Docker portal — verification boundary
