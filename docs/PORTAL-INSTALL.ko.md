@@ -22,7 +22,7 @@ https://raw.githubusercontent.com/volition79/buzz-agents/a3843e798c28ab5c78eb741
 
 ## 설치 및 실서버 검증 순서
 
-1. Docker Manager에 위 Compose URL로 배포합니다. 기존 `traefik-proxy` 네트워크와 HTTPS 인증서 발급기 `letsencrypt`를 사용합니다. 환경값 추가 없이 배포합니다. 자동 구성 후 portal 로그의 `Buzz setup URL` 주소를 엽니다.
+1. Docker Manager에 위 Compose URL로 배포합니다. 먼저 Compose 기본 네트워크에서 시작한 뒤 기존 Relay·Traefik의 실제 네트워크와 HTTPS 라우터 설정을 검색합니다. 자기 portal만 발견한 네트워크에 연결하며, 기존 서비스의 네트워크는 바꾸지 않습니다. 환경값 추가 없이 배포합니다. 자동 구성 후 portal 로그의 `Buzz setup URL` 주소를 엽니다.
 2. 설정 화면을 엽니다. Docker Manager의 **portal 로그**에 나온 최초 설정 코드를 입력하고, 설정 화면용 비밀번호(12자 이상)를 정합니다. root 비밀번호와는 별개입니다. 최초 코드는 60분간 유효하며 사용 후 폐기됩니다. 만료 시 portal을 재시작하면 새 코드가 나옵니다.
 3. 기존 Relay를 자동으로 찾습니다. 주소·소유자 공개키를 확인하고 연결합니다. 여러 개면 선택하고, 찾지 못하면 두 공개 정보만 직접 입력합니다. 소유권을 Nostr 서명으로 새로 증명하는 기능은 아닙니다. Docker 관리자만 읽을 수 있는 최초 코드와 기존 Relay 설정을 신뢰하며, 봇 권한은 기존 Relay가 검증합니다.
 4. **Windows 연결 파일 받기** → ZIP 압축 풀기 → `Buzz-VPS-Connect.exe` 실행. 자기 서버 주소가 맞는지 확인합니다. 파일은 10분간 한 번만 사용 가능합니다.
@@ -88,3 +88,5 @@ docker build -f Dockerfile.portal --target portal -t buzz-agents-portal:0.4.0 .
 ## 자동 라우팅 컨테이너
 
 초기 Compose 서비스 3개 외에 `setup-route`가 추가됩니다. 같은 portal 이미지의 제한된 HTTP 전달 프로그램이며, 별도 인증 데이터·Docker 소켓·호스트 볼륨이 없습니다. 사용자 요청은 고정된 자기 portal로만 전달합니다. 같은 구성으로 재시작하면 재사용하며, 다른 이미지/구성의 기존 route는 자동 교체하지 않습니다. 이미지 업그레이드와 설치 삭제는 별도 관리 절차가 필요합니다.
+
+네트워크 자동 탐색 수정은 새 이미지 후보 검증 중입니다. 여러 네트워크/Traefik 후보가 남거나 HTTPS 라우터 설정을 확인할 수 없으면 안전하게 대기합니다. 아직 선택 화면은 없습니다. 공인 HTTPS 접속 확인 전에는 설치 성공으로 간주하지 마세요.

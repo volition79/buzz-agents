@@ -32,8 +32,6 @@ def plan(containers, self_id):
     image = portal.get('Image', '')
     if not NAME.fullmatch(upstream) or not re.fullmatch(r'sha256:[a-f0-9]{64}', image):
         raise ToolError('bootstrap_own_portal_identity_invalid')
-    if 'traefik-proxy' not in portal.get('NetworkSettings', {}).get('Networks', {}):
-        raise ToolError('bootstrap_proxy_network_missing')
     # A Buzz template may split owner env and Traefik labels across services.
     relay_projects = set()
     for c in containers:
@@ -42,6 +40,7 @@ def plan(containers, self_id):
         if key and key != project and HEX.fullmatch(env.get('RELAY_OWNER_PUBKEY', '')):
             relay_projects.add(key)
     bases = {}
+    routers = []
     for c in containers:
         if labels(c).get('com.docker.compose.project') not in relay_projects or not c.get('State', {}).get('Running'):
             continue
@@ -51,17 +50,53 @@ def plan(containers, self_id):
                     match = BASE.search(host.lower())
                     if match:
                         bases.setdefault(match[1], set()).add(host.lower())
+                        routers.append((c, key[:-5]))
     if not bases:
         raise ToolError('bootstrap_hostinger_relay_domain_not_found')
     if len(bases) != 1:
         raise ToolError('bootstrap_relay_domains_ambiguous')
     base, hosts = next(iter(bases.items()))
+    routing = discover_routing(containers, routers)
     ident = 'buzz-setup-' + hashlib.sha256(project.encode()).hexdigest()[:12]
     hostname = ident + '.' + base
     result = {'project': project, 'hostname': hostname, 'url': 'https://' + hostname,
-              'relay_hosts': sorted(hosts), 'route_name': ident, 'upstream': upstream, 'image': image}
+              'relay_hosts': sorted(hosts), 'route_name': ident, 'upstream': upstream, 'image': image, **routing}
     result['fingerprint'] = hashlib.sha256(json.dumps(result, sort_keys=True).encode()).hexdigest()
     return result
+
+
+def networks(container):
+    return set(container.get('NetworkSettings', {}).get('Networks', {})) - {'host', 'none', 'bridge'}
+
+
+def discover_routing(containers, routers):
+    """Use existing HTTPS router settings, never assume network or TLS names."""
+    proxies = []
+    for c in containers:
+        image = c.get('Config', {}).get('Image', '').split('@')[0].split(':')[0]
+        if image in ('traefik', 'library/traefik', 'docker.io/library/traefik', 'docker.io/traefik') and c.get('State', {}).get('Running'):
+            proxies.append(c)
+    candidates = set()
+    for relay, prefix in routers:
+        tags = labels(relay)
+        entrypoints = tags.get(prefix + '.entrypoints', '')
+        resolver = tags.get(prefix + '.tls.certresolver', '')
+        if not re.fullmatch(r'[a-zA-Z0-9_-]+(?:,[a-zA-Z0-9_-]+)*', entrypoints) or not re.fullmatch(r'[a-zA-Z0-9_-]+', resolver):
+            continue
+        for proxy in proxies:
+            shared = networks(relay)
+            if proxy.get('HostConfig', {}).get('NetworkMode') != 'host':
+                shared &= networks(proxy)
+            explicit = tags.get('traefik.docker.network')
+            if explicit:
+                shared &= {explicit}
+            for network in shared:
+                if NAME.fullmatch(network):
+                    candidates.add((proxy['Id'], network, entrypoints, resolver))
+    if len(candidates) != 1:
+        raise ToolError('bootstrap_proxy_route_missing' if not candidates else 'bootstrap_proxy_route_ambiguous')
+    proxy_id, network, entrypoints, resolver = candidates.pop()
+    return {'proxy_id': proxy_id, 'network': network, 'entrypoints': entrypoints, 'resolver': resolver}
 
 
 def verify_dns(data, resolver=socket.getaddrinfo):
@@ -83,14 +118,14 @@ def route_command(data):
         'io.buzz-agents.bootstrap': data['fingerprint'],
         'com.docker.compose.project': data['project'],
         'com.docker.compose.service': 'setup-route',
-        'traefik.enable': 'true', 'traefik.docker.network': 'traefik-proxy',
+        'traefik.enable': 'true', 'traefik.docker.network': data['network'],
         'traefik.http.routers.'+ident+'.rule': 'Host(`'+data['hostname']+'`)',
-        'traefik.http.routers.'+ident+'.entrypoints': 'websecure',
-        'traefik.http.routers.'+ident+'.tls.certresolver': 'letsencrypt',
+        'traefik.http.routers.'+ident+'.entrypoints': data['entrypoints'],
+        'traefik.http.routers.'+ident+'.tls.certresolver': data['resolver'],
         'traefik.http.routers.'+ident+'.service': ident,
         'traefik.http.services.'+ident+'.loadbalancer.server.port': '8080',
     }
-    command = ['docker', 'create', '--name', ident, '--network', 'traefik-proxy',
+    command = ['docker', 'create', '--name', ident, '--network', data['network'],
                '--user', '10002:10002', '--read-only', '--cap-drop', 'ALL',
                '--security-opt', 'no-new-privileges:true', '--init',
                '--restart', 'unless-stopped', '--memory', '256m', '--cpus', '0.25',
@@ -128,7 +163,7 @@ def check_route(existing, data):
             or 'no-new-privileges:true' not in (host.get('SecurityOpt') or [])
             or existing.get('Mounts') or host.get('PortBindings')
             or any(host.get(key) for key in ('ExtraHosts','Dns','DnsSearch','DnsOptions','Links'))
-            or set(existing.get('NetworkSettings', {}).get('Networks', {})) != {'traefik-proxy'}
+            or set(existing.get('NetworkSettings', {}).get('Networks', {})) != {data['network']}
             or 'BUZZ_ROUTE_HOST='+data['hostname'] not in env
             or 'BUZZ_ROUTE_UPSTREAM='+data['upstream'] not in env
             or any(tag.get(key) != value for key, value in expected_labels.items())):

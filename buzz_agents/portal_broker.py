@@ -201,6 +201,9 @@ class Broker:
                     portal_bootstrap.check_route(existing, data)
                 else:
                     execute(portal_bootstrap.route_command(data))
+                portal = next(c for c in containers if c.get('Name', '').lstrip('/') == data['upstream'])
+                if data['network'] not in portal.get('NetworkSettings', {}).get('Networks', {}):
+                    execute(['docker', 'network', 'connect', data['network'], portal['Id']])
                 if not existing or not existing.get('State', {}).get('Running'):
                     execute(['docker', 'start', data['route_name']])
                 atomic_json(self.control / 'bootstrap.json', data)

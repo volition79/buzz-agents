@@ -56,7 +56,6 @@ services:
     volumes:
       - portal:/portal
       - rpc:/rpc
-    networks: [traefik-proxy]
     labels:
       - traefik.enable=false
     logging:
@@ -66,6 +65,3 @@ volumes:
   control:
   rpc:
   portal:
-networks:
-  traefik-proxy:
-    external: true

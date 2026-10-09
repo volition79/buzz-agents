@@ -31,7 +31,11 @@ def fixture():
     relay['Config']['Env'] = ['RELAY_OWNER_PUBKEY='+'e'*64, 'PRIVATE_TEST_VALUE=do-not-return']
     web = container('d','fixture-relay','web')
     web['Config']['Labels']['traefik.http.routers.relay.rule'] = 'Host(`buzz.srv12345.hstgr.cloud`)'
-    return [broker,portal,relay,web]
+    web['Config']['Labels'].update({'traefik.http.routers.relay.entrypoints':'secure-custom', 'traefik.http.routers.relay.tls.certresolver':'acme-custom'})
+    proxy = container('9','fixture-proxy','proxy')
+    proxy['Config']['Image']='traefik:v3.6'
+    portal['NetworkSettings']['Networks']={'fixture-setup_default':{}}
+    return [broker,portal,relay,web,proxy]
 
 
 class BootstrapTests(unittest.TestCase):
@@ -55,8 +59,31 @@ class BootstrapTests(unittest.TestCase):
         other['Config']['Env']=['RELAY_OWNER_PUBKEY='+'d'*64]
         other['Config']['Labels']['traefik.http.routers.other.rule']='Host(`relay.srv98765.hstgr.cloud`)'
         with self.assertRaisesRegex(ToolError,'ambiguous'):boot.plan(data+[other],'a'*12)
-        data=fixture();data[-1]['Config']['Labels']['traefik.http.routers.relay.rule']='Host(`relay.custom.example`)'
+        data=fixture();data[3]['Config']['Labels']['traefik.http.routers.relay.rule']='Host(`relay.custom.example`)'
         with self.assertRaisesRegex(ToolError,'not_found'):boot.plan(data,'a'*12)
+
+    def test_renamed_network_and_host_proxy(self):
+        for host_mode in (False, True):
+            items=fixture()
+            for c in items[2:]: c['NetworkSettings']['Networks']={'customer-relay_default':{}}
+            if host_mode:
+                items[-1]['HostConfig']={'NetworkMode':'host'}
+                items[-1]['NetworkSettings']['Networks']={'host':{}}
+            data=boot.plan(items,'a'*12)
+            self.assertEqual(data['network'],'customer-relay_default')
+            cmd=boot.route_command(data)
+            self.assertIn('customer-relay_default',cmd)
+            self.assertIn('traefik.http.routers.'+data['route_name']+'.entrypoints=secure-custom',cmd)
+            self.assertIn('traefik.http.routers.'+data['route_name']+'.tls.certresolver=acme-custom',cmd)
+            self.assertNotIn('traefik-proxy',cmd)
+
+    def test_missing_or_ambiguous_proxy_network_refused(self):
+        with self.assertRaisesRegex(ToolError,'proxy_route_missing'): boot.plan(fixture()[:-1],'a'*12)
+        items=fixture()
+        for c in items[2:]: c['NetworkSettings']['Networks']['second-net']={}
+        with self.assertRaisesRegex(ToolError,'proxy_route_ambiguous'): boot.plan(items,'a'*12)
+        items[3]['Config']['Labels']['traefik.docker.network']='second-net'
+        self.assertEqual(boot.plan(items,'a'*12)['network'],'second-net')
 
     def test_dns_success_mismatch_and_failure(self):
         data=boot.plan(fixture(),'a'*12)
@@ -88,6 +115,7 @@ class BootstrapTests(unittest.TestCase):
                 self.assertEqual(result['url'],plan['url'])
                 self.assertTrue(Path(tmp,'bootstrap.json').exists())
                 self.assertEqual(sum(x[1]=='create' for x in calls),1)
+                self.assertEqual([x for x in calls if x[1]=='network'], [['docker','network','connect','traefik-proxy','b'*64]])
                 for bad in [{'op':'bootstrap-plan','hostname':'evil'},{'op':'bootstrap-activate','fingerprint':plan['fingerprint'],'image':'evil'}]:
                     with self.assertRaises(ToolError):broker.dispatch(bad)
 

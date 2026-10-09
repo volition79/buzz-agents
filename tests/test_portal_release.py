@@ -15,6 +15,8 @@ class ReleaseTests(unittest.TestCase):
         for role,value in images.items():
             self.assertIn(value,text)
             self.assertNotIn('${BUZZ_'+role.upper()+'_IMAGE',text)
+        self.assertNotIn('external: true',text)
+        self.assertNotIn('traefik-proxy',text)
         self.assertNotIn('BUZZ_SETUP_HOST',text)
         self.assertNotIn('TRAEFIK_HOST',text)
         self.assertNotIn('BUZZ_PUBLIC_URL',text)
