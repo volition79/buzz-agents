@@ -22,7 +22,7 @@ class ReleaseTests(unittest.TestCase):
         self.assertNotIn('\nname:',text)
         self.assertNotIn('password',text.lower())
 
-    def test_root_url_artifact_matches_renderer_and_published_digests(self):
+    def test_public_candidate_images_are_digest_pinned(self):
         import re
         text=(ROOT/'docker-compose.yml').read_text()
         images={role:re.search(r'ghcr.io/volition79/buzz-agents-'+role+r'@sha256:[a-f0-9]{64}',text).group() for role in ('runtime','broker','portal')}

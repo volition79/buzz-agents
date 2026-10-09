@@ -86,3 +86,5 @@ AUTO-03 route: bounded HTTP proxy preserves exact Host and forwards to the fixed
 AUTO-04 Compose/CI/docs: no domain variables before startup. Test absent discovery, DNS mismatch, ownership collision, plan drift and restart; real Docker fixture lifecycle before publication and anonymous exact-artifact smoke afterward. Platform fixture is not real Hostinger acceptance. Existing public Compose remains old verified candidate until new image validation/promotion.
 
 Independent review found and fixed AUTO-03 upstream timeout mismatch (now250s vs existing245s RPC) and AUTO-02 existing route DNS overrides (ExtraHosts/Dns/DnsSearch/DnsOptions/Links refused). Regression assertions added.
+
+AUTO-01..04 build verification passed in CI37901027761, source3518e79bc21afeb668edafc84ffd2baaff07be6e. No hostname env was injected; artificial Relay metadata and hosts-file DNS were fixtures. Dynamic route/startup/restart identity and unchanged Relay verified. Promoting newly published image digests only after exact Raw smoke.

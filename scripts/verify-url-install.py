@@ -1,6 +1,7 @@
 """Fetch exact public Compose bytes and verify no-env Docker bootstrap in CI."""
 import argparse
 import hashlib
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -23,6 +24,10 @@ def main():
         compose=Path(tmp)/'docker-compose.yml';compose.write_bytes(raw)
         cmd=['docker','compose','--env-file','/dev/null','-p','buzz-url-check','-f',str(compose)]
         config=json.loads(subprocess.check_output(cmd+['config','--format','json'],env=env,cwd=tmp))
+        spec=importlib.util.spec_from_file_location('release',ROOT/'scripts/render-portal-release.py')
+        renderer=importlib.util.module_from_spec(spec);spec.loader.exec_module(renderer)
+        images={role:config['services'][name]['image'] for role,name in [('runtime','runtime-image'),('broker','broker'),('portal','portal')]}
+        assert raw.decode()==renderer.render(images),'public artifact differs from reviewed template'
         assert config['name']=='buzz-url-check'
         assert set(config['services'])=={'runtime-image','broker','portal'}
         assert all('@sha256:' in s['image'] for s in config['services'].values())
