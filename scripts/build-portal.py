@@ -39,7 +39,7 @@ def main():
     # A concrete reviewable publication payload, selected from source only.
     source = [ROOT/n for n in ('Dockerfile', 'Dockerfile.portal', '.dockerignore', '.gitignore',
                                'LICENSE', 'README.md', 'CONTRACT.md', 'TASK.md', 'package.json',
-                               'package-lock.json', 'compose.portal.yaml', 'compose.automation.yaml')]
+                               'package-lock.json', 'compose.portal.yaml', 'compose.automation.yaml', 'docker-compose.yml')]
     for folder in ('buzz_agents', 'guard-bin', 'scripts', 'tests', 'web-provider', 'connect', 'provider', 'setup', '.github'):
         source.extend(p for p in (ROOT/folder).rglob('*') if p.is_file()
                       and '__pycache__' not in p.parts and 'assets' not in p.parts

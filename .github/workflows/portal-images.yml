@@ -1,6 +1,11 @@
 name: Build and publish reviewed portal candidate
 on:
   workflow_dispatch:
+    inputs:
+      verify_only:
+        description: Validate the public URL artifact without rebuilding images
+        type: boolean
+        default: false
 permissions:
   contents: write
   packages: write
@@ -8,7 +13,21 @@ concurrency:
   group: portal-candidate-publication
   cancel-in-progress: false
 jobs:
+  url-install:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Regression tests for URL installation source
+        run: python3 -m unittest discover -s tests -p test_portal_release.py -v
+      - name: Fetch public Raw URL and start exact downloaded Compose
+        env:
+          # Anonymous image pull, no registry login in this job.
+          INSTALL_URL: https://raw.githubusercontent.com/${{ github.repository }}/${{ github.sha }}/docker-compose.yml
+        run: python3 scripts/verify-url-install.py --url "$INSTALL_URL" --start
   candidate:
+    needs: url-install
+    if: ${{ !inputs.verify_only }}
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
@@ -41,7 +60,8 @@ jobs:
           export BUZZ_RUNTIME_IMAGE="$IMAGE_PREFIX-runtime:$GITHUB_SHA"
           export BUZZ_BROKER_IMAGE="$IMAGE_PREFIX-broker:$GITHUB_SHA"
           export BUZZ_PORTAL_IMAGE="$IMAGE_PREFIX-portal:$GITHUB_SHA"
-          export BUZZ_SETUP_HOST=setup.example.invalid
+          export COMPOSE_PROJECT_NAME=buzz-build-check
+          export TRAEFIK_HOST=fixture.example.invalid
           docker network create traefik-proxy
           docker compose -f compose.portal.yaml up -d
           python3 - <<'PY'
@@ -93,4 +113,4 @@ jobs:
             --title "Buzz portal v0.4 candidate" --notes-file docs/PORTAL-VERIFICATION.md \
             dist/portal-v0.4/compose.install.yaml dist/portal-v0.4/manifest.json \
             dist/portal-v0.4/Buzz-VPS-Connect.exe dist/portal-v0.4/docker-build-context.zip
-          echo "Install Compose: https://github.com/$GITHUB_REPOSITORY/releases/download/$RELEASE_TAG/compose.install.yaml" >> "$GITHUB_STEP_SUMMARY"
+          echo "New image candidate Compose (requires review before replacing canonical docker-compose.yml): https://github.com/$GITHUB_REPOSITORY/releases/download/$RELEASE_TAG/compose.install.yaml" >> "$GITHUB_STEP_SUMMARY"

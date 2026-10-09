@@ -9,14 +9,16 @@ v0.4 공개 개발 후보입니다. GitHub에서 이미지 빌드·임시 Compos
 Docker Manager의 **컴포즈 → URL에서 Compose**에 입력할 주소:
 
 ```text
-https://github.com/volition79/buzz-agents/releases/download/portal-candidate-8ae5df6d57c1-1-1/compose.install.yaml
+https://raw.githubusercontent.com/volition79/buzz-agents/main/docker-compose.yml
 ```
 
-가져온 설정에서 `BUZZ_SETUP_HOST`에 기존 Buzz 주소와 다른 설정 화면 호스트명을 지정하고, 해당 이름의 DNS가 VPS를 가리키는지 확인합니다. 이미지 3개는 이미 정확한 digest로 고정되어 있습니다. 로컬 `compose.hostinger.yaml`은 개발용 템플릿이며 위 공개 설치 파일과 다릅니다.
+URL 가져오기 전용 수정 후보입니다. 프로젝트 이름은 Hostinger가 지정하고, HTTPS 주소는 공식 Traefik 예시의 `${COMPOSE_PROJECT_NAME}.${TRAEFIK_HOST}`를 사용합니다. `BUZZ_SETUP_HOST`를 별도로 요구하지 않습니다. 이미지 3개는 기존 검증된 digest로 고정했습니다.
+
+**아직 확인할 점:** 공식 예시는 이 변수 구성을 사용하지만, URL 가져오기에서 `TRAEFIK_HOST`가 자동 공급되는지는 보장하지 않습니다. 없으면 명시적으로 실패하도록 했습니다. 실제 Hostinger에서 YAML 유지·컨테이너 생성·HTTPS 접속이 확인되기 전까지 URL 설치 성공으로 소개하지 않습니다. 수동 YAML 입력이나 SSH 보정은 이 검증의 합격으로 인정하지 않습니다.
 
 ## 설치 및 실서버 검증 순서
 
-1. Docker Manager에 위 Compose URL로 배포합니다. 기존 `traefik-proxy` 네트워크와 HTTPS 인증서 발급기 `letsencrypt`를 사용합니다. 해당 VPS를 가리키는 설정 화면 호스트명을 지정해야 합니다. 기존 Buzz 주소와는 다른 호스트명입니다.
+1. Docker Manager에 위 Compose URL로 배포합니다. 기존 `traefik-proxy` 네트워크와 HTTPS 인증서 발급기 `letsencrypt`를 사용합니다. Hostinger가 제공하는 도메인 변수가 있어야 하며, 생성된 주소의 DNS가 VPS를 가리켜야 합니다.
 2. 설정 화면을 엽니다. Docker Manager의 **portal 로그**에 나온 최초 설정 코드를 입력하고, 설정 화면용 비밀번호(12자 이상)를 정합니다. root 비밀번호와는 별개입니다. 최초 코드는 60분간 유효하며 사용 후 폐기됩니다. 만료 시 portal을 재시작하면 새 코드가 나옵니다.
 3. 기존 Relay를 자동으로 찾습니다. 주소·소유자 공개키를 확인하고 연결합니다. 여러 개면 선택하고, 찾지 못하면 두 공개 정보만 직접 입력합니다. 소유권을 Nostr 서명으로 새로 증명하는 기능은 아닙니다. Docker 관리자만 읽을 수 있는 최초 코드와 기존 Relay 설정을 신뢰하며, 봇 권한은 기존 Relay가 검증합니다.
 4. **Windows 연결 파일 받기** → ZIP 압축 풀기 → `Buzz-VPS-Connect.exe` 실행. 자기 서버 주소가 맞는지 확인합니다. 파일은 10분간 한 번만 사용 가능합니다.
@@ -59,10 +61,21 @@ docker build -f Dockerfile.portal --target broker -t buzz-agents-broker:0.4.0 .
 docker build -f Dockerfile.portal --target portal -t buzz-agents-portal:0.4.0 .
 ```
 
-검토 후 지정 레지스트리에 공개하고 immutable digest로 `BUZZ_RUNTIME_IMAGE`, `BUZZ_BROKER_IMAGE`, `BUZZ_PORTAL_IMAGE`를 고정합니다. `BUZZ_SETUP_HOST`는 설정 화면 호스트명입니다. 아직 공개하지 않은 주소를 문서에 임의로 쓰지 않습니다.
+검토 후 지정 레지스트리에 공개하고 immutable digest로 `BUZZ_RUNTIME_IMAGE`, `BUZZ_BROKER_IMAGE`, `BUZZ_PORTAL_IMAGE`를 고정합니다. `COMPOSE_PROJECT_NAME`·`TRAEFIK_HOST`는 실행 환경에서 공급합니다. 루트 `docker-compose.yml`은 공개 URL 설치의 기준 파일입니다.
 
 공개 준비용 `.github/workflows/portal-images.yml`도 포함됩니다. 저장소에 올리는 것만으로 실행되지 않고, **수동 workflow_dispatch** 때만 동작합니다. Windows 빌드·테스트 → Docker 이미지 빌드 → 별도 CI 서버에서 Compose/권한 경계 스모크 → GHCR push → 익명 pull 확인 → digest가 고정된 설치 Compose를 후보 릴리스에 첨부하는 순서입니다. 최초 GHCR 패키지가 비공개이면 익명 확인 단계에서 멈추므로, 저장소 소유자가 각 패키지를 Public으로 바꾼 뒤 다시 실행해야 합니다. 첫 CI 실행은 성공했습니다.
 
 공개 소스 준비본은 `public-source.zip`입니다. 개인 계정 정보·연결 파일·테스트 실행 로그·이전 ZIP을 포함하지 않습니다. 기존 v0.3 소스는 회귀 확인을 위해 보존하지만, 새 배포 경로는 `web-provider`, `connect`, `Dockerfile.portal`입니다.
 
 기반: [Hostinger의 여러 Compose 프로젝트 Traefik 연결 안내](https://www.hostinger.com/support/connecting-multiple-docker-compose-projects-using-traefik-in-hostinger-docker-manager/), [Docker 소켓 권한 안내](https://docs.docker.com/engine/security/protect-access/).
+
+
+## URL 가져오기 합격 기준
+
+- 공개 Raw URL만 입력해 설치하며 수동 YAML 붙여넣기나 SSH 보정을 사용하지 않습니다.
+- 관리 화면을 다시 열어도 Compose 내용이 유지됩니다.
+- broker·portal이 실행되고 runtime-image는 정상 종료합니다.
+- HTTPS 설정 화면이 정상 응답합니다.
+- 기존 Relay·Traefik은 계속 동작합니다.
+
+공식 근거: [URL 설치](https://www.hostinger.com/support/12040815-how-to-deploy-your-first-container-with-hostinger-docker-manager/), [Raw URL 예시](https://www.hostinger.com/support/deploy-on-hostinger-button/), [Traefik 변수](https://www.hostinger.com/support/connecting-multiple-docker-compose-projects-using-traefik-in-hostinger-docker-manager/). CI는 Hostinger 환경변수를 모사하며 실제 hPanel importer를 실행하지 않습니다.

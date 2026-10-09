@@ -39,3 +39,12 @@ Source review checked current upstream desktop launch payload at `block/buzz` co
 8. KVM2 CPU/RAM behavior under the intended workload.
 
 The public GitHub repository, GHCR images and candidate release were created with user approval. Existing VPS and Relay settings were not changed. No chat-supplied private key or root password was used or packaged. Web portal setup password is separate from VPS root credentials. No policy-gate receipt is claimed: the existing focused manual evidence route remains active.
+
+
+## URL importer incident and correction
+
+Observed 2026-10-09 with source 33161cd177066040304fd8fd98fa4bd3de09a9a0: Hostinger reported `Docker project not found`; project row existed with zero containers and blank YAML. No server logs were available. Exact hPanel failure cause is unknown.
+
+Source correction removes the custom required BUZZ_SETUP_HOST and top-level project name, publishes a complete digest-pinned root docker-compose.yml at a Raw URL, and follows documented Hostinger Traefik variable/label conventions. The missing TRAEFIK_HOST case still fails explicitly; automatic platform injection is not assumed proven.
+
+`tests/test_portal_release.py` covers canonical artifact/renderer parity and digest constraints. `scripts/verify-url-install.py` fetches exact public bytes, tests both missing and supplied platform hostname, project renaming, role boundaries, anonymous pull and ephemeral CI start. CI uses explicit fixture platform variables and is not live Hostinger importer evidence. Runtime image bytes remain unchanged from the first published candidate.

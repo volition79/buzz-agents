@@ -66,3 +66,12 @@ Local implementation result:
 
 
 Publication result, 2026-10-09: public repository volition79/buzz-agents created. Source 8ae5df6d57c1c8a999bcebe3cd0b3517ef27f09a; CI run 37896228009 succeeded including image builds, isolated Compose role-boundary smoke and anonymous access. Candidate release portal-candidate-8ae5df6d57c1-1-1 published. Independent anonymous asset/manifest hash readback passed. This supersedes earlier pre-publication snapshots above; actual VPS deployment, authentication and Windows-off acceptance remain open.
+
+
+URL import correction (2026-10-09), baseline 33161cd177066040304fd8fd98fa4bd3de09a9a0.
+Approved existing scope retained; one user-requested read-only reviewer. No live VPS changes.
+URL-01 Compose/renderer: remove hardcoded project name; use official COMPOSE_PROJECT_NAME/TRAEFIK_HOST routing, no proprietary required hostname. Missing platform hostname remains explicit failure, never insecure fallback. Target Hostinger Linux Docker; built-in variable injection on URL imports remains unproven.
+URL-02 root docker-compose.yml: publish digest-pinned complete config as raw GitHub source, preserve runtime image digests and security roles.
+URL-03 workflow/regression: fetch exact published Raw bytes, validate missing-env failure and supplied Hostinger-env resolution, pull/start exact remote artifact in disposable CI; this is not Hostinger importer evidence.
+URL-04 docs/build: replace failed release-asset install guidance with Raw URL and acceptance boundaries; include canonical install source in packages.
+Focused manual test fallback remains due absent project policy registry. No changes to AI/auth implementations or legacy SSH path.
