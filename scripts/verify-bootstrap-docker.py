@@ -106,6 +106,8 @@ print(json.dumps({'account':Path('/portal/account.json').read_text(),'devices':P
                 route_before_upgrade=route_state['Id']
                 config['services']['broker']['image']=target_broker
                 config['services']['portal']['image']=target_portal
+                # Broker's atomic rewrite is root-owned; the fixture owns the parent.
+                actual.unlink()
                 actual.write_text(json.dumps(config))
                 run(cmd+['up','-d','--no-deps','broker','portal'],env=env)
                 ready()
