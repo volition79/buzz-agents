@@ -52,6 +52,23 @@ class BootstrapTests(unittest.TestCase):
         self.assertNotIn('--publish',command)
         self.assertIn('traefik.enable=true',command)
 
+    def test_portal_upgrade_only_retains_verified_unchanged_route(self):
+        from buzz_agents.portal_compose import service
+        items = fixture()
+        old = boot.plan(items, 'a'*12)
+        items[1]['Image'] = 'sha256:'+'1'*64
+        new = boot.plan(items, 'a'*12)
+        route = {'Name': '/'+old['route_name'], 'Image': old['image'],
+                 'Config': {'Labels': service(old)['labels']}}
+        with patch.object(boot, 'check_route') as check:
+            self.assertEqual(boot.retain_verified_route(new, old, items+[route]), old)
+            check.assert_called_once_with(route, old, compose=True)
+            bad = dict(new, network='foreign')
+            with self.assertRaises(ToolError): boot.retain_verified_route(bad, old, items+[route])
+            with self.assertRaises(ToolError): boot.retain_verified_route(new, dict(old, fingerprint='bad'), items+[route])
+            with self.assertRaises(ToolError): boot.retain_verified_route(new, old, items)
+        with self.assertRaises(ToolError): boot.retain_verified_route(new, old, items+[route])
+
     def test_missing_ambiguous_or_foreign_identity_waits(self):
         for data, ident in [(fixture()[:2],'a'*12),(fixture()+[container('e','fixture-setup','portal')],'a'*12),(fixture(),'f'*12)]:
             with self.assertRaises(ToolError):boot.plan(data,ident)

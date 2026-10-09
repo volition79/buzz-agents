@@ -205,6 +205,8 @@ class Broker:
                     raise ToolError('too_many_containers_for_discovery')
                 containers = json.loads(execute(['docker', 'inspect', *ids])) if ids else []
                 data = portal_bootstrap.plan(containers, os.environ.get('HOSTNAME', ''))
+                saved = read_json(self.control / 'bootstrap.json', {})
+                data = portal_bootstrap.retain_verified_route(data, saved, containers)
                 if op == 'bootstrap-plan':
                     return {'ok': True, **{key:data[key] for key in ('hostname','url','relay_hosts','fingerprint')}}
                 if request['fingerprint'] != data['fingerprint']:

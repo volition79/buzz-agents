@@ -97,3 +97,11 @@ Final broker image build [CI37912336094](https://github.com/volition79/buzz-agen
 
 
 Exact public artifact ec2d9b08df3bb7e7d383eff9fa9ac3002bde4b06 passed [CI37912789643](https://github.com/volition79/buzz-agents/actions/runs/37912789643), including both real Traefik network modes, anonymous pulls and renderer byte parity. Raw SHA256: 17896cf3c0bc9a0f766f59257f9eeabefa702d06162adf3d6abece0021545f44. Independent anonymous readback hash-matched all three image manifests. Actual hPanel application/Open and Windows-off acceptance remain pending.
+
+## Recovery/autofill candidate (2026-10-09)
+
+Scope: fragment setup/recovery-code autofill, owner-only local control socket, retry/reconnect and state-aware Korean guidance. Tokens never come from a public issuer. The Hostinger Open URL's token delivery remains unverified; accepting a manually provided fragment is not proof of Hostinger integration.
+
+New local evidence: 25 portal HTTP/broker tests passed, including expiring/single-use recovery, CSRF, concurrent redemption, persistence and failed-password-save preservation. Browser fixture passed fragment missing/malformed/duplicate/expired cases, immediate URL scrubbing, recovery and Windows-device state retention, desktop/mobile overflow and zero console exceptions. Docker/AI and Windows installer actions in that browser fixture are simulated, not live acceptance.
+
+Portal-image upgrade retains only a verified same-project/same-security proxy and its immutable image. Existing configuration or identity changes are still refused. Full Docker upgrade fixture and candidate image publication must pass before the new Compose is promoted. Previous published Compose URLs do not contain these changes.

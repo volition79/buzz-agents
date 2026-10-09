@@ -2,6 +2,7 @@
 
 No production network/credentials. Requires locally installed Chrome and websocket-client.
 """
+from contextlib import redirect_stdout
 import base64
 import io
 import json
@@ -111,7 +112,27 @@ def main():
             cdp.call('Page.navigate',{'url':app.url})
             cdp.until("document.querySelector('#loginForm') !== null")
             cdp.shot(output/'setup-login.png')
-            cdp.js("document.querySelector('#setupCode').value="+json.dumps(app.setup_code)+";document.querySelector('#password').value='browser-test-password';document.querySelector('#loginForm button').click()")
+            cdp.until("document.querySelector('#setupCode').value === ''")
+            assert '로그' in cdp.js("document.querySelector('#setupCodeField').innerText")
+            cdp.call('Page.navigate',{'url':app.url+'/#setup_code=bad'})
+            cdp.until("document.querySelector('#message')?.textContent.includes('읽지 못했습니다')")
+            assert cdp.js('location.hash') == ''
+            assert cdp.js("document.querySelector('#setupCode').value") == ''
+            cdp.call('Page.navigate',{'url':app.url+'/#setup_code='+app.setup_code+'&setup_code='+app.setup_code})
+            cdp.until("document.querySelector('#message')?.textContent.includes('읽지 못했습니다')")
+            cdp.call('Page.navigate',{'url':app.url+'/#setup_code='+app.setup_code})
+            cdp.until("document.querySelector('#message')?.textContent.includes('링크의 설정 코드')")
+            assert cdp.js('location.hash') == ''
+            assert cdp.js("document.querySelector('#setupCode').value") == app.setup_code
+            assert not app.account, 'link visit must never claim the server'
+            assert cdp.js("localStorage.length+sessionStorage.length") == 0
+            app.setup_deadline=time.time()-1
+            cdp.js("document.querySelector('#password').value='browser-test-password';document.querySelector('#loginForm button').click()")
+            cdp.until("document.querySelector('#message').textContent.includes('만료')")
+            with redirect_stdout(io.StringIO()): app.issue_access_code()
+            cdp.call('Page.navigate',{'url':app.url+'/#setup_code='+app.setup_code})
+            cdp.until("document.querySelector('#message')?.textContent.includes('링크의 설정 코드')")
+            cdp.js("document.querySelector('#password').value='browser-test-password';document.querySelector('#loginForm button').click()")
             cdp.until("document.querySelector('#owner').value.length === 64")
             assert cdp.js("document.querySelector('#relay').value")=='wss://relay.example.com'
             cdp.js("document.querySelector('#saveRelay').click()")
@@ -132,6 +153,9 @@ def main():
             post('/api/device/deploy',{'op':'deploy','agent':{}},connection['token'])
             cdp.js("document.querySelector('#refresh').click()")
             cdp.until("document.querySelectorAll('.bot').length === 2")
+            cdp.until("document.querySelector('#message').textContent.includes('서버에 등록')")
+            assert '10분 후 만료' not in cdp.js("document.querySelector('#message').textContent")
+            assert connection['device_id'] in cdp.js("document.querySelector('#devices').textContent")
             cdp.shot(output/'setup-desktop.png')
             cdp.js("document.querySelector('.bot button').click()")
             cdp.until("document.querySelector('#terminal').textContent.includes('브라우저 동작 시험')")
@@ -140,6 +164,19 @@ def main():
             cdp.shot(output/'setup-login-session.png')
             cdp.js("document.querySelector('#cancelAuth').click()")
             cdp.until("document.querySelector('#authStatus').textContent.includes('중지했습니다')")
+            output_text=io.StringIO()
+            with redirect_stdout(output_text): app.issue_access_code()
+            code=output_text.getvalue().split('/#recovery_code=')[1].splitlines()[0]
+            saved_devices=dict(app.devices)
+            cdp.call('Page.navigate',{'url':app.url+'/#recovery_code='+code})
+            cdp.until("document.querySelector('#recoveryCode')?.value.length === 32")
+            assert cdp.js('location.hash') == ''
+            cdp.shot(output/'setup-recovery.png')
+            cdp.js("document.querySelector('#recoveryPassword').value='new-browser-password';document.querySelector('#recoveryForm button').click()")
+            cdp.until("document.querySelector('#message').textContent.includes('비밀번호를 다시 설정')")
+            assert app.devices == saved_devices
+            cdp.js("document.querySelector('#password').value='new-browser-password';document.querySelector('#loginForm button').click()")
+            cdp.until("document.querySelector('#workspace').hidden === false")
             cdp.call('Emulation.setDeviceMetricsOverride',{'width':390,'height':844,'deviceScaleFactor':1,'mobile':True})
             cdp.js('window.scrollTo(0,0)')
             assert cdp.js('document.documentElement.scrollWidth <= window.innerWidth'), 'mobile horizontal overflow'
@@ -147,7 +184,7 @@ def main():
             assert not cdp.errors, cdp.errors
             report={'status':'passed','browser':'Google Chrome headless / CDP',
                     'viewports':[[1440,1120],[390,844]],'console_exceptions':0,
-                    'checked':['first claim','auto Relay discovery confirmation','bundle download','one-use pairing',
+                    'checked':['fragment autofill and immediate URL scrubbing','no-value/manual fallback','malformed/duplicate fragment rejection','expired setup retry','recovery preserves devices and requires new login','first claim','auto Relay discovery confirmation','bundle download','one-use pairing',
                                'device deploy HTTP','bot list','PTY UI input/cancel','mobile overflow'],
                     'simulated':['Docker broker','official provider login','Windows installer'],
                     'not_proven':['Docker deployment','real AI login/reply','Windows-off scheduled task']}
@@ -155,7 +192,7 @@ def main():
             print(json.dumps(report))
         except Exception:
             if cdp:
-                print('Browser failure:', cdp.js('JSON.stringify({url:location.href,body:document.body?.innerText.slice(0,1500)})'))
+                print('Browser failure:', cdp.js('JSON.stringify({url:location.origin+location.pathname,body:document.body?.innerText.slice(0,1500)})'))
                 cdp.shot(output/'browser-failure.png')
             raise
         finally:

@@ -1,8 +1,12 @@
 'use strict';
 const $ = id => document.getElementById(id);
 let configured = false, authSession = null, pollBusy = false, tick = 0;
+let pendingPairing = null, knownDevices = new Set();
 const errors = {
   invalid_or_expired_setup_code: '최초 설정 코드가 틀리거나 만료되었습니다. Docker Manager에서 portal을 재시작하면 새 코드를 확인할 수 있습니다.',
+  invalid_or_expired_recovery_code: '복구 코드가 틀리거나 만료·사용되었습니다. portal 터미널에서 복구 명령을 다시 실행하고 최신 로그를 확인하세요.',
+  pairing_expired_or_used: '연결 파일이 만료되었거나 이미 사용되었습니다. 새 연결 파일을 받아 주세요.',
+  pairing_limit_revoke_old_connections: '연결 한도에 도달했습니다. 사용하지 않는 Windows 연결을 해제하세요. 미사용 연결 파일은 10분 후 만료됩니다.',
   invalid_settings_password: '설정 화면 비밀번호가 맞지 않습니다.',
   settings_password_minimum_12_characters: '설정 화면 비밀번호는 12자 이상이어야 합니다.',
   settings_login_required: '설정 화면에 다시 로그인해 주세요.',
@@ -20,6 +24,7 @@ async function api(path, body={}) {
   const response = await fetch('/api/'+path, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body), credentials:'same-origin'});
   if (response.ok && response.headers.get('Content-Type')?.startsWith('application/zip')) return response.blob();
   const data = await response.json();
+  if (response.status===401 && data.error==='settings_login_required') {authSession=null;$('workspace').hidden=true;$('logout').hidden=true;$('loginPanel').hidden=false;await boot();}
   if (!response.ok || !data.ok) throw new Error(errors[data.error] || '처리하지 못했습니다: '+(data.error || response.status));
   return data;
 }
@@ -28,6 +33,8 @@ function action(id, fn, event='click') {
     try {await fn(e);} catch(error){message(error.message,true);} finally{if(button)button.disabled=false;}
   });
 }
+function recoveryMode(show) { $('loginForm').hidden=show; $('recoveryForm').hidden=!show; $('showRecovery').hidden=show; }
+
 async function enter() {
   $('loginPanel').hidden=true; $('workspace').hidden=false; $('logout').hidden=false;
   await refresh();
@@ -52,20 +59,51 @@ async function refresh(){
   for(const bot of data.bots){const card=document.createElement('div');card.className='bot';const details=document.createElement('div');const name=document.createElement('strong');name.textContent=bot.name;const sub=document.createElement('small');sub.textContent=(bot.provider==='codex'?'Codex':'Claude Code')+' · '+bot.pubkey.slice(0,12)+'…';details.append(name,sub);const state=document.createElement('span');state.className='state';state.textContent=statusName(bot.status);const button=document.createElement('button');button.className='secondary';button.textContent='계정 로그인';button.disabled=bot.status==='running'||!bot.container_running||Boolean(authSession);button.onclick=async()=>{button.disabled=true;try{await startLogin(bot);}catch(e){message(e.message,true);button.disabled=false;}};card.append(details,state,button);$('bots').append(card);const option=document.createElement('option');option.value=bot.pubkey;option.textContent=bot.name;$('scheduleBot').append(option);}
   if(selected)$('scheduleBot').value=selected;
   const devices=await api('devices');$('devices').replaceChildren();$('step2').classList.toggle('done',devices.devices.length>0);
-  for(const device of devices.devices){const row=document.createElement('div'),name=document.createElement('span'),button=document.createElement('button');name.textContent=device.name;button.className='quiet';button.textContent='연결 해제';button.onclick=async()=>{if(!confirm('이 Windows 연결 권한을 해제할까요? VPS의 실행 중인 봇은 유지됩니다.'))return;try{await api('revoke',{id:device.id});await refresh();}catch(e){message(e.message,true);}};row.append(name,button);$('devices').append(row);}
+  knownDevices=new Set(devices.devices.map(d=>d.id));
+  if(pendingPairing && devices.devices.some(d=>!pendingPairing.ids.has(d.id))){pendingPairing=null;$('connectionHint').textContent='서버에 Windows 연결이 등록되었습니다. 연결 프로그램의 저장 완료 메시지도 확인하세요. 연결 완료 후에는 파일의 10분 제한이 적용되지 않습니다.';message('Windows 연결이 서버에 등록되었습니다. 프로그램에서 저장 완료를 확인한 뒤 Buzz를 다시 실행하세요.');}
+  else if(pendingPairing && Date.now()>=pendingPairing.deadline){pendingPairing=null;message('연결 파일의 10분 유효시간이 지났습니다. 아직 연결하지 못했다면 새 연결 파일을 받으세요.',true);}
+  $('download').textContent=devices.devices.length||pendingPairing?'새 Windows 연결 파일 받기 ↓':'Windows 연결 파일 받기 ↓';
+  for(const device of devices.devices){const row=document.createElement('div'),name=document.createElement('span'),button=document.createElement('button');name.textContent=device.name+' · ID '+device.id;button.className='quiet';button.textContent='연결 해제';button.onclick=async()=>{if(!confirm('이 Windows 연결 권한을 해제할까요? VPS의 실행 중인 봇은 유지됩니다.'))return;try{await api('revoke',{id:device.id});await refresh();}catch(e){message(e.message,true);}};row.append(name,button);$('devices').append(row);}
 }
 async function startLogin(bot){if(authSession)throw new Error('현재 로그인 세션을 먼저 마치거나 중지해 주세요.');const result=await api('auth/start',{pubkey:bot.pubkey});authSession=result.session;$('authTitle').textContent=bot.name+' · 공식 로그인';$('authPanel').hidden=false;$('authForm').hidden=false;$('cancelAuth').hidden=false;$('terminal').textContent='VPS에서 공식 로그인을 시작하고 있습니다…';$('authStatus').textContent='최대 10분 동안 진행됩니다.';$('authLinks').replaceChildren();$('authPanel').scrollIntoView({behavior:'smooth',block:'center'});}
 function officialLinks(text){const hosts=['auth.openai.com','chatgpt.com','claude.ai','console.anthropic.com','platform.claude.com'];$('authLinks').replaceChildren();for(const raw of new Set(text.match(/https:\/\/[^\s<>"\x1b]+/g)||[])){try{const u=new URL(raw);if(!hosts.includes(u.hostname)||u.username||u.password)continue;const a=document.createElement('a');a.href=u.href;a.target='_blank';a.rel='noopener noreferrer';a.textContent='공식 로그인 열기 ↗ ('+u.hostname+')';$('authLinks').append(a);}catch{}}}
 async function poll(){if(pollBusy||$('workspace').hidden||document.hidden)return;pollBusy=true;try{if(authSession){const data=await api('auth/poll',{session:authSession});const text=data.output.replace(/\x1b\[[0-?]*[ -/]*[@-~]/g,'').replace(/\x1b\][^\x07]*(?:\x07|\x1b\\)/g,'');$('terminal').textContent=text;officialLinks(text);if(data.done){authSession=null;$('authForm').hidden=true;$('cancelAuth').hidden=true;$('authStatus').textContent=data.success?'공식 로그인 명령이 완료되었습니다. Buzz에서 실제 답변을 확인하세요.':'로그인이 완료되지 않았습니다. 위 안내를 확인하고 다시 시도하세요.';await refresh();}}else if(++tick%3===0)await refresh();}catch(e){message(e.message,true);}finally{pollBusy=false;}}
 action('loginForm',async()=>{await api('login',{setup_code:$('setupCode').value,password:$('password').value});$('setupCode').value='';$('password').value='';$('message').hidden=true;await enter();},'submit');
+action('showRecovery',()=>recoveryMode(true));
+action('cancelRecovery',()=>{$('recoveryCode').value='';$('recoveryPassword').value='';recoveryMode(false);});
+action('recoveryForm',async()=>{await api('recover',{recovery_code:$('recoveryCode').value,password:$('recoveryPassword').value});$('recoveryCode').value='';$('recoveryPassword').value='';$('password').value='';recoveryMode(false);message('비밀번호를 다시 설정했습니다. 새 비밀번호로 로그인하세요. 봇과 Windows 연결은 유지됩니다.');},'submit');
 action('relayForm',async()=>{await api('configure',{relay:$('relay').value.trim(),owner:$('owner').value.trim()});message('Relay 연결 설정을 저장했습니다. 이제 Windows 연결 파일을 받으세요.');await refresh();},'submit');
 action('discover',discover);action('refresh',refresh);
-action('download',async()=>{const blob=await api('pair/bundle'),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='Buzz-Windows-Connect.zip';a.click();setTimeout(()=>URL.revokeObjectURL(url),10000);message('압축을 풀고 Buzz-VPS-Connect.exe를 실행해 주세요. 연결 파일은 10분 후 만료됩니다.');});
+action('download',async()=>{const ids=new Set(knownDevices),blob=await api('pair/bundle');pendingPairing={ids,deadline:Date.now()+600000};const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='Buzz-Windows-Connect.zip';a.click();setTimeout(()=>URL.revokeObjectURL(url),10000);message('압축을 풀고 Buzz-VPS-Connect.exe를 실행해 주세요. 연결 파일은 10분 후 만료됩니다.');});
 action('authForm',async()=>{if(!authSession)return;const input=$('authInput').value;$('authInput').value='';await api('auth/input',{session:authSession,text:input});},'submit');
 action('cancelAuth',async()=>{if(authSession)await api('auth/cancel',{session:authSession});authSession=null;$('authForm').hidden=true;$('cancelAuth').hidden=true;$('terminal').textContent='';$('authLinks').replaceChildren();$('authStatus').textContent='로그인 세션을 중지했습니다.';await refresh();});
 action('scheduleInit',async()=>{const result=await api('schedule/init');$('schedulerKey').textContent=result.pubkey;});
 action('scheduleForm',async()=>{await api('schedule/save',{schedule:{channel_id:$('channel').value.trim(),bot_pubkey:$('scheduleBot').value,prompt:$('prompt').value,time:$('scheduleTime').value,membership_confirmed:$('membership').checked}});message('매일 예약을 저장했습니다. 메시지 전달과 AI 작업 완료를 실제로 확인하세요.');},'submit');
 action('scheduleDisable',async()=>{await api('schedule/disable');message('예약을 중지했습니다. 이미 실행 중인 AI 작업은 취소되지 않습니다.');});
 action('logout',async()=>{if(authSession)await api('auth/cancel',{session:authSession});await api('logout');location.reload();});
-async function boot(){try{const response=await fetch('/api/hello');const hello=await response.json();if(!response.ok||!hello.ok)throw new Error(errors[hello.error]||'HTTPS 접속 주소를 확인해 주세요.');if(hello.claimed){$('setupCodeField').hidden=true;$('passwordLabel').textContent='설정 화면 비밀번호';$('password').autocomplete='current-password';$('passwordHint').textContent='처음 연결할 때 정한 비밀번호를 입력하세요.';}if(hello.authenticated)await enter();}catch(e){message(e.message,true);}}
+// Fragments never enter HTTP/access logs. Scrub before the first asynchronous request.
+function takeAccessFragment() {
+  if (!location.hash) return null;
+  const params=new URLSearchParams(location.hash.slice(1));
+  history.replaceState(null,'',location.pathname+location.search);
+  const keys=[...params.keys()];
+  if(keys.length!==1 || !['setup_code','recovery_code'].includes(keys[0]) || !/^[A-Za-z0-9_-]{32,100}$/.test(params.get(keys[0]))) {
+    message('설정 링크의 인증값을 읽지 못했습니다. 아래 로그 안내에 따라 최신 코드를 직접 입력하세요.',true);return null;
+  }
+  return {kind:keys[0],value:params.get(keys[0])};
+}
+let accessFragment=takeAccessFragment();
+async function boot(){try{
+  const response=await fetch('/api/hello');const hello=await response.json();
+  if(!response.ok||!hello.ok)throw new Error(errors[hello.error]||'HTTPS 접속 주소를 확인해 주세요.');
+  if(hello.claimed){$('setupCodeField').hidden=true;$('setupCode').value='';$('showRecovery').hidden=false;$('passwordLabel').textContent='설정 화면 비밀번호';$('password').autocomplete='current-password';$('passwordHint').textContent='처음 연결할 때 정한 비밀번호를 입력하세요. 재시작 후에도 같은 비밀번호입니다.';}
+  if(accessFragment){
+    if(accessFragment.kind==='setup_code'&&!hello.claimed){$('setupCode').value=accessFragment.value;message('링크의 설정 코드를 입력했습니다. 새 비밀번호를 정하고 설정 시작을 누르세요.');}
+    else if(accessFragment.kind==='recovery_code'&&hello.claimed){$('workspace').hidden=true;$('loginPanel').hidden=false;recoveryMode(true);$('recoveryCode').value=accessFragment.value;message('복구 코드를 입력했습니다. 새 비밀번호를 정해 주세요.');}
+    else message(hello.claimed?'이미 설정된 서버입니다. 기존 비밀번호로 로그인하세요.':'아직 최초 설정 전입니다. 최신 setup code로 시작하세요.');
+    accessFragment=null;
+  }
+  if(hello.authenticated&&$('recoveryForm').hidden)await enter();
+}catch(e){message(e.message,true);}}
+window.addEventListener('hashchange',()=>{accessFragment=takeAccessFragment();if(accessFragment)boot();});
 boot();setInterval(poll,2000);

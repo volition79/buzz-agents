@@ -18,6 +18,7 @@ def main():
     parser.add_argument('--compose',required=True)
     parser.add_argument('--host-proxy',action='store_true')
     parser.add_argument('--legacy-upgrade',action='store_true')
+    parser.add_argument('--portal-upgrade',action='store_true')
     args=parser.parse_args()
     assert os.environ.get('GITHUB_ACTIONS')=='true', 'CI fixture only'
     project='buzz-auto-ci'
@@ -36,6 +37,11 @@ def main():
         run(['sudo','mkdir','-p',str(actual.parent)])
         run(['sudo','chown',str(os.getuid())+':'+str(os.getgid()),str(actual.parent)])
         target_broker=config['services']['broker']['image']
+        target_portal=config['services']['portal']['image']
+        if args.portal_upgrade:
+            config['services']['broker']['image']='ghcr.io/volition79/buzz-agents-broker@sha256:56d45e699381baf6e79bc16934d24f64713be6b6e6a3bf21fef52f7a82df73c8'
+            config['services']['portal']['image']='ghcr.io/volition79/buzz-agents-portal@sha256:844f142608f887dc314c4c810a40136d031a087d6619a7363b624966dd42bc81'
+            for role in ('broker','portal'): run(['docker','pull',config['services'][role]['image']])
         config['services']['portal'].setdefault('environment',{})['BUZZ_FIXTURE_LITERAL']='a$$b'
         if args.legacy_upgrade:
             config['services']['broker']['image']='ghcr.io/volition79/buzz-agents-broker@sha256:00c183b8e229e5f0627fa9fcb43eecc3c9bb7c97c42104078f90004ee8126145'
@@ -80,6 +86,43 @@ def main():
             ready()
             route_state=json.loads(run(['docker','inspect',route]))[0]
             portal_before=json.loads(run(['docker','inspect',project+'-portal-1']))[0]
+            if args.portal_upgrade:
+                # Claim and pair through actual old HTTP API; keep fixture credentials in memory.
+                logs=run(['docker','logs',project+'-portal-1']).decode()
+                code=next(line.split(': ',1)[1] for line in logs.splitlines() if line.startswith('Buzz first setup code'))
+                seed="""import io,json,urllib.request,zipfile
+from pathlib import Path
+base='http://127.0.0.1:8080'
+headers={'Host':HOST,'X-Forwarded-Proto':'https','Origin':'https://'+HOST,'Content-Type':'application/json'}
+def post(path,data):
+ return urllib.request.urlopen(urllib.request.Request(base+path,json.dumps(data).encode(),headers))
+r=post('/api/login',{'setup_code':CODE,'password':'ci-upgrade-password'})
+headers['Cookie']=r.headers['Set-Cookie'].split(';')[0]
+with zipfile.ZipFile(io.BytesIO(post('/api/pair/bundle',{}).read())) as z: pairing=json.loads(z.read('buzz-pairing.json'))
+device=json.load(post('/api/pair/exchange',{'pairing_code':pairing['pairing_code'],'name':'ci-upgrade-device'}))
+print(json.dumps({'account':Path('/portal/account.json').read_text(),'devices':Path('/portal/devices.json').read_text(),'token':device['token']}))
+""".replace('HOST',repr(host)).replace('CODE',repr(code))
+                preserved=json.loads(run(cmd+['exec','-T','portal','python','-c',seed],env=env))
+                route_before_upgrade=route_state['Id']
+                config['services']['broker']['image']=target_broker
+                config['services']['portal']['image']=target_portal
+                actual.write_text(json.dumps(config))
+                run(cmd+['up','-d','--no-deps','broker','portal'],env=env)
+                ready()
+                route_state=json.loads(run(['docker','inspect',route]))[0]
+                assert route_state['Id']==route_before_upgrade, 'portal upgrade replaced verified proxy'
+                verify="""import json,urllib.request
+from pathlib import Path
+assert Path('/portal/account.json').read_text()==ACCOUNT
+assert Path('/portal/devices.json').read_text()==DEVICES
+h={'Host':HOST,'X-Forwarded-Proto':'https','Content-Type':'application/json','Authorization':'Bearer '+TOKEN}
+r=urllib.request.Request('http://127.0.0.1:8080/api/device/check',b'{}',h)
+assert json.load(urllib.request.urlopen(r))['ok']
+from buzz_agents.portal_recover import request_code
+request_code()
+""".replace('ACCOUNT',repr(preserved['account'])).replace('DEVICES',repr(preserved['devices'])).replace('HOST',repr(host)).replace('TOKEN',repr(preserved['token']))
+                run(cmd+['exec','-T','portal','python','-c',verify],env=env)
+                assert 'Buzz recovery code' in run(['docker','logs',project+'-portal-1']).decode()
             if args.legacy_upgrade:
                 assert not route_state['Config']['Labels'].get('com.docker.compose.config-hash')
                 config['services']['broker']['image']=target_broker
@@ -99,12 +142,12 @@ def main():
             assert route_state['Id'] in project_ids, 'route not in Compose ps'
             assert route_state['Config']['Labels']['com.docker.compose.project.config_files']==str(actual)
             assert route_state['Config']['Labels']['traefik.http.routers.'+project+'.rule']=='Host(`'+host+'`)'
-            assert json.loads(run(['docker','inspect',project+'-portal-1']))[0]['Id']==portal_before['Id']
+            assert (json.loads(run(['docker','inspect',project+'-portal-1']))[0]['Id']==portal_before['Id']) != args.portal_upgrade
             resolved=json.loads(run(cmd+['config','--format','json'],env=env))
             # Compose config serializes literal dollars escaped; verify the real
             # container value and equivalence of config output across rewrite.
             assert 'BUZZ_FIXTURE_LITERAL=a$b' in portal_before['Config']['Env']
-            assert resolved['services']['setup-route']['image']==resolved['services']['portal']['image']
+            assert (resolved['services']['setup-route']['image']==resolved['services']['portal']['image']) != args.portal_upgrade
             assert '@sha256:' in resolved['services']['setup-route']['image']
             assert resolved['services']['portal']['environment']['BUZZ_FIXTURE_LITERAL']==normalized_before['services']['portal']['environment']['BUZZ_FIXTURE_LITERAL']
             assert json.loads(actual.read_text())['services']['portal']['environment']['BUZZ_FIXTURE_LITERAL']=='a$$b'
@@ -134,7 +177,7 @@ def main():
             assert before['NetworkSettings']['Networks']==after['NetworkSettings']['Networks']
             run(cmd+['down','--volumes'],env=env)
             assert not run(['docker','ps','-aq','--filter','name=^/'+route+'$']).strip(), 'Compose down left route behind'
-            print(json.dumps({'genuine_compose_route':True,'legacy_upgrade':args.legacy_upgrade,'no_domain_environment':True,'auto_route_running':True,'route_restart_reused':True,'fixture_relay_unchanged':True,'fixture_dns_only':True,'live_hostinger_verified':False,'real_traefik_tls_fixture':True,'host_proxy':args.host_proxy}))
+            print(json.dumps({'genuine_compose_route':True,'legacy_upgrade':args.legacy_upgrade,'portal_upgrade_preserves_account_devices_route':args.portal_upgrade,'no_domain_environment':True,'auto_route_running':True,'route_restart_reused':True,'fixture_relay_unchanged':True,'fixture_dns_only':True,'live_hostinger_verified':False,'real_traefik_tls_fixture':True,'host_proxy':args.host_proxy}))
         finally:
             subprocess.run(['docker','rm','-f',route],capture_output=True)
             subprocess.run(cmd+['down','--volumes'],env=env,capture_output=True)

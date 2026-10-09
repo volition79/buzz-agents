@@ -159,6 +159,113 @@ class PortalHTTPTests(unittest.TestCase):
         self.assertNotIn('private-token', json.dumps(result))
 
 
+    def test_access_reissue_socket_and_recovery_preserve_devices(self):
+        from contextlib import redirect_stdout
+        from buzz_agents.portal_recover import control_server, request_code
+        output = io.StringIO()
+        original = self.app.setup_code
+        with control_server(self.app), redirect_stdout(output):
+            socket_path = self.app.root/'access.sock'
+            self.assertEqual(socket_path.stat().st_mode & 0o777, 0o600)
+            with self.assertRaises(BlockingIOError):
+                with control_server(self.app): pass
+            request_code(socket_path)
+        self.assertNotEqual(original, self.app.setup_code)
+        self.assertFalse(socket_path.exists())
+        self.assertIn('/#setup_code='+self.app.setup_code, output.getvalue())
+        self.assertEqual(self.call('/api/login', {'setup_code': original, 'password': 'test-password-long'})[0], 400)
+        pairing = self.pair()
+        _, device, _ = self.call('/api/pair/exchange', {'pairing_code': pairing['pairing_code']}, origin=False)
+        persisted = (self.app.root/'devices.json').read_bytes()
+        old_cookie = self.cookie
+        output = io.StringIO()
+        with control_server(self.app), redirect_stdout(output):
+            request_code(self.app.root/'access.sock')
+        recovery = output.getvalue().split('/#recovery_code=')[1].splitlines()[0]
+        self.assertEqual(self.call('/api/recover', {'recovery_code': recovery, 'password': 'new-long-password'}, origin=False)[0], 403)
+        self.assertEqual(self.call('/api/recover', {'recovery_code': recovery, 'password': 'short'})[0], 400)
+        self.assertEqual(self.call('/api/recover', {'recovery_code': recovery, 'password': 'new-long-password'})[0], 200)
+        self.assertEqual(self.call('/api/status', {}, cookie=old_cookie)[0], 401)
+        self.assertEqual((self.app.root/'devices.json').read_bytes(), persisted)
+        self.assertTrue(self.app.device('Bearer '+device['token']))
+        self.assertEqual(self.call('/api/recover', {'recovery_code': recovery, 'password': 'another-password'})[0], 400)
+        self.assertEqual(self.call('/api/login', {'password': 'test-password-long'})[0], 400)
+        self.assertEqual(self.call('/api/login', {'password': 'new-long-password'})[0], 200)
+        self.assertNotIn(recovery, (self.app.root/'account.json').read_text())
+
+    def test_recovery_expiry_reissue_restart_and_failed_save(self):
+        from contextlib import redirect_stdout
+        self.login()
+        def issue():
+            out = io.StringIO()
+            with redirect_stdout(out): self.app.issue_access_code()
+            return out.getvalue().split('/#recovery_code=')[1].splitlines()[0]
+        old = issue(); fresh = issue()
+        self.assertEqual(self.call('/api/recover', {'recovery_code': old, 'password': 'new-long-password'})[0], 400)
+        self.now[0] += 3600
+        self.assertEqual(self.call('/api/recover', {'recovery_code': fresh, 'password': 'new-long-password'})[0], 400)
+        self.now[0] += 61
+        fresh = issue()
+        before = (self.app.root/'account.json').read_bytes()
+        with patch('buzz_agents.portal.atomic_json', side_effect=OSError('fixture-write-failure')):
+            self.assertEqual(self.call('/api/recover', {'recovery_code': fresh, 'password': 'new-long-password'})[0], 500)
+        self.assertEqual((self.app.root/'account.json').read_bytes(), before)
+        self.assertTrue(self.app.admin(self.cookie))
+        restarted = Portal(self.app.root, self.url, local=True, clock=lambda: self.now[0])
+        with self.assertRaisesRegex(ToolError, 'invalid_or_expired_recovery_code'):
+            restarted.recover({'recovery_code': fresh, 'password': 'new-long-password'})
+        self.assertEqual(restarted.account, self.app.account)
+        self.assertFalse(restarted.grants)
+        self.assertFalse(restarted.admin(self.cookie))
+
+    def test_recovery_one_winner_and_unused_pairing_revoked(self):
+        from concurrent.futures import ThreadPoolExecutor
+        from contextlib import redirect_stdout
+        pairing = self.pair()
+        out = io.StringIO()
+        with redirect_stdout(out): self.app.issue_access_code()
+        code = out.getvalue().split('/#recovery_code=')[1].splitlines()[0]
+        def attempt(_):
+            return self.call('/api/recover', {'recovery_code': code, 'password': 'new-long-password'})[0]
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            results = list(pool.map(attempt, range(2)))
+        self.assertEqual(sorted(results), [200, 400])
+        self.assertEqual(self.call('/api/pair/exchange', {'pairing_code': pairing['pairing_code']}, origin=False)[0], 400)
+
+    def test_setup_deadline_and_restart_regeneration(self):
+        code = self.app.setup_code
+        self.now[0] += 3600
+        self.assertEqual(self.call('/api/login', {'setup_code': code, 'password': 'test-password-long'})[0], 400)
+        restarted = Portal(self.app.root, self.url, local=True, clock=lambda: self.now[0])
+        self.assertNotEqual(restarted.setup_code, code)
+        with self.assertRaises(ToolError): restarted.login({'setup_code': code, 'password': 'test-password-long'})
+        self.assertTrue(restarted.login({'setup_code': restarted.setup_code, 'password': 'test-password-long'}))
+
+    def test_no_public_issuer_or_secret_readback(self):
+        for path in ['/api/recover/issue', '/api/issue-access-code', '/access.sock']:
+            self.assertNotEqual(self.call(path, {})[0], 200)
+        self.assertEqual(self.call('/api/recover', {'password': 'new-long-password'})[0], 400)
+        for path in ['/', '/api/hello', '/app.js']:
+            _, body, _ = self.call(path)
+            self.assertNotIn(self.app.setup_code, body.decode() if isinstance(body, bytes) else json.dumps(body))
+        self.assertEqual(self.call('/?setup_code='+self.app.setup_code)[0], 400)
+
+    def test_device_check_and_self_revoke_are_own_only(self):
+        pairing = self.pair()
+        _, device, _ = self.call('/api/pair/exchange', {'pairing_code': pairing['pairing_code']}, origin=False)
+        h = {'Authorization': 'Bearer '+device['token']}
+        self.calls.clear()
+        status, value, _ = self.call('/api/device/check', {}, cookie='', origin=False, headers=h)
+        self.assertEqual(status, 200)
+        self.assertEqual(value['device_id'], device['device_id'])
+        self.assertEqual(self.calls, [])
+        other = 'f'*24
+        self.app.devices[other] = {'hash': digest('x'*43), 'name': 'other'}
+        self.assertEqual(self.call('/api/device/revoke-self', {'id':other}, cookie='', origin=False, headers=h)[0], 200)
+        self.assertIn(other, self.app.devices)
+        self.assertEqual(self.call('/api/device/check', {}, cookie='', origin=False, headers=h)[0], 401)
+
+
 class BrokerTests(unittest.TestCase):
     def test_discovery_only_public_fields_and_multiple_relays(self):
         container = {'Config': {'Env': ['RELAY_OWNER_PUBKEY='+OWNER, 'BUZZ_REQUIRE_RELAY_MEMBERSHIP=true',

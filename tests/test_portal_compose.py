@@ -35,6 +35,24 @@ class ComposeRouteTests(unittest.TestCase):
         self.assertEqual(pc.service(self.data,ref)['image'],ref)
         self.assertNotEqual(pc.service(self.data,ref)['image'],self.data['image'])
 
+    def test_upgraded_portal_uses_retained_proxy_digest_only_after_identity_check(self):
+        items = fixture()
+        portal_ref = 'ghcr.io/example/portal@sha256:'+'a'*64
+        route_ref = 'ghcr.io/example/portal@sha256:'+'b'*64
+        items[1]['Image'] = 'sha256:'+'c'*64
+        items[1]['Config']['Image'] = portal_ref
+        route = {'Config': {'Image': route_ref}}
+        with patch.object(pc, 'project_file', return_value=self.path), \
+             patch.object(pc, 'inspect_container', return_value=route), \
+             patch.object(pc, 'check_current') as check, \
+             patch.object(pc, '_reconcile') as reconcile:
+            pc.reconcile(items, 'a'*12, self.data)
+            check.assert_called_once_with(route, self.data, self.path)
+            reconcile.assert_called_once_with(self.path, self.data, route_ref, portal_ref)
+        with patch.object(pc, 'project_file', return_value=self.path), \
+             patch.object(pc, 'inspect_container', return_value=route):
+            with self.assertRaises(ToolError): pc.reconcile(items, 'a'*12, self.data)
+
     def test_preservation_rejects_changed_old_service_and_volume(self):
         for changed in ({'services': {'portal': {'image': 'other'}}},
                         {'services': {}, 'volumes': {'portal': {'name': 'other'}}}):

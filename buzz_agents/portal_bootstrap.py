@@ -65,6 +65,26 @@ def plan(containers, self_id):
     return result
 
 
+def retain_verified_route(data, saved, containers):
+    """A portal UI upgrade may reuse its unchanged, previously verified proxy image.
+
+    Never migrate routing/security settings or replace a proxy through this path.
+    """
+    if not saved or saved.get('fingerprint') == data['fingerprint']:
+        return data
+    previous = {k: v for k, v in saved.items() if k != 'fingerprint'}
+    if hashlib.sha256(json.dumps(previous, sort_keys=True).encode()).hexdigest() != saved.get('fingerprint'):
+        raise ToolError('bootstrap_saved_route_invalid')
+    same = lambda value: {k: v for k, v in value.items() if k not in ('image', 'fingerprint')}
+    if same(data) != same(saved):
+        raise ToolError('bootstrap_existing_route_requires_review')
+    existing = [c for c in containers if c.get('Name', '').lstrip('/') == saved['route_name']]
+    if len(existing) != 1:
+        raise ToolError('bootstrap_previous_route_missing')
+    check_route(existing[0], saved, compose=True)
+    return saved
+
+
 def networks(container):
     return set(container.get('NetworkSettings', {}).get('Networks', {})) - {'host', 'none', 'bridge'}
 

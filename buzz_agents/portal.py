@@ -71,8 +71,44 @@ class Portal:
         self.attempts = deque()
         self.setup_code = secrets.token_urlsafe(24)
         self.setup_deadline = clock() + 3600
+        self.recovery = None
         self.account = read_json(self.root / 'account.json', {})
         self.devices = read_json(self.root / 'devices.json', {})
+
+    def print_access_code(self, code, recovery=False):
+        kind = 'recovery' if recovery else 'first setup'
+        key = 'recovery_code' if recovery else 'setup_code'
+        print(f'Buzz {kind} code (valid 60 minutes, one use): {code}', flush=True)
+        print(f'Buzz {kind} link: {self.url}/#{key}={code}', flush=True)
+        print('Use the latest code only. Reissue or portal restart invalidates it.', flush=True)
+
+    def issue_access_code(self):
+        # Called only through the local, mode-0600 control socket.
+        with self.lock:
+            code = secrets.token_urlsafe(24)
+            if self.account:
+                self.recovery = (digest(code), self.clock() + 3600)
+            else:
+                self.setup_code, self.setup_deadline = code, self.clock() + 3600
+            self.print_access_code(code, recovery=bool(self.account))
+
+    def recover(self, data):
+        with self.lock:
+            self.throttle()
+            code = data.get('recovery_code', '')
+            if (not self.account or not isinstance(code, str) or not TOKEN.fullmatch(code)
+                    or not self.recovery or self.clock() >= self.recovery[1]
+                    or not hmac.compare_digest(digest(code), self.recovery[0])):
+                raise ToolError('invalid_or_expired_recovery_code')
+            salt = secrets.token_hex(16)
+            record = {'salt': salt, 'hash': self.password_hash(data.get('password'), salt)}
+            atomic_json(self.root / 'account.json', record)
+            self.account = record
+            self.recovery = None
+            self.sessions.clear()
+            self.grants.clear()
+            # Persistent device credentials and broker/AI state are deliberately retained.
+            return {'ok': True}
 
     def throttle(self):
         # Global bounded rate limit avoids trusting spoofable forwarded client IPs.
@@ -95,7 +131,7 @@ class Portal:
             password = data.get('password')
             if not self.account:
                 code = data.get('setup_code', '')
-                if (not isinstance(code, str) or self.clock() > self.setup_deadline
+                if (not isinstance(code, str) or self.clock() >= self.setup_deadline
                         or not hmac.compare_digest(code, self.setup_code)):
                     raise ToolError('invalid_or_expired_setup_code')
                 salt = secrets.token_hex(16)
@@ -144,7 +180,10 @@ class Portal:
             with zipfile.ZipFile(out, 'w', zipfile.ZIP_DEFLATED) as archive:
                 archive.write(executable, executable.name)
                 archive.writestr('buzz-pairing.json', json.dumps(data))
-                archive.writestr('시작하기.txt', '압축을 풀고 Buzz-VPS-Connect.exe를 실행하세요. 연결 파일은 10분간 한 번만 사용할 수 있습니다.\n')
+                archive.writestr('시작하기.txt', '압축을 모두 풀고 Buzz-VPS-Connect.exe를 실행하세요. 연결 파일은 10분간 한 번만 사용할 수 있습니다.\n'
+                                 '만료·실패 시 설정 화면에서 새 연결 파일을 받으세요. 정상 연결 후에는 파일의 만료와 무관하게 연결이 유지됩니다.\n'
+                                 '다시 실행하면 기존 연결을 확인합니다. 재연결은 직접 선택할 때만 진행하며 Buzz를 먼저 종료하세요.\n'
+                                 '저장 실패 시 표시된 장치 ID를 설정 화면에서 찾아 해제하고 새 파일로 재시도하세요.\n')
             return out.getvalue()
 
     def exchange(self, data):
@@ -245,7 +284,8 @@ class Handler(BaseHTTPRequestHandler):
         if self.command != 'POST':
             return self.respond(404, {'ok': False, 'error': 'not_found'})
         origin = self.headers.get('Origin')
-        device_route = self.path in ('/api/pair/exchange', '/api/device/deploy', '/api/device/status')
+        device_route = self.path in ('/api/pair/exchange', '/api/device/deploy', '/api/device/status',
+                                          '/api/device/check', '/api/device/revoke-self')
         if (origin and origin != app.url) or (not device_route and origin != app.url):
             return self.respond(403, {'ok': False, 'error': 'origin_rejected'})
         data = self.request_body()
@@ -254,11 +294,21 @@ class Handler(BaseHTTPRequestHandler):
             cookie = 'buzz_session='+token+'; HttpOnly; SameSite=Strict; Path=/; Max-Age=28800'
             if not app.local: cookie += '; Secure'
             return self.respond(200, {'ok': True}, cookie=cookie)
+        if self.path == '/api/recover':
+            return self.respond(200, app.recover(data))
         if self.path == '/api/pair/exchange':
             return self.respond(200, app.exchange(data))
         if self.path.startswith('/api/device/'):
             if not app.device(self.headers.get('Authorization', '')):
                 return self.respond(401, {'ok': False, 'error': 'connection_revoked_or_invalid'})
+            if self.path in ('/api/device/check', '/api/device/revoke-self'):
+                with app.lock:
+                    fingerprint = digest(self.headers.get('Authorization', '').removeprefix('Bearer '))
+                    identifier = next((k for k, v in app.devices.items() if hmac.compare_digest(v['hash'], fingerprint)), None)
+                    if not identifier:
+                        return self.respond(401, {'ok': False, 'error': 'connection_revoked_or_invalid'})
+                    result = app.revoke(identifier) if self.path.endswith('revoke-self') else {'ok': True, 'device_id': identifier}
+                return self.respond(200, result)
             if self.path == '/api/device/deploy':
                 return self.respond(200, app.rpc({'op': 'deploy', 'request': data}))
             if self.path == '/api/device/status':
@@ -346,9 +396,10 @@ def bootstrap_url(rpc=broker_call, sleep=time.sleep):
 def main():
     os.umask(0o077)
     app = Portal('/portal', os.environ.get('BUZZ_PUBLIC_URL') or bootstrap_url())
+    from .portal_recover import control_server
     if not app.account:
-        print('Buzz first setup code (valid 60 minutes): '+app.setup_code, flush=True)
-    with Server(('0.0.0.0', 8080), app) as server:
+        app.print_access_code(app.setup_code)
+    with control_server(app), Server(('0.0.0.0', 8080), app) as server:
         server.serve_forever()
 
 

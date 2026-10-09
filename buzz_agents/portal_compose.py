@@ -109,20 +109,29 @@ def reconcile(containers, self_id, data):
     path = project_file(containers, self_id, data['project'])
     portal = next(c for c in containers if c.get('Name', '').lstrip('/') == data['upstream'])
     image_ref = portal.get('Config', {}).get('Image', '')
-    if portal.get('Image') != data['image'] or not re.fullmatch(r'[a-z0-9][a-z0-9._/-]+@sha256:[a-f0-9]{64}', image_ref):
+    if not re.fullmatch(r'[a-z0-9][a-z0-9._/-]+@sha256:[a-f0-9]{64}', image_ref):
         raise ToolError('bootstrap_portal_digest_required')
+    portal_ref = image_ref
+    if portal.get('Image') != data['image']:
+        existing = inspect_container(data['route_name'])
+        if not existing:
+            raise ToolError('bootstrap_previous_route_missing')
+        check_current(existing, data, path)
+        image_ref = existing.get('Config', {}).get('Image', '')
+        if not re.fullmatch(r'[a-z0-9][a-z0-9._/-]+@sha256:[a-f0-9]{64}', image_ref):
+            raise ToolError('bootstrap_route_digest_required')
     lock = path.parent / '.buzz-route.lock'
     fd = os.open(lock, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
     with os.fdopen(fd, 'w') as stream:
         fcntl.flock(stream, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        return _reconcile(path, data, image_ref)
+        return _reconcile(path, data, image_ref, portal_ref)
 
 
-def _reconcile(path, data, image_ref=None):
+def _reconcile(path, data, image_ref=None, portal_ref=None):
     cmd = command(path, data['project'])
     original = path.read_bytes()
     before = normalized(path, data['project'])
-    if image_ref and before.get('services', {}).get('portal', {}).get('image') != image_ref:
+    if image_ref and before.get('services', {}).get('portal', {}).get('image') != (portal_ref or image_ref):
         raise ToolError('bootstrap_portal_compose_image_changed')
     raw = json.loads(execute(cmd + ['config', '--format', 'json', '--no-interpolate',
                                     '--no-env-resolution', '--no-path-resolution', '--no-normalize']))

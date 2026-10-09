@@ -88,37 +88,95 @@ func protect(path string) error {
 	return nil
 }
 
+func readConnection(home string) (Connection, []byte, error) {
+	path := filepath.Join(home, ".buzz-agents-web", "connection.json")
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return Connection{}, nil, err
+	}
+	var c Connection
+	if len(raw) > 4096 || json.Unmarshal(raw, &c) != nil || validate(Pairing{1, c.Endpoint, c.Token}) != nil || !regexp.MustCompile(`^[a-f0-9]{24}$`).MatchString(c.DeviceID) {
+		return Connection{}, raw, errors.New("기존 연결 파일을 읽지 못했습니다. 재연결을 선택하면 성공 시에만 교체합니다.")
+	}
+	return c, raw, nil
+}
+
+func deviceRequest(c Connection, action string, client *http.Client) bool {
+	if validate(Pairing{1, c.Endpoint, c.Token}) != nil {
+		return false
+	}
+	req, err := http.NewRequest("POST", c.Endpoint+"/api/device/"+action, strings.NewReader("{}"))
+	if err != nil {
+		return false
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+c.Token)
+	resp, err := client.Do(req)
+	if err != nil {
+		return false
+	}
+	defer resp.Body.Close()
+	var value struct {
+		OK       bool   `json:"ok"`
+		DeviceID string `json:"device_id"`
+	}
+	if resp.StatusCode != 200 || json.NewDecoder(io.LimitReader(resp.Body, 4096)).Decode(&value) != nil || !value.OK {
+		return false
+	}
+	return action != "check" || value.DeviceID == c.DeviceID
+}
+
 func install(p Pairing, home string, client *http.Client) error {
+	return installConnection(p, home, client, false, commitFile)
+}
+
+func installConnection(p Pairing, home string, client *http.Client, replace bool, commit func(string, string, bool) error) error {
 	if err := validate(p); err != nil {
 		return err
 	}
 	dir := filepath.Join(home, ".buzz-agents-web")
-	config := filepath.Join(dir, "connection.json")
-	if _, err := os.Stat(config); err == nil {
-		return errors.New("이미 Windows 연결 정보가 있습니다. 기존 연결은 보존했습니다. 설정 화면의 연결 목록을 먼저 확인해 주세요.")
-	} else if !os.IsNotExist(err) {
-		return err
-	}
-	bin := filepath.Join(home, ".local", "bin")
-	target := filepath.Join(bin, "buzz-backend-hostinger-https.exe")
-	if old, err := os.ReadFile(target); err == nil && !bytes.Equal(old, provider) {
-		return errors.New("다른 버전의 HTTPS 연결기가 있어 자동으로 덮어쓰지 않습니다.")
-	} else if err != nil && !os.IsNotExist(err) {
-		return err
-	}
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		return err
 	}
 	if err := protect(dir); err != nil {
 		return err
 	}
+	unlock, err := lockInstall(filepath.Join(dir, "connect.lock"))
+	if err != nil {
+		return errors.New("다른 연결 프로그램이 실행 중이거나 폴더에 접근할 수 없습니다. 다른 창을 닫고 다시 시도하세요.")
+	}
+	defer unlock()
+	config := filepath.Join(dir, "connection.json")
+	old, before, readErr := readConnection(home)
+	existed := !os.IsNotExist(readErr)
+	if existed && !replace {
+		return errors.New("이미 Windows 연결 정보가 있습니다. 기존 연결을 보존했습니다. 프로그램에서 재연결을 직접 선택하세요.")
+	}
+	if readErr != nil && before == nil && existed {
+		return errors.New("기존 연결 파일에 접근하지 못했습니다. 파일을 변경하지 않았습니다.")
+	}
+	bin := filepath.Join(home, ".local", "bin")
+	target := filepath.Join(bin, "buzz-backend-hostinger-https.exe")
+	if oldBytes, err := os.ReadFile(target); err == nil && !bytes.Equal(oldBytes, provider) {
+		return errors.New("다른 버전의 HTTPS 연결기가 있어 자동으로 덮어쓰지 않습니다.")
+	} else if err != nil && !os.IsNotExist(err) {
+		return err
+	}
 	if err := os.MkdirAll(bin, 0755); err != nil {
 		return err
 	}
-	// Prepare executable before redeeming a one-use code. No global PATH edits.
-	if err := os.WriteFile(target, provider, 0755); err != nil {
-		return err
+	if _, err := os.Stat(target); os.IsNotExist(err) {
+		if err := os.WriteFile(target, provider, 0755); err != nil {
+			return err
+		}
 	}
+	// Open a protected staging file BEFORE consuming the one-use grant.
+	f, err := os.CreateTemp(dir, ".connection-*.tmp")
+	if err != nil {
+		return errors.New("연결 정보를 저장할 수 없습니다. 연결 파일은 사용하지 않았습니다.")
+	}
+	defer os.Remove(f.Name())
+	defer f.Close()
 	name, _ := os.Hostname()
 	if name == "" {
 		name = "Windows Buzz"
@@ -130,15 +188,36 @@ func install(p Pairing, home string, client *http.Client) error {
 	if err != nil {
 		return err
 	}
-	data, _ := json.MarshalIndent(c, "", "  ")
-	f, err := os.OpenFile(config, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
-	if err != nil {
-		return errors.New("연결 정보 저장 실패. 설정 화면에서 방금 만든 Windows 연결을 해제한 뒤 다시 시도하세요.")
+	fail := func() error {
+		if deviceRequest(c, "revoke-self", client) {
+			return errors.New("연결 정보 저장 실패. 새 서버 연결은 해제했고 기존 연결은 보존했습니다. 새 연결 파일로 다시 시도하세요.")
+		}
+		return fmt.Errorf("연결 정보 저장 실패. 기존 연결은 보존했습니다. 설정 화면에서 장치 ID %s 를 해제한 뒤 새 연결 파일로 재시도하세요.", c.DeviceID)
 	}
-	_, writeErr := f.Write(data)
-	closeErr := f.Close()
-	if writeErr != nil || closeErr != nil {
-		return errors.New("연결 정보 저장 실패. 설정 화면에서 해당 연결을 해제하세요.")
+	data, _ := json.MarshalIndent(c, "", "  ")
+	if _, err := f.Write(data); err != nil {
+		return fail()
+	}
+	if err := f.Sync(); err != nil {
+		return fail()
+	}
+	if err := f.Close(); err != nil {
+		return fail()
+	}
+	current, err := os.ReadFile(config)
+	if existed {
+		if err != nil || !bytes.Equal(current, before) {
+			return fail()
+		}
+	} else if !os.IsNotExist(err) {
+		return fail()
+	}
+	if err := commit(f.Name(), config, existed); err != nil {
+		return fail()
+	}
+	// Revoke only the previous credential after the new local file is committed.
+	if readErr == nil && old.Endpoint == c.Endpoint && old.DeviceID != c.DeviceID {
+		deviceRequest(old, "revoke-self", client)
 	}
 	return nil
 }
@@ -180,9 +259,33 @@ func main() {
 		return
 	}
 	client := &http.Client{Timeout: 30 * time.Second, CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return errors.New("redirect refused") }}
-	if err := install(p, home, client); err != nil {
+	replace := false
+	old, raw, oldErr := readConnection(home)
+	if oldErr == nil || raw != nil {
+		if oldErr == nil {
+			fmt.Println("기존 서버: " + old.Endpoint + "\n기존 장치 ID: " + old.DeviceID)
+			if deviceRequest(old, "check", client) {
+				fmt.Println("기존 Windows 연결이 정상입니다. 다시 설치할 필요가 없습니다.")
+			} else {
+				fmt.Println("기존 연결 상태를 확인하지 못했습니다. 서버 상태와 설정 화면의 연결 목록을 확인하세요.")
+			}
+		} else {
+			fmt.Println(oldErr.Error())
+		}
+		fmt.Println("기존 연결 유지: Enter / 재연결: r (먼저 Buzz를 종료하세요). 새 연결은 위에 표시한 서버에 저장됩니다.")
+		answer, _ := in.ReadString('\n')
+		if strings.TrimSpace(answer) != "r" {
+			fmt.Println("기존 연결을 유지했습니다.")
+			return
+		}
+		replace = true
+	}
+	if err := installConnection(p, home, client, replace, commitFile); err != nil {
 		fmt.Println("완료되지 않음: " + err.Error())
 		return
+	}
+	if replace && oldErr == nil {
+		fmt.Println("이전 장치 ID: " + old.DeviceID + " — 이전 서버 목록에 남아 있다면 이 ID의 연결만 해제하세요.")
 	}
 	fmt.Println("\nWindows 연결을 저장했습니다.\n1. Buzz를 다시 실행하세요.\n2. 봇 실행 위치에서 Hostinger VPS — HTTPS를 선택하고 배포하세요.\n3. 서버 설정 화면에서 해당 봇의 Codex·Claude 계정에 로그인하세요.")
 }
