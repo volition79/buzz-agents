@@ -63,7 +63,7 @@ class Handler(BaseHTTPRequestHandler):
             headers = {k: self.headers[k] for k in FORWARD if k in self.headers}
             headers.update({'Host': self.server.hostname, 'X-Forwarded-Proto': 'https', 'Connection': 'close'})
             if self.command == 'POST': headers['Content-Length'] = str(size)
-            conn = http.client.HTTPConnection(self.server.upstream, self.server.upstream_port, timeout=30)
+            conn = http.client.HTTPConnection(self.server.upstream, self.server.upstream_port, timeout=250)
             conn.request(self.command, self.path, body=body if self.command == 'POST' else None, headers=headers)
             response = conn.getresponse()
             payload = response.read(RESPONSE_LIMIT + 1)

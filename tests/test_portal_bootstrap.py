@@ -106,7 +106,7 @@ class BootstrapTests(unittest.TestCase):
                   'RestartPolicy':{'Name':'unless-stopped'},'SecurityOpt':['no-new-privileges:true']},
                   'Mounts':[],'NetworkSettings':{'Networks':{'traefik-proxy':{}}}}
         boot.check_route(existing,data)
-        for field,value in [('Privileged',True),('ReadonlyRootfs',False),('Memory',0),('CapAdd',['SYS_ADMIN'])]:
+        for field,value in [('Privileged',True),('ReadonlyRootfs',False),('Memory',0),('CapAdd',['SYS_ADMIN']),('ExtraHosts',['upstream:192.0.2.99']),('Dns',['192.0.2.99'])]:
             changed=copy.deepcopy(existing);changed['HostConfig'][field]=value
             with self.assertRaises(ToolError):boot.check_route(changed,data)
         changed=copy.deepcopy(existing);changed['Mounts']=[{'Source':'/var/run/docker.sock'}]
@@ -172,3 +172,13 @@ class RouteHTTPTests(unittest.TestCase):
         conn.putheader('Host','setup.example');conn.putheader('X-Forwarded-Proto','https')
         conn.putheader('Content-Length','0');conn.putheader('Content-Length','0');conn.endheaders()
         self.assertEqual(conn.getresponse().status,400);conn.close()
+
+    def test_upstream_timeout_preserves_existing_deploy_budget(self):
+        original=http.client.HTTPConnection
+        seen=[]
+        def connection(host,port,timeout):
+            if port==self.upstream.server_port:seen.append(timeout)
+            return original(host,port,timeout=timeout)
+        with patch('buzz_agents.portal_route.http.client.HTTPConnection',side_effect=connection):
+            self.assertEqual(self.call('/api/device/deploy','POST',b'fixture')[0],200)
+        self.assertEqual(seen,[250])

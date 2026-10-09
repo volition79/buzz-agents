@@ -127,6 +127,7 @@ def check_route(existing, data):
             or host.get('RestartPolicy', {}).get('Name') != 'unless-stopped'
             or 'no-new-privileges:true' not in (host.get('SecurityOpt') or [])
             or existing.get('Mounts') or host.get('PortBindings')
+            or any(host.get(key) for key in ('ExtraHosts','Dns','DnsSearch','DnsOptions','Links'))
             or set(existing.get('NetworkSettings', {}).get('Networks', {})) != {'traefik-proxy'}
             or 'BUZZ_ROUTE_HOST='+data['hostname'] not in env
             or 'BUZZ_ROUTE_UPSTREAM='+data['upstream'] not in env
