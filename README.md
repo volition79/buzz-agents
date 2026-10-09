@@ -6,7 +6,7 @@
 - [검증 결과](docs/PORTAL-VERIFICATION.md)
 - 새 로컬 패키지: `dist/portal-v0.4/`
 
-공개 이미지 3개와 [설치 Compose](https://raw.githubusercontent.com/volition79/buzz-agents/main/docker-compose.yml)가 준비되었습니다. GitHub Docker 빌드·임시 실행·익명 다운로드 검증은 통과했으며, 기존 후보의 실제 Hostinger 설치와 공인 HTTPS는 확인했습니다. 기존 「열기」 접속은 확인됐으며, 인증값 전달·복구 개선 후보의 실제 설치와 KVM 2 Windows-off 검증은 아직 남아 있습니다. 기존 릴리스 첨부파일 URL의 설치 실패를 보완하는 수정 후보입니다.
+공개 이미지 3개와 [설치 Compose](https://raw.githubusercontent.com/volition79/buzz-agents/main/docker-compose.yml)가 준비되었습니다. GitHub Docker 빌드·임시 실행·익명 다운로드 검증은 통과했으며, 기존 후보의 실제 Hostinger 설치와 공인 HTTPS는 확인했습니다. 기존 「열기」 접속은 확인됐으며, 새 후보는 코드 자동 입력·로그 대체 안내·비밀번호 복구·Windows 재연결을 포함합니다. Docker 업데이트 시 계정과 기존 연결 보존을 검증했습니다. 실제 hPanel의 인증값 전달과 KVM 2 Windows-off 검증은 아직 남아 있습니다.
 
 ## 보존된 v0.3 SSH 방식
 
