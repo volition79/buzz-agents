@@ -13,7 +13,7 @@ services:
     mem_limit: 64m
     pids_limit: 16
   broker:
-    image: ghcr.io/volition79/buzz-agents-broker@sha256:331907b9d49a7c88e26f80e75d164fa714927351416ab2b61c1bee801dde6af3
+    image: ghcr.io/volition79/buzz-agents-broker@sha256:054cd17863c65a1b760915e27d96079da3adc56bc26d85c40510790745447de2
     depends_on:
       runtime-image:
         condition: service_completed_successfully
@@ -42,7 +42,7 @@ services:
       driver: json-file
       options: {max-size: 5m, max-file: "2"}
   portal:
-    image: ghcr.io/volition79/buzz-agents-portal@sha256:502d57ca9a26c07327a92c9973392f1631c640ff54f4e54eac68c90d0f27847b
+    image: ghcr.io/volition79/buzz-agents-portal@sha256:3baa1b7246b26a4c8849d2e49ab8dc504762fedfd2ee1e810f81ed29f00539f8
     depends_on: [broker]
     user: "10002:10002"
     init: true
