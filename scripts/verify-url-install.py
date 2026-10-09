@@ -38,6 +38,7 @@ def main():
             assert os.environ.get('GITHUB_ACTIONS')=='true','CI only'
             subprocess.run(cmd+['pull'],env=env,cwd=tmp,check=True)
             subprocess.run(['python3',str(ROOT/'scripts/verify-bootstrap-docker.py'),'--compose',str(compose)],env=env,check=True)
+            subprocess.run(['python3',str(ROOT/'scripts/verify-bootstrap-docker.py'),'--compose',str(compose),'--host-proxy'],env=env,check=True)
     print(json.dumps({'url_sha256':hashlib.sha256(raw).hexdigest(),'public_bytes_match':True,
                       'no_domain_environment':True,'fixture_dns_only':True,
                       'hostinger_import_verified':False,'runtime_smoke':args.start}))
