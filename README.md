@@ -6,7 +6,7 @@
 - [검증 결과](docs/PORTAL-VERIFICATION.md)
 - 새 로컬 패키지: `dist/portal-v0.4/`
 
-공개 이미지 3개와 [설치 Compose](https://raw.githubusercontent.com/volition79/buzz-agents/main/docker-compose.yml)가 준비되었습니다. GitHub Docker 빌드·임시 실행·익명 다운로드 검증은 통과했으며, 실제 Hostinger URL 가져오기와 KVM 2 Windows-off 검증은 아직 남아 있습니다. 기존 릴리스 첨부파일 URL의 설치 실패를 보완하는 수정 후보입니다.
+공개 이미지 3개와 [설치 Compose](https://raw.githubusercontent.com/volition79/buzz-agents/main/docker-compose.yml)가 준비되었습니다. GitHub Docker 빌드·임시 실행·익명 다운로드 검증은 통과했으며, 기존 후보의 실제 Hostinger 설치와 공인 HTTPS는 확인했습니다. 이번 「열기」 버튼 수정의 실서버 확인과 KVM 2 Windows-off 검증은 아직 남아 있습니다. 기존 릴리스 첨부파일 URL의 설치 실패를 보완하는 수정 후보입니다.
 
 ## 보존된 v0.3 SSH 방식
 
@@ -38,4 +38,4 @@ python3 scripts/build-easy.py
 
 v0.2 문서와 테스트 로그는 이력입니다. 새 사용자 설치는 위 사용 방법을 따릅니다.
 
-자동 초기 설정 후보는 도메인 환경값 없이 기존 Hostinger 기본 도메인의 Buzz Relay를 검색합니다. `setup-route`가 추가 생성되며, 실제 URL 가져오기·TLS·AI 인증·Windows-off 수용 시험은 아직 별도입니다.
+자동 초기 설정 후보는 도메인 환경값 없이 기존 Hostinger 기본 도메인의 Buzz Relay를 검색합니다. `setup-route`가 추가 생성되며, 기존 후보의 URL 설치·공인 TLS는 확인했으며, 이번 「열기」 수정의 실서버 확인·AI 인증·Windows-off 수용 시험은 별도입니다.

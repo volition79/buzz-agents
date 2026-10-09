@@ -9,7 +9,7 @@ v0.4 공개 개발 후보입니다. GitHub에서 이미지 빌드·임시 Compos
 Docker Manager의 **컴포즈 → URL에서 Compose**에 입력할 주소:
 
 ```text
-https://raw.githubusercontent.com/volition79/buzz-agents/ee2ab42595318ad9e4b8c0bc46454573165c1ec3/docker-compose.yml
+https://raw.githubusercontent.com/volition79/buzz-agents/ec2d9b08df3bb7e7d383eff9fa9ac3002bde4b06/docker-compose.yml
 ```
 
 도메인 환경변수를 요구하지 않는 자동 초기 설정 후보입니다. 기존 **Hostinger 기본 도메인의 Buzz Relay와 Traefik**이 먼저 실행되어 있어야 합니다.
@@ -90,3 +90,10 @@ docker build -f Dockerfile.portal --target portal -t buzz-agents-portal:0.4.0 .
 초기 Compose 서비스 3개 외에 `setup-route`가 추가됩니다. 같은 portal 이미지의 제한된 HTTP 전달 프로그램이며, 별도 인증 데이터·Docker 소켓·호스트 볼륨이 없습니다. 사용자 요청은 고정된 자기 portal로만 전달합니다. 같은 구성으로 재시작하면 재사용하며, 다른 이미지/구성의 기존 route는 자동 교체하지 않습니다. 확인된 구버전 helper는 기존 URL을 유지하면서 정식 서비스로 전환합니다. 전환 후에는 Compose 조회와 종료에 포함됩니다. 다른 이미지 업그레이드는 별도 검토가 필요합니다.
 
 네트워크 자동 탐색 수정은 CI37906214523 및 공개 URL 재실행 CI37906666736에서 통과했습니다. 기존 후보의 실제 Hostinger 설치와 공인 HTTPS는 확인했으며, 이번 Open 버튼 수정의 실서버 검증은 남아 있습니다. 여러 네트워크/Traefik 후보가 남거나 HTTPS 라우터 설정을 확인할 수 없으면 안전하게 대기합니다. 아직 선택 화면은 없습니다. 공인 HTTPS 접속 확인 전에는 설치 성공으로 간주하지 마세요.
+
+
+## 열기 버튼 수정 후보 검증
+
+CI37912336094에서 134개 Python 검사와 실제 Docker 신규 설치·기존 helper 전환을 통과했습니다. 공개 URL 그대로 내려받은 배포 검사도 CI37912789643에서 통과했습니다. 접속용 서비스는 정식 Compose 목록과 종료 대상에 포함되며 기존 설정 화면 이미지·URL·인증 볼륨을 유지합니다. 실제 hPanel의 `entrypoint_url` 생성 및 「열기」 클릭 확인은 수정본을 VPS에 적용한 뒤 진행해야 합니다.
+
+기존 프로젝트의 단순 「업데이트」가 GitHub URL의 새 내용을 다시 가져온다고 가정하지 마세요. 이미지가 digest로 고정되어 있으므로 새 Compose 내용이 실제 저장됐는지 확인해야 합니다. 기존 프로젝트를 삭제하거나 이름을 바꾸면 현재 URL·볼륨과 달라질 수 있으므로, 기존 `buzz-agents` 구성을 보존한 적용 경로를 먼저 확인합니다.
