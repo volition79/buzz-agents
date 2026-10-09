@@ -1,0 +1,96 @@
+name: Build and publish reviewed portal candidate
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+  packages: write
+concurrency:
+  group: portal-candidate-publication
+  cancel-in-progress: false
+jobs:
+  candidate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff
+        with:
+          go-version: '1.26.5'
+          cache: false
+      - name: Build Windows candidate and run scoped tests
+        shell: bash
+        run: |
+          python3 scripts/build-portal.py
+          npm ci --ignore-scripts --no-audit --no-fund
+          sudo env "PATH=$PATH" python3 -m unittest discover -s tests -v
+          for module in web-provider connect; do
+            (cd "$module" && go test -race ./... && go vet ./...)
+          done
+          node --check buzz_agents/web/app.js
+      - name: Build all three images
+        shell: bash
+        run: |
+          IMAGE_PREFIX="ghcr.io/${GITHUB_REPOSITORY,,}"
+          echo "IMAGE_PREFIX=$IMAGE_PREFIX" >> "$GITHUB_ENV"
+          docker build --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" -t "$IMAGE_PREFIX-runtime:$GITHUB_SHA" .
+          docker build -f Dockerfile.portal --target broker --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" -t "$IMAGE_PREFIX-broker:$GITHUB_SHA" .
+          docker build -f Dockerfile.portal --target portal --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" -t "$IMAGE_PREFIX-portal:$GITHUB_SHA" .
+      - name: Start isolated CI stack and check role boundary
+        shell: bash
+        run: |
+          export BUZZ_RUNTIME_IMAGE="$IMAGE_PREFIX-runtime:$GITHUB_SHA"
+          export BUZZ_BROKER_IMAGE="$IMAGE_PREFIX-broker:$GITHUB_SHA"
+          export BUZZ_PORTAL_IMAGE="$IMAGE_PREFIX-portal:$GITHUB_SHA"
+          export BUZZ_SETUP_HOST=setup.example.invalid
+          docker network create traefik-proxy
+          docker compose -f compose.portal.yaml up -d
+          python3 - <<'PY'
+          import subprocess,time
+          check="import os,time; from pathlib import Path; from buzz_agents.portal import broker_call; assert os.geteuid()==10002; assert not Path('/var/run/docker.sock').exists(); assert broker_call({'op':'status'})['configured'] is False"
+          for attempt in range(15):
+              result=subprocess.run(['docker','compose','-f','compose.portal.yaml','exec','-T','portal','python','-c',check],capture_output=True)
+              if result.returncode==0:break
+              time.sleep(1)
+          else:raise SystemExit('isolated role-boundary smoke failed; no images published')
+          PY
+          docker compose -f compose.portal.yaml down
+          docker run --rm --network none --entrypoint docker "$BUZZ_BROKER_IMAGE" compose version
+      - name: Publish reviewed images
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          printf '%s' "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          for role in runtime broker portal; do docker push "$IMAGE_PREFIX-$role:$GITHUB_SHA"; done
+          python3 scripts/render-portal-release.py \
+            --runtime "$(docker image inspect "$IMAGE_PREFIX-runtime:$GITHUB_SHA" --format '{{index .RepoDigests 0}}')" \
+            --broker "$(docker image inspect "$IMAGE_PREFIX-broker:$GITHUB_SHA" --format '{{index .RepoDigests 0}}')" \
+            --portal "$(docker image inspect "$IMAGE_PREFIX-portal:$GITHUB_SHA" --format '{{index .RepoDigests 0}}')" \
+            --output dist/portal-v0.4/compose.install.yaml
+      - name: Require anonymous image access before issuing install URL
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json,os,urllib.request
+          prefix=os.environ['IMAGE_PREFIX'].removeprefix('ghcr.io/')
+          for role in ('runtime','broker','portal'):
+              image=prefix+'-'+role
+              url='https://ghcr.io/token?service=ghcr.io&scope=repository:'+image+':pull'
+              try:
+                  with urllib.request.urlopen(url,timeout=30) as response: token=json.load(response)['token']
+                  request=urllib.request.Request('https://ghcr.io/v2/'+image+'/manifests/'+os.environ['GITHUB_SHA'],headers={'Authorization':'Bearer '+token,'Accept':'application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json'})
+                  with urllib.request.urlopen(request,timeout=30) as response: assert response.status==200
+              except Exception:
+                  raise SystemExit('Set this GHCR package to Public in GitHub package settings, then rerun: '+image)
+          PY
+      - name: Create candidate release with concrete install Compose
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          RELEASE_TAG="portal-candidate-${GITHUB_SHA:0:12}-${GITHUB_RUN_NUMBER}-${GITHUB_RUN_ATTEMPT}"
+          gh release create "$RELEASE_TAG" --target "$GITHUB_SHA" --prerelease \
+            --title "Buzz portal v0.4 candidate" --notes-file docs/PORTAL-VERIFICATION.md \
+            dist/portal-v0.4/compose.install.yaml dist/portal-v0.4/manifest.json \
+            dist/portal-v0.4/Buzz-VPS-Connect.exe dist/portal-v0.4/docker-build-context.zip
+          echo "Install Compose: https://github.com/$GITHUB_REPOSITORY/releases/download/$RELEASE_TAG/compose.install.yaml" >> "$GITHUB_STEP_SUMMARY"

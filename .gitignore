@@ -1,0 +1,14 @@
+.env
+__pycache__/
+*.pyc
+node_modules/
+bin/
+*.sqlite*
+secrets/
+state/
+setup/assets/
+connect/assets/
+web-provider/buzz-vps-web-provider
+connect/buzz-vps-connect
+dist/
+.sonol-test/runtime/

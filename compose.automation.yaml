@@ -1,0 +1,30 @@
+name: buzz-agents-scheduler
+services:
+  scheduler:
+    image: ${BUZZ_AGENTS_IMAGE:?Use the reviewed local v0.2 image tag}
+    pull_policy: never
+    user: '10001:10001'
+    init: true
+    restart: unless-stopped
+    command: [python, -m, buzz_agents.scheduler]
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    cpus: '0.15'
+    mem_limit: 192m
+    memswap_limit: 192m
+    pids_limit: 64
+    tmpfs: ['/tmp:size=32m,mode=1777,nosuid,nodev']
+    volumes:
+      - type: bind
+        source: /var/lib/buzz-agents-automation/config
+        target: /automation-config
+        read_only: true
+        bind: {create_host_path: false}
+      - type: bind
+        source: /var/lib/buzz-agents-automation/state
+        target: /automation-state
+        bind: {create_host_path: false}
+    logging:
+      driver: json-file
+      options: {max-size: '5m', max-file: '2'}

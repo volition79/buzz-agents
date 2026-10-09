@@ -1,0 +1,79 @@
+# Release template: publish reviewed images, then set their immutable references.
+# Existing Hostinger Traefik and Buzz Relay are prerequisites; neither is replaced.
+name: buzz-agents-portal
+services:
+  runtime-image:
+    image: ${BUZZ_RUNTIME_IMAGE:?Set the published runtime image digest}
+    entrypoint: ["python", "-c", "print('Runtime image ready')"]
+    network_mode: none
+    user: "10001:10001"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    restart: "no"
+    mem_limit: 64m
+    pids_limit: 16
+  broker:
+    image: ${BUZZ_BROKER_IMAGE:?Set the published broker image digest}
+    depends_on:
+      runtime-image:
+        condition: service_completed_successfully
+    environment:
+      BUZZ_RUNTIME_IMAGE: ${BUZZ_RUNTIME_IMAGE:?Set the published runtime image digest}
+    network_mode: none
+    user: "0:0"
+    init: true
+    read_only: true
+    cap_drop: [ALL]
+    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER]
+    security_opt: ["no-new-privileges:true"]
+    restart: unless-stopped
+    cpus: 0.35
+    mem_limit: 256m
+    pids_limit: 96
+    tmpfs: ["/tmp:size=32m,mode=1777", "/run:size=4m"]
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /var/lib/buzz-agents-v2:/var/lib/buzz-agents-v2
+      - /var/lib/buzz-agents-easy-scheduler:/var/lib/buzz-agents-easy-scheduler
+      - control:/control
+      - rpc:/rpc
+    logging:
+      driver: json-file
+      options: {max-size: 5m, max-file: "2"}
+  portal:
+    image: ${BUZZ_PORTAL_IMAGE:?Set the published portal image digest}
+    depends_on: [broker]
+    environment:
+      BUZZ_PUBLIC_URL: https://${BUZZ_SETUP_HOST:?Set the setup hostname pointing to this VPS}
+    user: "10002:10002"
+    init: true
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    restart: unless-stopped
+    cpus: 0.25
+    mem_limit: 192m
+    pids_limit: 48
+    tmpfs: ["/tmp:size=16m,mode=1777"]
+    volumes:
+      - portal:/portal
+      - rpc:/rpc
+    networks: [traefik-proxy]
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=traefik-proxy
+      - traefik.http.routers.buzz-agents-setup.rule=Host(`${BUZZ_SETUP_HOST}`)
+      - traefik.http.routers.buzz-agents-setup.entrypoints=websecure
+      - traefik.http.routers.buzz-agents-setup.tls.certresolver=letsencrypt
+      - traefik.http.services.buzz-agents-setup.loadbalancer.server.port=8080
+    logging:
+      driver: json-file
+      options: {max-size: 5m, max-file: "2"}
+volumes:
+  control:
+  rpc:
+  portal:
+networks:
+  traefik-proxy:
+    external: true

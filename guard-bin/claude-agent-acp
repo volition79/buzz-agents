@@ -1,0 +1,3 @@
+#!/usr/local/bin/python
+from buzz_agents.guard import main
+raise SystemExit(main())

@@ -1,0 +1,9 @@
+{
+  "name": "buzz-agents-local-helper",
+  "version": "0.2.0",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "description": "Nostr signature verification and identity generation; no provider authentication logic",
+  "dependencies": {"@noble/secp256k1": "3.0.0"}
+}
