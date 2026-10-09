@@ -30,6 +30,11 @@ class ComposeRouteTests(unittest.TestCase):
             return Path(argv[argv.index('-f')+1]).read_bytes()
         return b''
 
+    def test_route_keeps_pullable_pinned_portal_reference(self):
+        ref='ghcr.io/example/portal@sha256:'+'f'*64
+        self.assertEqual(pc.service(self.data,ref)['image'],ref)
+        self.assertNotEqual(pc.service(self.data,ref)['image'],self.data['image'])
+
     def test_preservation_rejects_changed_old_service_and_volume(self):
         for changed in ({'services': {'portal': {'image': 'other'}}},
                         {'services': {}, 'volumes': {'portal': {'name': 'other'}}}):

@@ -4,6 +4,7 @@ import fcntl
 import hashlib
 import json
 import os
+import re
 from pathlib import Path
 import stat
 import tempfile
@@ -35,7 +36,7 @@ def command(path, project):
             '-p', project, '-f', str(path)]
 
 
-def service(data):
+def service(data, image_ref=None):
     argv = boot.route_command(data, compose=True)
     tags = {}
     for i, value in enumerate(argv[:-1]):
@@ -43,7 +44,7 @@ def service(data):
             key, val = argv[i+1].split('=', 1)
             if not key.startswith('com.docker.compose.'):
                 tags[key] = val
-    return {'image': data['image'], 'container_name': data['route_name'],
+    return {'image': image_ref or data['image'], 'container_name': data['route_name'],
             'command': ['python', '-m', 'buzz_agents.portal_route'],
             'user': '10002:10002', 'read_only': True, 'init': True,
             'cap_drop': ['ALL'], 'security_opt': ['no-new-privileges:true'],
@@ -106,22 +107,28 @@ def check_current(existing, data, path):
 
 def reconcile(containers, self_id, data):
     path = project_file(containers, self_id, data['project'])
+    portal = next(c for c in containers if c.get('Name', '').lstrip('/') == data['upstream'])
+    image_ref = portal.get('Config', {}).get('Image', '')
+    if portal.get('Image') != data['image'] or not re.fullmatch(r'[a-z0-9][a-z0-9._/-]+@sha256:[a-f0-9]{64}', image_ref):
+        raise ToolError('bootstrap_portal_digest_required')
     lock = path.parent / '.buzz-route.lock'
     fd = os.open(lock, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
     with os.fdopen(fd, 'w') as stream:
         fcntl.flock(stream, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        return _reconcile(path, data)
+        return _reconcile(path, data, image_ref)
 
 
-def _reconcile(path, data):
+def _reconcile(path, data, image_ref=None):
     cmd = command(path, data['project'])
     original = path.read_bytes()
     before = normalized(path, data['project'])
+    if image_ref and before.get('services', {}).get('portal', {}).get('image') != image_ref:
+        raise ToolError('bootstrap_portal_compose_image_changed')
     raw = json.loads(execute(cmd + ['config', '--format', 'json', '--no-interpolate',
                                     '--no-env-resolution', '--no-path-resolution', '--no-normalize']))
     if set(raw.get('services', {})) - {'broker', 'portal', 'runtime-image', 'setup-route'}:
         raise ToolError('bootstrap_unexpected_compose_services')
-    expected_service = service(data)
+    expected_service = service(data, image_ref)
     current = raw.get('services', {}).get('setup-route')
     if current and current.get('labels', {}).get('io.buzz-agents.bootstrap') != data['fingerprint']:
         raise ToolError('bootstrap_existing_compose_route_requires_review')

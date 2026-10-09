@@ -104,6 +104,8 @@ def main():
             # Compose config serializes literal dollars escaped; verify the real
             # container value and equivalence of config output across rewrite.
             assert 'BUZZ_FIXTURE_LITERAL=a$b' in portal_before['Config']['Env']
+            assert resolved['services']['setup-route']['image']==resolved['services']['portal']['image']
+            assert '@sha256:' in resolved['services']['setup-route']['image']
             assert resolved['services']['portal']['environment']['BUZZ_FIXTURE_LITERAL']==normalized_before['services']['portal']['environment']['BUZZ_FIXTURE_LITERAL']
             assert json.loads(actual.read_text())['services']['portal']['environment']['BUZZ_FIXTURE_LITERAL']=='a$$b'
 
