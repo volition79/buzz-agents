@@ -43,6 +43,7 @@ def main():
         actual.unlink(missing_ok=True)
         actual.write_text(json.dumps(config))
         cmd=['docker','compose','--env-file','/dev/null','-p',project,'-f',str(actual)]
+        normalized_before=json.loads(run(cmd+['config','--format','json'],env=env))
         network='buzz-fixture-relay_default'
         run(['docker','network','create',network])
         proxy='buzz-ci-traefik-fixture'
@@ -100,7 +101,10 @@ def main():
             assert route_state['Config']['Labels']['traefik.http.routers.'+project+'.rule']=='Host(`'+host+'`)'
             assert json.loads(run(['docker','inspect',project+'-portal-1']))[0]['Id']==portal_before['Id']
             resolved=json.loads(run(cmd+['config','--format','json'],env=env))
-            assert resolved['services']['portal']['environment']['BUZZ_FIXTURE_LITERAL']=='a$b'
+            # Compose config serializes literal dollars escaped; verify the real
+            # container value and equivalence of config output across rewrite.
+            assert 'BUZZ_FIXTURE_LITERAL=a$b' in portal_before['Config']['Env']
+            assert resolved['services']['portal']['environment']['BUZZ_FIXTURE_LITERAL']==normalized_before['services']['portal']['environment']['BUZZ_FIXTURE_LITERAL']
             assert json.loads(actual.read_text())['services']['portal']['environment']['BUZZ_FIXTURE_LITERAL']=='a$$b'
 
             assert route_state['State']['Running']

@@ -69,6 +69,18 @@ class ComposeRouteTests(unittest.TestCase):
         self.assertIn(['docker','start','old'], self.calls)
         self.assertFalse(any(call[1]=='rm' for call in self.calls))
 
+    def test_failed_new_readiness_removes_only_owned_replacement_and_restores_legacy(self):
+        legacy={'Id':'old','State':{'Running':True},'Config':{'Labels':{'io.buzz-agents.managed':boot.MANAGED}}}
+        created={'Id':'new','Image':self.data['image'],'State':{'Running':False},'Config':{'Labels':{
+            **pc.service(self.data)['labels'], 'com.docker.compose.project':self.data['project'],
+            'com.docker.compose.service':'setup-route','com.docker.compose.config-hash':'fixture',
+            'com.docker.compose.project.config_files':str(self.path)}}}
+        with patch.object(pc,'execute',self.run_command),patch.object(pc,'inspect_container',side_effect=[legacy,None,created,created]),patch.object(boot,'check_route'):
+            with self.assertRaisesRegex(ToolError,'not_running'):pc._reconcile(self.path,self.data)
+        self.assertIn(['docker','rm','-f','new'],self.calls)
+        self.assertIn(['docker','start','old'],self.calls)
+        self.assertEqual(self.path.read_bytes(),self.bytes)
+
     def test_cleanup_failure_keeps_committed_new_route(self):
         legacy = {'Id':'old','State':{'Running':True},'Config':{'Labels':{'io.buzz-agents.managed':boot.MANAGED}}}
         created = {'Id':'new','State':{'Running':True}}

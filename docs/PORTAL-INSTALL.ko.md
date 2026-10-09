@@ -4,7 +4,7 @@
 
 ## 현재 상태
 
-v0.4 공개 개발 후보입니다. GitHub에서 이미지 빌드·임시 Compose 실행·비로그인 다운로드 검증을 통과했습니다. 실제 Hostinger 설치·공식 계정 인증·Windows 완전 종료 시험은 아직 남아 있습니다.
+v0.4 공개 개발 후보입니다. GitHub에서 이미지 빌드·임시 Compose 실행·비로그인 다운로드 검증을 통과했습니다. 기존 후보의 실제 Hostinger 설치와 공인 HTTPS 접속은 확인했습니다. 이번 「열기」 버튼 수정의 실제 hPanel 검증, 공식 계정 인증과 Windows 완전 종료 시험은 아직 남아 있습니다.
 
 Docker Manager의 **컴포즈 → URL에서 Compose**에 입력할 주소:
 
@@ -14,7 +14,7 @@ https://raw.githubusercontent.com/volition79/buzz-agents/ee2ab42595318ad9e4b8c0b
 
 도메인 환경변수를 요구하지 않는 자동 초기 설정 후보입니다. 기존 **Hostinger 기본 도메인의 Buzz Relay와 Traefik**이 먼저 실행되어 있어야 합니다.
 
-시작한 broker가 기존 Relay 프로젝트의 소유자 공개키와 Traefik 호스트 라벨을 읽습니다. `srv숫자.hstgr.cloud` 기반 도메인이 하나로 확인되면 프로젝트별 `buzz-setup-고유값.srv숫자.hstgr.cloud` 주소를 구성합니다. portal이 DNS를 확인한 뒤, broker가 별도 `setup-route` 컨테이너를 생성합니다. 기존 Relay와 Traefik은 수정하지 않습니다. portal은 Docker 소켓 없이 실행됩니다.
+시작한 broker가 기존 Relay 프로젝트의 소유자 공개키와 Traefik 호스트 라벨을 읽습니다. `srv숫자.hstgr.cloud` 기반 도메인이 하나로 확인되면 프로젝트별 `buzz-setup-고유값.srv숫자.hstgr.cloud` 주소를 구성합니다. portal이 DNS를 확인한 뒤, broker가 자기 프로젝트의 Compose 파일에 `setup-route` 서비스를 등록하고 실행합니다. 기존 Relay와 Traefik은 수정하지 않습니다. portal은 Docker 소켓 없이 실행됩니다.
 
 `TRAEFIK_HOST`, `BUZZ_SETUP_HOST`, root 비밀번호, 사람의 nsec를 입력하지 않습니다. 최초 관리자 코드와 설정 비밀번호는 계속 필요합니다. DNS 조회는 연결 가능성 검사이며 사용자 소유권 인증을 대체하지 않습니다.
 
@@ -22,7 +22,7 @@ https://raw.githubusercontent.com/volition79/buzz-agents/ee2ab42595318ad9e4b8c0b
 
 ## 설치 및 실서버 검증 순서
 
-1. Docker Manager에 위 Compose URL로 배포합니다. 먼저 Compose 기본 네트워크에서 시작한 뒤 기존 Relay·Traefik의 실제 네트워크와 HTTPS 라우터 설정을 검색합니다. 자기 portal만 발견한 네트워크에 연결하며, 기존 서비스의 네트워크는 바꾸지 않습니다. 환경값 추가 없이 배포합니다. 자동 구성 후 portal 로그의 `Buzz setup URL` 주소를 엽니다.
+1. Docker Manager에 위 Compose URL로 배포합니다. 먼저 Compose 기본 네트워크에서 시작한 뒤 기존 Relay·Traefik의 실제 네트워크와 HTTPS 라우터 설정을 검색합니다. 자기 portal만 발견한 네트워크에 연결하며, 기존 서비스의 네트워크는 바꾸지 않습니다. 환경값 추가 없이 배포합니다. 자동 구성 후 목록을 새로고침하고 **열기** 버튼으로 접속하는 것이 이번 수정의 목표입니다. 실제 hPanel 확인 전까지는 portal 로그의 `Buzz setup URL` 주소로도 접속할 수 있습니다.
 2. 설정 화면을 엽니다. Docker Manager의 **portal 로그**에 나온 최초 설정 코드를 입력하고, 설정 화면용 비밀번호(12자 이상)를 정합니다. root 비밀번호와는 별개입니다. 최초 코드는 60분간 유효하며 사용 후 폐기됩니다. 만료 시 portal을 재시작하면 새 코드가 나옵니다.
 3. 기존 Relay를 자동으로 찾습니다. 주소·소유자 공개키를 확인하고 연결합니다. 여러 개면 선택하고, 찾지 못하면 두 공개 정보만 직접 입력합니다. 소유권을 Nostr 서명으로 새로 증명하는 기능은 아닙니다. Docker 관리자만 읽을 수 있는 최초 코드와 기존 Relay 설정을 신뢰하며, 봇 권한은 기존 Relay가 검증합니다.
 4. **Windows 연결 파일 받기** → ZIP 압축 풀기 → `Buzz-VPS-Connect.exe` 실행. 자기 서버 주소가 맞는지 확인합니다. 파일은 10분간 한 번만 사용 가능합니다.
@@ -47,7 +47,7 @@ https://raw.githubusercontent.com/volition79/buzz-agents/ee2ab42595318ad9e4b8c0b
 
 ## 권한 구조
 
-portal은 UID10002로 동작하며 Docker 소켓·봇 인증 폴더에 접근하지 않습니다. 네트워크가 없는 broker만 Docker 소켓과 정해진 데이터 폴더를 사용하고, private Unix socket으로 제한된 작업을 받습니다. **Docker 소켓을 가진 broker 자체는 서버 관리자에 준하는 권한**이 있으므로 신뢰한 이미지로만 배포해야 합니다. root 비밀번호가 필요 없다는 말은 내부 관리 권한까지 없다는 뜻이 아닙니다.
+portal은 UID10002로 동작하며 Docker 소켓·봇 인증 폴더에 접근하지 않습니다. 네트워크가 없는 broker만 Docker 소켓·정해진 데이터 폴더·자기 `/docker/<프로젝트>` 설정 폴더를 사용하고, private Unix socket으로 제한된 작업을 받습니다. **Docker 소켓을 가진 broker 자체는 서버 관리자에 준하는 권한**이 있으므로 신뢰한 이미지로만 배포해야 합니다. root 비밀번호가 필요 없다는 말은 내부 관리 권한까지 없다는 뜻이 아닙니다.
 
 봇은 기존처럼 별도 컨테이너·UID10001·봇별 인증 홈·자원 한도·작업 보호 정책을 사용합니다. AI 컨테이너에는 Docker 소켓을 제공하지 않습니다. 공식 로그인 화면은 최대 10분간만 열리며, 출력은 메모리에만 유지하고 로그/파일로 저장하지 않습니다.
 
@@ -87,6 +87,6 @@ docker build -f Dockerfile.portal --target portal -t buzz-agents-portal:0.4.0 .
 
 ## 자동 라우팅 컨테이너
 
-초기 Compose 서비스 3개 외에 `setup-route`가 추가됩니다. 같은 portal 이미지의 제한된 HTTP 전달 프로그램이며, 별도 인증 데이터·Docker 소켓·호스트 볼륨이 없습니다. 사용자 요청은 고정된 자기 portal로만 전달합니다. 같은 구성으로 재시작하면 재사용하며, 다른 이미지/구성의 기존 route는 자동 교체하지 않습니다. 이미지 업그레이드와 설치 삭제는 별도 관리 절차가 필요합니다.
+초기 Compose 서비스 3개 외에 `setup-route`가 추가됩니다. 같은 portal 이미지의 제한된 HTTP 전달 프로그램이며, 별도 인증 데이터·Docker 소켓·호스트 볼륨이 없습니다. 사용자 요청은 고정된 자기 portal로만 전달합니다. 같은 구성으로 재시작하면 재사용하며, 다른 이미지/구성의 기존 route는 자동 교체하지 않습니다. 확인된 구버전 helper는 기존 URL을 유지하면서 정식 서비스로 전환합니다. 전환 후에는 Compose 조회와 종료에 포함됩니다. 다른 이미지 업그레이드는 별도 검토가 필요합니다.
 
-네트워크 자동 탐색 수정은 CI37906214523 및 공개 URL 재실행 CI37906666736에서 통과했습니다. 실제 Hostinger 설치 검증은 남아 있습니다. 여러 네트워크/Traefik 후보가 남거나 HTTPS 라우터 설정을 확인할 수 없으면 안전하게 대기합니다. 아직 선택 화면은 없습니다. 공인 HTTPS 접속 확인 전에는 설치 성공으로 간주하지 마세요.
+네트워크 자동 탐색 수정은 CI37906214523 및 공개 URL 재실행 CI37906666736에서 통과했습니다. 기존 후보의 실제 Hostinger 설치와 공인 HTTPS는 확인했으며, 이번 Open 버튼 수정의 실서버 검증은 남아 있습니다. 여러 네트워크/Traefik 후보가 남거나 HTTPS 라우터 설정을 확인할 수 없으면 안전하게 대기합니다. 아직 선택 화면은 없습니다. 공인 HTTPS 접속 확인 전에는 설치 성공으로 간주하지 마세요.

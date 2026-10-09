@@ -69,3 +69,26 @@ Source 9d6683aea6756fc559267805361927cc6ff656a9; CI37906214523 passed 121 Python
 Limits: default-only TLS configuration without router labels, custom domains and ambiguous routing safely wait; no pre-bootstrap selector UI. Dynamic route lifecycle/upgrades still need separate management as documented. Public ACME validity, actual Hostinger importer, user logins and Windows-off task acceptance are not proven by CI.
 
 Public artifact ee2ab42595318ad9e4b8c0bc46454573165c1ec3 passed CI37906666736: exact anonymous Raw byte parity, pinned image pulls, shared/host proxy HTTPS fixtures. SHA256 `0f99971770d71f9bea9c86772da2496d72b22551773284b18c86e1de9cc18956`. Independent anonymous manifest digest verification passed for all three images. This does not close the live acceptance gaps above.
+
+
+## Open-button correction (current work)
+
+The user's live Docker output and hPanel API response now confirm that the old URL
+import started broker/portal and the raw routing helper. Public setup HTTPS was
+also checked with normal certificate validation. This supersedes the earlier
+unverified import/TLS notes for that installed candidate only. The hPanel API
+still returns entrypoint_url=null for buzz-agents and excludes its raw helper;
+the working Relay has a derived HTTPS entrypoint.
+
+OPEN-01 registers setup-route through genuine Compose, using a project-named
+Traefik router. Only broker changes; portal/runtime digests, URL and volumes are
+preserved. Broker mounts only its own /docker/<project> directory, verifies the
+canonical config_files label, parses without interpolation, compares resolved
+existing services, and adds its route to that file. A checked legacy helper is
+replaced with rollback and a private recovery journal. Existing Relay and Traefik
+are not mutated. This is custom integration, not a claimed Hostinger builtin.
+
+Acceptance still requires the real hPanel response to include setup-route and a
+non-null entrypoint_url, then Open must reach the existing trusted HTTPS portal.
+CI Compose visibility/TLS fixtures cannot prove hPanel's private selection logic.
+AI authentication and the original Windows-off fresh task remain unverified.

@@ -86,12 +86,22 @@ def replace_if_unchanged(path, expected, replacement):
         Path(name).unlink(missing_ok=True)
 
 
-def check_current(existing, data, path):
-    boot.check_route(existing, data, compose=True)
+def check_owned_replacement(existing, data, path):
     tags = boot.labels(existing)
+    required = {'io.buzz-agents.managed': boot.MANAGED+'-compose',
+                'io.buzz-agents.bootstrap': data['fingerprint'],
+                'com.docker.compose.project': data['project'],
+                'com.docker.compose.service': 'setup-route',
+                'com.docker.compose.project.config_files': str(path)}
     if (not tags.get('com.docker.compose.config-hash')
-            or tags.get('com.docker.compose.project.config_files') != str(path)):
+            or any(tags.get(key) != value for key, value in required.items())
+            or existing.get('Image') != data['image']):
         raise ToolError('bootstrap_compose_route_identity_mismatch')
+
+
+def check_current(existing, data, path):
+    check_owned_replacement(existing, data, path)
+    boot.check_route(existing, data, compose=True)
 
 
 def reconcile(containers, self_id, data):
@@ -211,7 +221,11 @@ def _reconcile(path, data):
         if renamed:
             created = inspect_container(route)
             if created:
-                check_current(created, data, path)
+                # A failed new route may violate readiness/security checks, but
+                # rollback may remove only our exact newly created identity.
+                check_owned_replacement(created, data, path)
+                if created['Id'] == existing['Id']:
+                    raise ToolError('bootstrap_route_recovery_requires_review')
                 execute(['docker', 'rm', '-f', created['Id']])
             execute(['docker', 'rename', existing['Id'], route])
         if legacy and was_running:
