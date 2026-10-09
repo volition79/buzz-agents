@@ -4,13 +4,15 @@
 
 ## 현재 상태
 
-v0.4 공개 개발 후보입니다. GitHub에서 이미지 빌드·임시 Compose 실행·비로그인 다운로드 검증을 통과했습니다. 기존 후보의 실제 Hostinger 설치와 공인 HTTPS 접속은 확인했습니다. 기존 「열기」 버튼에서 설정 화면 접속은 확인했습니다. 이번 캡처 기반 한국어·영어 안내와 Windows 재연결 후보는 CI37936814573의 신규 설치·업데이트 시험을 통과했습니다. Hostinger ‘열기’의 인증값 자동 전달은 사용하지 않습니다. 공식 계정 인증·Windows 완전 종료 시험은 아직 남아 있습니다.
+v0.4 공개 개발 후보입니다. GitHub에서 이미지 빌드·임시 Compose 실행·비로그인 다운로드 검증을 통과했습니다. 기존 후보의 실제 Hostinger 설치와 공인 HTTPS 접속은 확인했습니다. 기존 「열기」 버튼에서 설정 화면 접속은 확인했습니다. 이번 후보는 최초 설정 버튼의 HTTP400 오류를 수정했습니다. CI37939336330에서 실제 접속 중계기를 거치는 Chrome 최초 설정·재로그인 및 신규 설치·업데이트 시험을 통과했습니다. Hostinger ‘열기’의 인증값 자동 전달은 사용하지 않습니다. 공식 계정 인증·Windows 완전 종료 시험은 아직 남아 있습니다.
 
 캡처 기반 한국어·영어 안내, 실제 Relay 주소 복사와 Windows 연결 상태별 선택을 포함한 Docker Manager **컴포즈 → URL에서 Compose** 주소:
 
 ```text
-https://raw.githubusercontent.com/volition79/buzz-agents/da9a4640dc2dbdcc6c2a9129b2074b1b0a838347/docker-compose.yml
+https://raw.githubusercontent.com/volition79/buzz-agents/21524ec79f7603a8f31633b2d34c24cfaabe75a0/docker-compose.yml
 ```
+
+최초 설정에서 HTTP400을 보았다면 이번 URL로 업데이트한 뒤 Docker Manager의 **열기**로 다시 접속하세요. 주소 끝에 `?`가 남은 오류 페이지를 새로고침하지 마세요. portal 로그의 최신 최초 설정 코드를 사용합니다. 설정 버튼은 화면 준비가 끝나면 활성화됩니다.
 
 업데이트 후에는 설정 페이지에서 Windows 연결 ZIP을 새로 다운로드하세요. 예전에 내려받은 실행 파일에는 새 안내와 연결 선택 방식이 반영되지 않습니다.
 
