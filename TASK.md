@@ -88,3 +88,5 @@ AUTO-04 Compose/CI/docs: no domain variables before startup. Test absent discove
 Independent review found and fixed AUTO-03 upstream timeout mismatch (now250s vs existing245s RPC) and AUTO-02 existing route DNS overrides (ExtraHosts/Dns/DnsSearch/DnsOptions/Links refused). Regression assertions added.
 
 AUTO-01..04 build verification passed in CI37901027761, source3518e79bc21afeb668edafc84ffd2baaff07be6e. No hostname env was injected; artificial Relay metadata and hosts-file DNS were fixtures. Dynamic route/startup/restart identity and unchanged Relay verified. Promoting newly published image digests only after exact Raw smoke.
+
+AUTO-01..04 public artifact verification: CI37901354005 passed for a3843e798c28ab5c78eb7418de697d0790d45ae4; immutable Raw URL https://raw.githubusercontent.com/volition79/buzz-agents/a3843e798c28ab5c78eb7418de697d0790d45ae4/docker-compose.yml. No-domain-env startup and route reuse verified against published images; fixture DNS only. Main promotion contains the same verified artifact bytes. Live Hostinger import/TLS and original Windows-off AI goal remain open.
