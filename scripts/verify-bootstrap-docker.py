@@ -17,6 +17,7 @@ def main():
     parser=argparse.ArgumentParser()
     parser.add_argument('--compose',required=True)
     parser.add_argument('--host-proxy',action='store_true')
+    parser.add_argument('--legacy-upgrade',action='store_true')
     args=parser.parse_args()
     assert os.environ.get('GITHUB_ACTIONS')=='true', 'CI fixture only'
     project='buzz-auto-ci'
@@ -30,6 +31,18 @@ def main():
         cmd=['docker','compose','--env-file','/dev/null','-p',project,'-f',str(source),'-f',str(override)]
         config=json.loads(run(cmd+['config','--format','json'],env=env))
         assert 'BUZZ_PUBLIC_URL' not in config['services']['portal'].get('environment',{})
+        # Match Hostinger's actual config_files path, including a single file.
+        actual=Path('/docker')/project/'docker-compose.yml'
+        run(['sudo','mkdir','-p',str(actual.parent)])
+        run(['sudo','chown',str(os.getuid())+':'+str(os.getgid()),str(actual.parent)])
+        target_broker=config['services']['broker']['image']
+        config['services']['portal'].setdefault('environment',{})['BUZZ_FIXTURE_LITERAL']='a$$b'
+        if args.legacy_upgrade:
+            config['services']['broker']['image']='ghcr.io/volition79/buzz-agents-broker@sha256:00c183b8e229e5f0627fa9fcb43eecc3c9bb7c97c42104078f90004ee8126145'
+            run(['docker','pull',config['services']['broker']['image']])
+        actual.unlink(missing_ok=True)
+        actual.write_text(json.dumps(config))
+        cmd=['docker','compose','--env-file','/dev/null','-p',project,'-f',str(actual)]
         network='buzz-fixture-relay_default'
         run(['docker','network','create',network])
         proxy='buzz-ci-traefik-fixture'
@@ -65,6 +78,31 @@ def main():
                 raise AssertionError('automatic bootstrap failed in Docker fixture')
             ready()
             route_state=json.loads(run(['docker','inspect',route]))[0]
+            portal_before=json.loads(run(['docker','inspect',project+'-portal-1']))[0]
+            if args.legacy_upgrade:
+                assert not route_state['Config']['Labels'].get('com.docker.compose.config-hash')
+                config['services']['broker']['image']=target_broker
+                actual.unlink()
+                actual.write_text(json.dumps(config))
+                run(cmd+['up','-d','--no-deps','broker'],env=env)
+            for _ in range(40):
+                found=subprocess.run(['docker','inspect',route],capture_output=True)
+                if found.returncode:
+                    time.sleep(2)
+                    continue
+                route_state=json.loads(found.stdout)[0]
+                if route_state['Config']['Labels'].get('com.docker.compose.config-hash'): break
+                time.sleep(2)
+            assert route_state['Config']['Labels'].get('com.docker.compose.config-hash'), 'route absent from genuine Compose metadata'
+            project_ids=run(cmd+['ps','-a','-q'],env=env).decode().split()
+            assert route_state['Id'] in project_ids, 'route not in Compose ps'
+            assert route_state['Config']['Labels']['com.docker.compose.project.config_files']==str(actual)
+            assert route_state['Config']['Labels']['traefik.http.routers.'+project+'.rule']=='Host(`'+host+'`)'
+            assert json.loads(run(['docker','inspect',project+'-portal-1']))[0]['Id']==portal_before['Id']
+            resolved=json.loads(run(cmd+['config','--format','json'],env=env))
+            assert resolved['services']['portal']['environment']['BUZZ_FIXTURE_LITERAL']=='a$b'
+            assert json.loads(actual.read_text())['services']['portal']['environment']['BUZZ_FIXTURE_LITERAL']=='a$$b'
+
             assert route_state['State']['Running']
             assert route_state['Config']['User']=='10002:10002' and not route_state['Mounts']
             assert route_state['HostConfig']['ReadonlyRootfs'] and route_state['HostConfig']['CapDrop']==['ALL']
@@ -88,10 +126,12 @@ def main():
             assert proxy_before['Id']==proxy_after['Id'] and proxy_before['Config']==proxy_after['Config']
             assert proxy_before['NetworkSettings']['Networks']==proxy_after['NetworkSettings']['Networks']
             assert before['NetworkSettings']['Networks']==after['NetworkSettings']['Networks']
-            print(json.dumps({'no_domain_environment':True,'auto_route_running':True,'route_restart_reused':True,'fixture_relay_unchanged':True,'fixture_dns_only':True,'live_hostinger_verified':False,'real_traefik_tls_fixture':True,'host_proxy':args.host_proxy}))
+            run(cmd+['down','--volumes'],env=env)
+            assert not run(['docker','ps','-aq','--filter','name=^/'+route+'$']).strip(), 'Compose down left route behind'
+            print(json.dumps({'genuine_compose_route':True,'legacy_upgrade':args.legacy_upgrade,'no_domain_environment':True,'auto_route_running':True,'route_restart_reused':True,'fixture_relay_unchanged':True,'fixture_dns_only':True,'live_hostinger_verified':False,'real_traefik_tls_fixture':True,'host_proxy':args.host_proxy}))
         finally:
             subprocess.run(['docker','rm','-f',route],capture_output=True)
-            subprocess.run(cmd+['down'],env=env,capture_output=True)
+            subprocess.run(cmd+['down','--volumes'],env=env,capture_output=True)
             subprocess.run(['docker','rm','-f',relay],capture_output=True)
             subprocess.run(['docker','rm','-f',proxy],capture_output=True)
             subprocess.run(['docker','network','rm',network],capture_output=True)

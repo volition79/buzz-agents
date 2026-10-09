@@ -19,7 +19,7 @@ from .config import HEX, relay_url
 from .host import Deployer, execute, inspect_container, check_ownership, container_name
 from .bridge import bot_records
 from .policy import atomic_json, read_json
-from . import easy_schedule, portal_bootstrap
+from . import easy_schedule, portal_bootstrap, portal_compose
 
 LIMIT = 512 * 1024
 STATE = Path('/var/lib/buzz-agents-v2')
@@ -166,6 +166,22 @@ class Broker:
         self.lock = threading.RLock()
         self.logins = LoginSessions()
 
+    def reconcile_saved_route(self):
+        # Broker-only upgrades need no portal restart. Previous activation already
+        # passed DNS in portal; fresh discovery must still match that saved plan.
+        saved = read_json(self.control / 'bootstrap.json', {})
+        if not saved:
+            return
+        for _ in range(12):
+            try:
+                self.dispatch({'op': 'bootstrap-activate', 'fingerprint': saved['fingerprint']})
+                print('Compose setup route ready', flush=True)
+                return
+            except Exception:
+                print('Compose setup route awaiting reconciliation; existing settings retained', flush=True)
+                time.sleep(10)
+
+
     def settings(self):
         data = read_json(self.control / 'settings.json', {})
         if not data:
@@ -196,16 +212,10 @@ class Broker:
                 old = read_json(self.control / 'bootstrap.json', {})
                 if old and old.get('fingerprint') != data['fingerprint']:
                     raise ToolError('bootstrap_existing_route_requires_review')
-                existing = inspect_container(data['route_name'])
-                if existing:
-                    portal_bootstrap.check_route(existing, data)
-                else:
-                    execute(portal_bootstrap.route_command(data))
                 portal = next(c for c in containers if c.get('Name', '').lstrip('/') == data['upstream'])
                 if data['network'] not in portal.get('NetworkSettings', {}).get('Networks', {}):
                     execute(['docker', 'network', 'connect', data['network'], portal['Id']])
-                if not existing or not existing.get('State', {}).get('Running'):
-                    execute(['docker', 'start', data['route_name']])
+                portal_compose.reconcile(containers, os.environ.get('HOSTNAME', ''), data)
                 atomic_json(self.control / 'bootstrap.json', data)
                 return {'ok': True, 'url': data['url']}
         if op == 'discover':
@@ -287,6 +297,7 @@ def main():
         os.chown(SOCKET, 0, 10002)
         os.chmod(SOCKET, 0o660)
         server.broker = Broker(os.environ['BUZZ_RUNTIME_IMAGE'])
+        threading.Thread(target=server.broker.reconcile_saved_route, daemon=True).start()
         server.serve_forever()
 
 

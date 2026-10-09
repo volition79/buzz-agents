@@ -46,33 +46,43 @@ jobs:
             (cd "$module" && go test -race ./... && go vet ./...)
           done
           node --check buzz_agents/web/app.js
-      - name: Build all three images
+      - name: Build broker and preserve installed portal and runtime digests
         shell: bash
         run: |
           IMAGE_PREFIX="ghcr.io/${GITHUB_REPOSITORY,,}"
           echo "IMAGE_PREFIX=$IMAGE_PREFIX" >> "$GITHUB_ENV"
-          docker build --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" -t "$IMAGE_PREFIX-runtime:$GITHUB_SHA" .
+          python3 - <<'PYCODE'
+          import os,re
+          from pathlib import Path
+          text=Path('docker-compose.yml').read_text()
+          with open(os.environ['GITHUB_ENV'],'a') as output:
+              for role in ('runtime','portal'):
+                  image=re.search(r'ghcr.io/volition79/buzz-agents-'+role+r'@sha256:[a-f0-9]{64}',text).group()
+                  output.write('BUZZ_'+role.upper()+'_IMAGE='+image+'\n')
+          PYCODE
           docker build -f Dockerfile.portal --target broker --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" -t "$IMAGE_PREFIX-broker:$GITHUB_SHA" .
-          docker build -f Dockerfile.portal --target portal --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" -t "$IMAGE_PREFIX-portal:$GITHUB_SHA" .
+      - name: Pull retained images
+        run: |
+          docker pull "$BUZZ_RUNTIME_IMAGE"
+          docker pull "$BUZZ_PORTAL_IMAGE"
       - name: Automatic startup without domain environment
         shell: bash
         run: |
-          export BUZZ_RUNTIME_IMAGE="$IMAGE_PREFIX-runtime:$GITHUB_SHA"
           export BUZZ_BROKER_IMAGE="$IMAGE_PREFIX-broker:$GITHUB_SHA"
-          export BUZZ_PORTAL_IMAGE="$IMAGE_PREFIX-portal:$GITHUB_SHA"
           python3 scripts/verify-bootstrap-docker.py --compose compose.portal.yaml
           python3 scripts/verify-bootstrap-docker.py --compose compose.portal.yaml --host-proxy
+          python3 scripts/verify-bootstrap-docker.py --compose compose.portal.yaml --host-proxy --legacy-upgrade
       - name: Publish reviewed images
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           printf '%s' "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
-          for role in runtime broker portal; do docker push "$IMAGE_PREFIX-$role:$GITHUB_SHA"; done
+          docker push "$IMAGE_PREFIX-broker:$GITHUB_SHA"
           python3 scripts/render-portal-release.py \
-            --runtime "$(docker image inspect "$IMAGE_PREFIX-runtime:$GITHUB_SHA" --format '{{index .RepoDigests 0}}')" \
+            --runtime "$BUZZ_RUNTIME_IMAGE" \
             --broker "$(docker image inspect "$IMAGE_PREFIX-broker:$GITHUB_SHA" --format '{{index .RepoDigests 0}}')" \
-            --portal "$(docker image inspect "$IMAGE_PREFIX-portal:$GITHUB_SHA" --format '{{index .RepoDigests 0}}')" \
+            --portal "$BUZZ_PORTAL_IMAGE" \
             --output dist/portal-v0.4/compose.install.yaml
       - name: Require anonymous image access before issuing install URL
         shell: bash
@@ -82,10 +92,11 @@ jobs:
           prefix=os.environ['IMAGE_PREFIX'].removeprefix('ghcr.io/')
           for role in ('runtime','broker','portal'):
               image=prefix+'-'+role
+              ref=os.environ['GITHUB_SHA'] if role=='broker' else os.environ['BUZZ_'+role.upper()+'_IMAGE'].split('@')[1]
               url='https://ghcr.io/token?service=ghcr.io&scope=repository:'+image+':pull'
               try:
                   with urllib.request.urlopen(url,timeout=30) as response: token=json.load(response)['token']
-                  request=urllib.request.Request('https://ghcr.io/v2/'+image+'/manifests/'+os.environ['GITHUB_SHA'],headers={'Authorization':'Bearer '+token,'Accept':'application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json'})
+                  request=urllib.request.Request('https://ghcr.io/v2/'+image+'/manifests/'+ref,headers={'Authorization':'Bearer '+token,'Accept':'application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json'})
                   with urllib.request.urlopen(request,timeout=30) as response: assert response.status==200
               except Exception:
                   raise SystemExit('Set this GHCR package to Public in GitHub package settings, then rerun: '+image)

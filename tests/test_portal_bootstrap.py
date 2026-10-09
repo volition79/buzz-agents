@@ -112,15 +112,17 @@ class BootstrapTests(unittest.TestCase):
                 plan=broker.dispatch({'op':'bootstrap-plan'})
                 with self.assertRaisesRegex(ToolError,'plan_changed'):
                     broker.dispatch({'op':'bootstrap-activate','fingerprint':'wrong'})
-                with patch('buzz_agents.portal_broker.inspect_container',return_value={'Config':{'Labels':{}}}):
+                with patch('buzz_agents.portal_broker.portal_compose.reconcile',side_effect=ToolError('requires_review')):
                     with self.assertRaisesRegex(ToolError,'requires_review'):
                         broker.dispatch({'op':'bootstrap-activate','fingerprint':plan['fingerprint']})
                 self.assertFalse(any(x[1] in ('create','start','rm') for x in calls))
-                with patch('buzz_agents.portal_broker.inspect_container',return_value=None):
+                calls.clear()
+                with patch('buzz_agents.portal_broker.portal_compose.reconcile') as reconcile:
                     result=broker.dispatch({'op':'bootstrap-activate','fingerprint':plan['fingerprint']})
+                    self.assertEqual(reconcile.call_args.args[2]['fingerprint'], plan['fingerprint'])
                 self.assertEqual(result['url'],plan['url'])
                 self.assertTrue(Path(tmp,'bootstrap.json').exists())
-                self.assertEqual(sum(x[1]=='create' for x in calls),1)
+                self.assertFalse(any(x[1]=='create' for x in calls))
                 self.assertEqual([x for x in calls if x[1]=='network'], [['docker','network','connect','traefik-proxy','b'*64]])
                 for bad in [{'op':'bootstrap-plan','hostname':'evil'},{'op':'bootstrap-activate','fingerprint':plan['fingerprint'],'image':'evil'}]:
                     with self.assertRaises(ToolError):broker.dispatch(bad)

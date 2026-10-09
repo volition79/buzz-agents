@@ -111,10 +111,10 @@ def verify_dns(data, resolver=socket.getaddrinfo):
         raise ToolError('bootstrap_dns_mismatch')
 
 
-def route_command(data):
-    ident = data['route_name']
+def route_command(data, compose=False):
+    ident = data['project'] if compose else data['route_name']
     tag = {
-        'io.buzz-agents.managed': MANAGED,
+        'io.buzz-agents.managed': MANAGED + ('-compose' if compose else ''),
         'io.buzz-agents.bootstrap': data['fingerprint'],
         'com.docker.compose.project': data['project'],
         'com.docker.compose.service': 'setup-route',
@@ -125,7 +125,7 @@ def route_command(data):
         'traefik.http.routers.'+ident+'.service': ident,
         'traefik.http.services.'+ident+'.loadbalancer.server.port': '8080',
     }
-    command = ['docker', 'create', '--name', ident, '--network', data['network'],
+    command = ['docker', 'create', '--name', data['route_name'], '--network', data['network'],
                '--user', '10002:10002', '--read-only', '--cap-drop', 'ALL',
                '--security-opt', 'no-new-privileges:true', '--init',
                '--restart', 'unless-stopped', '--memory', '256m', '--cpus', '0.25',
@@ -136,9 +136,9 @@ def route_command(data):
     return command + [data['image'], 'python', '-m', 'buzz_agents.portal_route']
 
 
-def check_route(existing, data):
+def check_route(existing, data, compose=False):
     tag = labels(existing)
-    if (tag.get('io.buzz-agents.managed') != MANAGED
+    if (tag.get('io.buzz-agents.managed') != MANAGED + ('-compose' if compose else '')
             or tag.get('io.buzz-agents.bootstrap') != data['fingerprint']
             or tag.get('com.docker.compose.project') != data['project']
             or existing.get('Image') != data['image']):
@@ -147,7 +147,7 @@ def check_route(existing, data):
     host = existing.get('HostConfig', {})
     env = config.get('Env') or []
     expected_labels = {}
-    command = route_command(data)
+    command = route_command(data, compose=compose)
     for index, item in enumerate(command[:-1]):
         if item == '--label':
             key, value = command[index+1].split('=', 1)
