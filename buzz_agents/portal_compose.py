@@ -166,6 +166,12 @@ def _reconcile(path, data):
         else:
             check_current(existing, data, path)
     was_running = bool(existing and existing.get('State', {}).get('Running'))
+    if legacy and journal:
+        if journal.get('legacy_id') != existing['Id'] or journal.get('fingerprint') != data['fingerprint']:
+            raise ToolError('bootstrap_route_recovery_requires_review')
+        # A crash can occur after stop but before rename; canonical name is
+        # still present then, so backup-name recovery alone is insufficient.
+        was_running = bool(journal.get('was_running'))
     # Persist backup bytes privately, retaining first original for manual recovery.
     backup_path = path.parent / '.buzz-compose-before-route'
     try:
@@ -212,6 +218,8 @@ def _reconcile(path, data):
             execute(['docker', 'start', existing['Id']])
         if changed and path.read_bytes() == proposed:
             replace_if_unchanged(path, proposed, original)
+        if legacy:
+            journal_path.unlink(missing_ok=True)
         raise
 
     # Commit point: a valid, running Compose route now owns the original URL.

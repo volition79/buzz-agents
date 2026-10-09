@@ -94,6 +94,17 @@ class ComposeRouteTests(unittest.TestCase):
             with self.assertRaisesRegex(ToolError,'fixture_failed'): pc._reconcile(self.path,self.data)
         self.assertEqual(self.calls.count(['docker','start','old']),2)
 
+    def test_crash_between_stop_and_rename_preserves_original_running_state(self):
+        legacy={'Id':'old','State':{'Running':False},'Config':{'Labels':{'io.buzz-agents.managed':boot.MANAGED}}}
+        (self.path.parent/'.buzz-route-transaction.json').write_text(json.dumps({'legacy_id':'old','was_running':True,'fingerprint':self.data['fingerprint']}))
+        def run(argv):
+            if 'up' in argv: raise ToolError('fixture_failed')
+            return self.run_command(argv)
+        with patch.object(pc,'execute',run),patch.object(pc,'inspect_container',side_effect=[legacy,None,None]),patch.object(boot,'check_route'):
+            with self.assertRaisesRegex(ToolError,'fixture_failed'): pc._reconcile(self.path,self.data)
+        self.assertIn(['docker','start','old'],self.calls)
+        self.assertFalse((self.path.parent/'.buzz-route-transaction.json').exists())
+
     def test_concurrent_edit_is_never_rolled_back(self):
         def run(argv):
             if 'up' in argv:
