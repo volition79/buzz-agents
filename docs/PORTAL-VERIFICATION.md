@@ -1,6 +1,8 @@
 # v0.4 Docker portal — verification boundary
 
-Local development candidate, 2026-10-09. No live Hostinger deployment or publication was performed.
+Published development candidate, 2026-10-09. No live Hostinger deployment was performed.
+
+Published source: `8ae5df6d57c1c8a999bcebe3cd0b3517ef27f09a`. [CI run](https://github.com/volition79/buzz-agents/actions/runs/37896228009) passed all build, test, isolated Compose, image publication and anonymous-access steps. [Candidate release](https://github.com/volition79/buzz-agents/releases/tag/portal-candidate-8ae5df6d57c1-1-1).
 
 ## Passed
 
@@ -12,7 +14,7 @@ Local development candidate, 2026-10-09. No live Hostinger deployment or publica
 - Actual Windows x64 HTTPS provider executable answered `info` with protocol 1 and version 0.4.0. This does not prove Buzz discovery or Windows connection installation.
 - Official Docker Compose 2.40.3 `config --quiet` accepted the template with test image/host values. CLI artifact SHA256 matched the Docker official image history.
 - Docker CLI 28.5.1 manifest resolved and pinned to `sha256:9190b0613792e658a7783cf14b2d5ace5941bb68ede7276922ea36ee457d76ad`; image history confirms the copied Compose plugin path.
-- Prepared manual-only CI publication workflow and digest-only Compose renderer; mutable tags/injected strings are rejected in renderer tests. Workflow execution is not yet verified.
+- Prepared manual-only CI publication workflow and digest-only Compose renderer; mutable tags/injected strings are rejected in renderer tests. The first GitHub workflow completed successfully.
 
 ## Evidence
 
@@ -20,10 +22,15 @@ Local development candidate, 2026-10-09. No live Hostinger deployment or publica
 
 Source review checked current upstream desktop launch payload at `block/buzz` commit `e9269cbdf66b0e2fdb588aa20aad65bcba3ca622` (`desktop/src-tauri/src/commands/agents_deploy.rs`): resolved `launch` exists. The upstream remote-agent specification still contains historical draft caveats; the installed Windows app version has not been verified against that source.
 
+## Publication verification
+
+- All three images built on the GitHub Linux runner; disposable Compose stack started successfully. Portal UID10002, absent Docker socket, and broker RPC status were checked at runtime.
+- Published release assets were downloaded without authentication; the EXE and build-context ZIP match the build manifest.
+- All three digest-pinned image manifests were fetched anonymously and their SHA256 values matched the installation Compose.
+- `published-assets.json` and `SHA256SUMS.published` cover the actual release downloads, including Compose. The original `manifest.json` describes the broader build output, some of which is embedded rather than separately uploaded.
+
 ## Not yet proven — release acceptance remains open
 
-1. Docker image builds and actual Compose start on Linux: authoring environment has no Docker daemon. Compose schema validation is not an image build or privilege-boundary runtime test.
-2. Published immutable image digests and a public Compose installation URL.
 3. Existing VPS Traefik network/labels/DNS and live Relay auto-discovery.
 4. Windows Buzz finds the provider, supplies the current launch contract, and deploys a real bot. Desktop subscription checks for selecting a provider must also be observed.
 5. Real Codex/Claude official authentication and reauthentication through nested Docker PTYs; actual replies and persistent credentials after restart. Device-auth eligibility follows the official account settings.
@@ -31,4 +38,4 @@ Source review checked current upstream desktop launch payload at `block/buzz` co
 7. **Windows fully powered off before a new scheduled task begins and completes**, verified by server-side timestamps/files and actual AI completion, not only Relay delivery.
 8. KVM2 CPU/RAM behavior under the intended workload.
 
-No external settings were changed. No chat-supplied private key or root password was used or packaged. Web portal setup password is separate from VPS root credentials. No policy-gate receipt is claimed: the existing focused manual evidence route remains active.
+The public GitHub repository, GHCR images and candidate release were created with user approval. Existing VPS and Relay settings were not changed. No chat-supplied private key or root password was used or packaged. Web portal setup password is separate from VPS root credentials. No policy-gate receipt is claimed: the existing focused manual evidence route remains active.

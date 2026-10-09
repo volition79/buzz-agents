@@ -4,11 +4,19 @@
 
 ## 현재 상태
 
-v0.4 로컬 개발 후보입니다. **공개 설치 URL과 컨테이너 이미지는 아직 배포하지 않았습니다.** `compose.hostinger.yaml`은 이미지 참조를 채워야 하는 릴리스 템플릿입니다. 이 파일만 URL로 입력하면 설치가 끝난다는 뜻이 아닙니다. 실서버 Docker 배포·공식 계정 인증·Windows 완전 종료 시험 전에는 영상용 완성본으로 소개하지 마세요.
+v0.4 공개 개발 후보입니다. GitHub에서 이미지 빌드·임시 Compose 실행·비로그인 다운로드 검증을 통과했습니다. 실제 Hostinger 설치·공식 계정 인증·Windows 완전 종료 시험은 아직 남아 있습니다.
 
-## 완성 시 사용 순서
+Docker Manager의 **컴포즈 → URL에서 Compose**에 입력할 주소:
 
-1. Docker Manager에 공개될 Compose URL로 배포합니다. 기존 `traefik-proxy` 네트워크와 HTTPS 인증서 발급기 `letsencrypt`를 사용합니다. 해당 VPS를 가리키는 설정 화면 호스트명을 지정해야 합니다. 기존 Buzz 주소와는 다른 호스트명입니다.
+```text
+https://github.com/volition79/buzz-agents/releases/download/portal-candidate-8ae5df6d57c1-1-1/compose.install.yaml
+```
+
+가져온 설정에서 `BUZZ_SETUP_HOST`에 기존 Buzz 주소와 다른 설정 화면 호스트명을 지정하고, 해당 이름의 DNS가 VPS를 가리키는지 확인합니다. 이미지 3개는 이미 정확한 digest로 고정되어 있습니다. 로컬 `compose.hostinger.yaml`은 개발용 템플릿이며 위 공개 설치 파일과 다릅니다.
+
+## 설치 및 실서버 검증 순서
+
+1. Docker Manager에 위 Compose URL로 배포합니다. 기존 `traefik-proxy` 네트워크와 HTTPS 인증서 발급기 `letsencrypt`를 사용합니다. 해당 VPS를 가리키는 설정 화면 호스트명을 지정해야 합니다. 기존 Buzz 주소와는 다른 호스트명입니다.
 2. 설정 화면을 엽니다. Docker Manager의 **portal 로그**에 나온 최초 설정 코드를 입력하고, 설정 화면용 비밀번호(12자 이상)를 정합니다. root 비밀번호와는 별개입니다. 최초 코드는 60분간 유효하며 사용 후 폐기됩니다. 만료 시 portal을 재시작하면 새 코드가 나옵니다.
 3. 기존 Relay를 자동으로 찾습니다. 주소·소유자 공개키를 확인하고 연결합니다. 여러 개면 선택하고, 찾지 못하면 두 공개 정보만 직접 입력합니다. 소유권을 Nostr 서명으로 새로 증명하는 기능은 아닙니다. Docker 관리자만 읽을 수 있는 최초 코드와 기존 Relay 설정을 신뢰하며, 봇 권한은 기존 Relay가 검증합니다.
 4. **Windows 연결 파일 받기** → ZIP 압축 풀기 → `Buzz-VPS-Connect.exe` 실행. 자기 서버 주소가 맞는지 확인합니다. 파일은 10분간 한 번만 사용 가능합니다.
@@ -53,7 +61,7 @@ docker build -f Dockerfile.portal --target portal -t buzz-agents-portal:0.4.0 .
 
 검토 후 지정 레지스트리에 공개하고 immutable digest로 `BUZZ_RUNTIME_IMAGE`, `BUZZ_BROKER_IMAGE`, `BUZZ_PORTAL_IMAGE`를 고정합니다. `BUZZ_SETUP_HOST`는 설정 화면 호스트명입니다. 아직 공개하지 않은 주소를 문서에 임의로 쓰지 않습니다.
 
-공개 준비용 `.github/workflows/portal-images.yml`도 포함됩니다. 저장소에 올리는 것만으로 실행되지 않고, **수동 workflow_dispatch** 때만 동작합니다. Windows 빌드·테스트 → Docker 이미지 빌드 → 별도 CI 서버에서 Compose/권한 경계 스모크 → GHCR push → 익명 pull 확인 → digest가 고정된 설치 Compose를 후보 릴리스에 첨부하는 순서입니다. 최초 GHCR 패키지가 비공개이면 익명 확인 단계에서 멈추므로, 저장소 소유자가 각 패키지를 Public으로 바꾼 뒤 다시 실행해야 합니다. 이 CI 흐름 자체도 아직 실행 전입니다.
+공개 준비용 `.github/workflows/portal-images.yml`도 포함됩니다. 저장소에 올리는 것만으로 실행되지 않고, **수동 workflow_dispatch** 때만 동작합니다. Windows 빌드·테스트 → Docker 이미지 빌드 → 별도 CI 서버에서 Compose/권한 경계 스모크 → GHCR push → 익명 pull 확인 → digest가 고정된 설치 Compose를 후보 릴리스에 첨부하는 순서입니다. 최초 GHCR 패키지가 비공개이면 익명 확인 단계에서 멈추므로, 저장소 소유자가 각 패키지를 Public으로 바꾼 뒤 다시 실행해야 합니다. 첫 CI 실행은 성공했습니다.
 
 공개 소스 준비본은 `public-source.zip`입니다. 개인 계정 정보·연결 파일·테스트 실행 로그·이전 ZIP을 포함하지 않습니다. 기존 v0.3 소스는 회귀 확인을 위해 보존하지만, 새 배포 경로는 `web-provider`, `connect`, `Dockerfile.portal`입니다.
 

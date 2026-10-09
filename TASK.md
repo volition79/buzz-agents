@@ -63,3 +63,6 @@ Local implementation result:
 - Final reviewed boundaries: bootstrap, bridge, schedule, auth lock, provider config/default, Windows helper, packaging/lockfile, tests and user docs. Existing native/guard/quota behavior retained. No CodeMap capture because approved route is off; no invented rationale records.
 - Existing ZIP and external Relay untouched. Local candidate is complete enough for live pilot; the project acceptance objective remains unproven until Windows/VPS trials.
 - User-facing simplification: the single Windows helper performs server installation too. No unpublished Compose URL is promised. Initial SSH trust verification and Buzz membership/allowlist remain explicit.
+
+
+Publication result, 2026-10-09: public repository volition79/buzz-agents created. Source 8ae5df6d57c1c8a999bcebe3cd0b3517ef27f09a; CI run 37896228009 succeeded including image builds, isolated Compose role-boundary smoke and anonymous access. Candidate release portal-candidate-8ae5df6d57c1-1-1 published. Independent anonymous asset/manifest hash readback passed. This supersedes earlier pre-publication snapshots above; actual VPS deployment, authentication and Windows-off acceptance remain open.

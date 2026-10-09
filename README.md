@@ -6,7 +6,7 @@
 - [검증 결과](docs/PORTAL-VERIFICATION.md)
 - 새 로컬 패키지: `dist/portal-v0.4/`
 
-아직 공개 이미지/Compose URL과 실제 KVM 2 Windows-off 검증은 완료하지 않았습니다. 문서의 공개 전 준비를 마쳐야 URL 설치를 사용할 수 있습니다.
+공개 이미지 3개와 [설치 Compose](https://github.com/volition79/buzz-agents/releases/download/portal-candidate-8ae5df6d57c1-1-1/compose.install.yaml)가 준비되었습니다. GitHub Docker 빌드·임시 실행·익명 다운로드 검증은 통과했으며, 실제 KVM 2 Windows-off 검증은 아직 남아 있습니다.
 
 ## 보존된 v0.3 SSH 방식
 
