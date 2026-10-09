@@ -4,13 +4,15 @@
 
 ## 현재 상태
 
-v0.4 공개 개발 후보입니다. GitHub에서 이미지 빌드·임시 Compose 실행·비로그인 다운로드 검증을 통과했습니다. 기존 후보의 실제 Hostinger 설치와 공인 HTTPS 접속은 확인했습니다. 기존 「열기」 버튼에서 설정 화면 접속은 확인했습니다. 이번 다국어·재시작 안내 후보는 CI37933477258의 신규 설치·업데이트 시험을 통과했습니다. Hostinger ‘열기’의 인증값 자동 전달은 사용하지 않습니다. 공식 계정 인증·Windows 완전 종료 시험은 아직 남아 있습니다.
+v0.4 공개 개발 후보입니다. GitHub에서 이미지 빌드·임시 Compose 실행·비로그인 다운로드 검증을 통과했습니다. 기존 후보의 실제 Hostinger 설치와 공인 HTTPS 접속은 확인했습니다. 기존 「열기」 버튼에서 설정 화면 접속은 확인했습니다. 이번 캡처 기반 한국어·영어 안내와 Windows 재연결 후보는 CI37936814573의 신규 설치·업데이트 시험을 통과했습니다. Hostinger ‘열기’의 인증값 자동 전달은 사용하지 않습니다. 공식 계정 인증·Windows 완전 종료 시험은 아직 남아 있습니다.
 
-한국어·영어 자동 표시와 재시작 안내를 포함한 Docker Manager **컴포즈 → URL에서 Compose** 주소:
+캡처 기반 한국어·영어 안내, 실제 Relay 주소 복사와 Windows 연결 상태별 선택을 포함한 Docker Manager **컴포즈 → URL에서 Compose** 주소:
 
 ```text
-https://raw.githubusercontent.com/volition79/buzz-agents/89f7ff848cbb250086a5e57146e174fcb89b073c/docker-compose.yml
+https://raw.githubusercontent.com/volition79/buzz-agents/da9a4640dc2dbdcc6c2a9129b2074b1b0a838347/docker-compose.yml
 ```
+
+업데이트 후에는 설정 페이지에서 Windows 연결 ZIP을 새로 다운로드하세요. 예전에 내려받은 실행 파일에는 새 안내와 연결 선택 방식이 반영되지 않습니다.
 
 도메인 환경변수를 요구하지 않는 자동 초기 설정 후보입니다. 기존 **Hostinger 기본 도메인의 Buzz Relay와 Traefik**이 먼저 실행되어 있어야 합니다.
 

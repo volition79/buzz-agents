@@ -2,6 +2,8 @@
 
 This candidate adds three real Buzz onboarding captures with Korean/English instructions and a copy button for the installation's saved Relay URL. Browser tests checked both languages, image loading, clipboard success/denial, user-data preservation and desktop/mobile layouts. Portal tests: 25 passed. Windows connection choices now distinguish a healthy connection, an explicit server rejection and unknown status; Enter keeps, reconnects or retries respectively. Linux race/vet and 11 native Windows tests passed, including TLS classification, EOF cancellation and existing save/rollback checks. Both package archives contain the three screenshot assets. These are local results; publication CI is recorded separately. The user performs VPS installation.
 
+Published source `c172f61333325111465314f72df3e48e36a5fcb2`: [candidate CI37936814573](https://github.com/volition79/buzz-agents/actions/runs/37936814573) passed scoped tests, four Docker startup/upgrade fixtures and anonymous image checks. [Exact Raw CI37937481478](https://github.com/volition79/buzz-agents/actions/runs/37937481478) passed on install commit `da9a4640dc2dbdcc6c2a9129b2074b1b0a838347`, including anonymous pulls and both Traefik network modes. Anonymous Compose SHA256: `a10ad79357aab2c25e7b500bd013cc62986a26849fb931a9bc3c7c43f76e9f4f`. Published EXE SHA256 `c15568b0db829e9642ab3f0286b06fd392a674b8e6ce0c7cd09c778a617af1bb` matches locally tested Windows bytes. Published web/portal sources and all three screenshots match local bytes. User installs; VPS unchanged. Real AI authentication, collaboration and Windows-off acceptance remain pending.
+
 Earlier publication evidence follows.
 
 # Browser language and restart-guide update — 2026-10-09
