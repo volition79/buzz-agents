@@ -4,6 +4,10 @@ window.BuzzI18n.translatePage();
 const $ = id => document.getElementById(id);
 let configured = false, authSession = null, pollBusy = false, tick = 0;
 let pendingPairing = null, knownDevices = new Set();
+let requestQueue = Promise.resolve(), initializing = false;
+function queuedRequest(fn) {
+  const result=requestQueue.then(fn);requestQueue=result.catch(()=>{});return result;
+}
 const errors = {
   invalid_or_expired_setup_code: t('최초 설정 코드가 틀리거나 만료되었습니다. Docker Manager에서 buzz-agents 오른쪽 ⋮ → 다시 시작을 선택한 뒤 portal의 최신 로그에서 새 코드를 복사하세요.'),
   invalid_or_expired_recovery_code: t('복구 코드가 틀리거나 만료·사용되었습니다. portal 터미널에서 복구 명령을 다시 실행하고 최신 로그를 확인하세요.'),
@@ -23,12 +27,49 @@ const errors = {
 };
 function message(text, bad=false) { $('message').textContent=text; $('message').className=bad?'error':''; $('message').hidden=false; }
 async function api(path, body={}) {
-  const response = await fetch('/api/'+path, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body), credentials:'same-origin'});
-  if (response.ok && response.headers.get('Content-Type')?.startsWith('application/zip')) return response.blob();
-  const data = await response.json();
+  const result=await queuedRequest(async()=>{
+    const retryable=['status','devices','discover'].includes(path);
+    for(let attempt=0;;attempt++) {
+      let response;
+      try {
+        response=await fetch('/api/'+path, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body), credentials:'same-origin'});
+      } catch {
+        if(retryable && attempt<2){await new Promise(resolve=>setTimeout(resolve,300*(attempt+1)));continue;}
+        throw new Error(t('서버에 연결하지 못했습니다. 잠시 후 다시 시도하세요.'));
+      }
+      if([502,503,504].includes(response.status)) {
+        await response.arrayBuffer();
+        if(retryable && attempt<2){await new Promise(resolve=>setTimeout(resolve,300*(attempt+1)));continue;}
+        throw new Error(t('서버 연결이 일시적으로 원활하지 않습니다. 잠시 후 다시 시도하세요.'));
+      }
+      if(response.ok && response.headers.get('Content-Type')?.startsWith('application/zip'))return {blob:await response.blob()};
+      let data;
+      try {data=await response.json();} catch {throw new Error(t('서버에서 올바른 응답을 받지 못했습니다. 잠시 후 다시 시도하세요.'));}
+      if(!data || typeof data!=='object')throw new Error(t('서버에서 올바른 응답을 받지 못했습니다. 잠시 후 다시 시도하세요.'));
+      return {response,data};
+    }
+  });
+  if(result.blob)return result.blob;
+  const {response,data}=result;
   if (response.status===401 && data.error==='settings_login_required') {authSession=null;$('workspace').hidden=true;$('logout').hidden=true;$('loginPanel').hidden=false;await boot();}
   if (!response.ok || !data.ok) throw new Error(errors[data.error] || t('처리하지 못했습니다: ')+(data.error || response.status));
   return data;
+}
+// Guide images share the API queue so retained two-slot bridges never receive
+// an unbounded browser image burst. No credentials or writes are retried here.
+function loadGuide() {
+  for(const img of document.querySelectorAll('#buzzGuide img[data-src]')) {
+    if(img.dataset.queued)continue;
+    img.dataset.queued='true';
+    queuedRequest(()=>new Promise(resolve=>{
+      let timer;
+      const finish=()=>{clearTimeout(timer);img.onload=null;img.onerror=null;delete img.dataset.queued;resolve();};
+      img.onload=()=>{delete img.dataset.src;finish();};
+      img.onerror=finish;
+      timer=setTimeout(()=>{img.removeAttribute('src');finish();},15000);
+      img.loading='eager';img.src=img.dataset.src;
+    }));
+  }
 }
 function action(id, fn, event='click') {
   $(id).addEventListener(event, async e => {e.preventDefault(); const button=e.submitter || (e.currentTarget.tagName==='BUTTON'?e.currentTarget:null); if(button) button.disabled=true;
@@ -38,9 +79,22 @@ function action(id, fn, event='click') {
 function recoveryMode(show) { $('loginForm').hidden=show; $('recoveryForm').hidden=!show; $('showRecovery').hidden=show; }
 
 async function enter() {
-  $('loginPanel').hidden=true; $('workspace').hidden=false; $('logout').hidden=false;
-  await refresh();
-  if(!configured) await discover();
+  if(initializing)return;
+  initializing=true;$('retryStartup').hidden=true;
+  $('message').hidden=true;
+  $('loginPanel').hidden=true;$('workspace').hidden=true;$('logout').hidden=false;
+  try {
+    await refresh();
+    if(!configured) await discover();
+    $('workspace').hidden=false;
+    loadGuide();
+  } catch(error) {
+    $('retryStartup').hidden=false;
+    throw error;
+  } finally {
+    if($('loginPanel').hidden)$('workspace').hidden=false;
+    initializing=false;
+  }
 }
 async function discover() {
   const data=await api('discover'); $('relayChoices').replaceChildren();
@@ -71,13 +125,14 @@ async function refresh(){
 }
 async function startLogin(bot){if(authSession)throw new Error(t('현재 로그인 세션을 먼저 마치거나 중지해 주세요.'));const result=await api('auth/start',{pubkey:bot.pubkey});authSession=result.session;$('authTitle').textContent=bot.name+t(' · 공식 로그인');$('authPanel').hidden=false;$('authForm').hidden=false;$('cancelAuth').hidden=false;$('terminal').textContent=t('VPS에서 공식 로그인을 시작하고 있습니다…');$('authStatus').textContent=t('최대 10분 동안 진행됩니다.');$('authLinks').replaceChildren();$('authPanel').scrollIntoView({behavior:'smooth',block:'center'});}
 function officialLinks(text){const hosts=['auth.openai.com','chatgpt.com','claude.ai','console.anthropic.com','platform.claude.com'];$('authLinks').replaceChildren();for(const raw of new Set(text.match(/https:\/\/[^\s<>"\x1b]+/g)||[])){try{const u=new URL(raw);if(!hosts.includes(u.hostname)||u.username||u.password)continue;const a=document.createElement('a');a.href=u.href;a.target='_blank';a.rel='noopener noreferrer';a.textContent=t('공식 로그인 열기 ↗ (')+u.hostname+')';$('authLinks').append(a);}catch{}}}
-async function poll(){if(pollBusy||$('workspace').hidden||document.hidden)return;pollBusy=true;try{if(authSession){const data=await api('auth/poll',{session:authSession});const text=data.output.replace(/\x1b\[[0-?]*[ -/]*[@-~]/g,'').replace(/\x1b\][^\x07]*(?:\x07|\x1b\\)/g,'');$('terminal').textContent=text;officialLinks(text);if(data.done){authSession=null;$('authForm').hidden=true;$('cancelAuth').hidden=true;$('authStatus').textContent=data.success?t('공식 로그인 명령이 완료되었습니다. Buzz에서 실제 답변을 확인하세요.'):t('로그인이 완료되지 않았습니다. 위 안내를 확인하고 다시 시도하세요.');await refresh();}}else if(++tick%3===0)await refresh();}catch(e){message(e.message,true);}finally{pollBusy=false;}}
+async function poll(){if(initializing||pollBusy||$('workspace').hidden||document.hidden)return;pollBusy=true;try{if(authSession){const data=await api('auth/poll',{session:authSession});const text=data.output.replace(/\x1b\[[0-?]*[ -/]*[@-~]/g,'').replace(/\x1b\][^\x07]*(?:\x07|\x1b\\)/g,'');$('terminal').textContent=text;officialLinks(text);if(data.done){authSession=null;$('authForm').hidden=true;$('cancelAuth').hidden=true;$('authStatus').textContent=data.success?t('공식 로그인 명령이 완료되었습니다. Buzz에서 실제 답변을 확인하세요.'):t('로그인이 완료되지 않았습니다. 위 안내를 확인하고 다시 시도하세요.');await refresh();}}else if(++tick%3===0)await refresh();}catch(e){message(e.message,true);}finally{pollBusy=false;}}
 action('loginForm',async()=>{await api('login',{setup_code:$('setupCode').value,password:$('password').value});$('setupCode').value='';$('password').value='';$('message').hidden=true;await enter();},'submit');
 action('showRecovery',()=>recoveryMode(true));
 action('cancelRecovery',()=>{$('recoveryCode').value='';$('recoveryPassword').value='';recoveryMode(false);});
 action('recoveryForm',async()=>{await api('recover',{recovery_code:$('recoveryCode').value,password:$('recoveryPassword').value});$('recoveryCode').value='';$('recoveryPassword').value='';$('password').value='';recoveryMode(false);message(t('비밀번호를 다시 설정했습니다. 새 비밀번호로 로그인하세요. 봇과 Windows 연결은 유지됩니다.'));},'submit');
 action('relayForm',async()=>{await api('configure',{relay:$('relay').value.trim(),owner:$('owner').value.trim()});message(t('Relay 연결 설정을 저장했습니다. 이제 Windows 연결 파일을 받으세요.'));await refresh();},'submit');
 action('discover',discover);action('refresh',refresh);
+action('retryStartup',enter);
 action('download',async()=>{const ids=new Set(knownDevices),blob=await api('pair/bundle');pendingPairing={ids,deadline:Date.now()+600000};const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='Buzz-Windows-Connect.zip';a.click();setTimeout(()=>URL.revokeObjectURL(url),10000);message(t('압축을 풀고 Buzz-VPS-Connect.exe를 실행해 주세요. 연결 파일은 10분 후 만료됩니다.'));});
 action('authForm',async()=>{if(!authSession)return;const input=$('authInput').value;$('authInput').value='';await api('auth/input',{session:authSession,text:input});},'submit');
 action('cancelAuth',async()=>{if(authSession)await api('auth/cancel',{session:authSession});authSession=null;$('authForm').hidden=true;$('cancelAuth').hidden=true;$('terminal').textContent='';$('authLinks').replaceChildren();$('authStatus').textContent=t('로그인 세션을 중지했습니다.');await refresh();});

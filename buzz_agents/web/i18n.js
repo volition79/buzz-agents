@@ -2,6 +2,10 @@
 // Korean source copy is the message key. Add another catalog to support another locale.
 (() => {
   const catalogs = {en: {
+  "서버 연결 다시 확인": "Retry server connection",
+  "서버에 연결하지 못했습니다. 잠시 후 다시 시도하세요.": "Could not connect to the server. Please try again shortly.",
+  "서버 연결이 일시적으로 원활하지 않습니다. 잠시 후 다시 시도하세요.": "The server connection is temporarily unavailable. Please try again shortly.",
+  "서버에서 올바른 응답을 받지 못했습니다. 잠시 후 다시 시도하세요.": "The server returned an unexpected response. Please try again shortly.",
   "화면을 준비하고 있습니다. 버튼이 활성화되지 않으면 새로고침하세요.": "Preparing setup. If the button stays disabled, refresh this page.",
   "Buzz · VPS 연결": "Buzz · VPS Setup",
   "Buzz 연결 처음으로": "Back to Buzz setup",

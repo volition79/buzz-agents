@@ -1,3 +1,11 @@
+# Post-login automatic discovery regression — 2026-10-09
+
+User confirmed manual Relay/HEX discovery works, while login followed by automatic loading displayed a non-JSON Bad Gateway error. Read-only unauthenticated probes did not capture the exact failed authenticated request. On source e0e6ccd, a real two-slot route with one-second guide-image latency reproduces a successful claim followed by missing automatic owner fill. This supports a request-overlap failure; it does not claim access to the user's authenticated Network history.
+
+The page now serializes its API and guide-image requests, completes status/devices/discover before loading images and suppresses polling during initialization. Only read-only status/devices/discover retry transport or 502/503/504 errors, at most three attempts. Login/configuration/pairing/auth operations are never automatically retried. Non-JSON failures have localized messages; a failed initial load exposes an explicit retry button. No route, Relay, account or credential changes.
+
+Real-route Chrome regression passes delayed images, transient and persistent gateway replies, automatic owner fill, explicit retry, existing-password login and exactly-one login attempt on gateway failure. The original e0e6ccd assets fail the same replay before owner fill. Logout assertions now wait for the actual visible logged-out page rather than stale hidden form state. Existing Korean/English guide/browser checks and portal HTTP26 passed. Publication is recorded below when complete; live user retest remains outstanding.
+
 # Initial setup HTTP400 regression — 2026-10-09
 
 Observed on published source `daccc5f` through the real HTTPS setup URL: cold Chrome loads intermittently miss app.js or i18n.js; one captured runtime exception was missing BuzzI18n. Native form submission then requests /?, which the route correctly rejects. Public asset bytes matched the release. The retained route admits two concurrent connections while the page added a third parallel CSS/JS request. Direct-portal browser checks had omitted this bridge boundary.
