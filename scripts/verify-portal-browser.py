@@ -109,6 +109,7 @@ def main():
             cdp=CDP(page['webSocketDebuggerUrl']);cdp.call('Runtime.enable');cdp.call('Page.enable')
             cdp.call('Emulation.setDeviceMetricsOverride',{'width':1440,'height':1120,'deviceScaleFactor':1,'mobile':False})
             cdp.call('Browser.setDownloadBehavior',{'behavior':'allow','downloadPath':str(tmp/'downloads')})
+            cdp.call('Network.setUserAgentOverride', {'userAgent':cdp.js('navigator.userAgent'), 'acceptLanguage':'ko-KR,ko'})
             cdp.call('Page.navigate',{'url':app.url})
             cdp.until("document.querySelector('#loginForm') !== null")
             cdp.shot(output/'setup-login.png')

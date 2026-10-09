@@ -1,3 +1,9 @@
+# Browser language and restart-guide update — 2026-10-09
+
+This candidate adds automatic Korean/English UI selection (132 entries), English fallback, and project-menu restart instructions for initial setup codes. Chrome locale tests cover Korean, US/UK English, French fallback, localized static/dynamic text, recovery and unmodified user/provider content. Desktop/mobile checks and the existing browser connection flow passed; portal unit tests: 25 passed. The new i18n script is served through the same protected static handler. These are local fixture results; live VPS update and original real-AI/Windows-off acceptance are separate.
+
+The following sections describe earlier candidate evidence and history.
+
 # v0.4 Docker portal — verification boundary
 
 Published development candidate, 2026-10-09. No live Hostinger deployment was performed.

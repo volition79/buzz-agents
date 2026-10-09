@@ -46,6 +46,7 @@ jobs:
             (cd "$module" && go test -race ./... && go vet ./...)
           done
           node --check buzz_agents/web/app.js
+          node --check buzz_agents/web/i18n.js
       - name: Build portal and broker; retain runtime digest
         shell: bash
         run: |

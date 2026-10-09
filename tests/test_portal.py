@@ -245,7 +245,7 @@ class PortalHTTPTests(unittest.TestCase):
         for path in ['/api/recover/issue', '/api/issue-access-code', '/access.sock']:
             self.assertNotEqual(self.call(path, {})[0], 200)
         self.assertEqual(self.call('/api/recover', {'password': 'new-long-password'})[0], 400)
-        for path in ['/', '/api/hello', '/app.js']:
+        for path in ['/', '/api/hello', '/app.js', '/i18n.js']:
             _, body, _ = self.call(path)
             self.assertNotIn(self.app.setup_code, body.decode() if isinstance(body, bytes) else json.dumps(body))
         self.assertEqual(self.call('/?setup_code='+self.app.setup_code)[0], 400)
