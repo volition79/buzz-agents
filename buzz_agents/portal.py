@@ -323,9 +323,29 @@ class Server(ThreadingHTTPServer):
             self.slots.release()
 
 
+def bootstrap_url(rpc=broker_call, sleep=time.sleep):
+    from .portal_bootstrap import verify_dns
+    last = None
+    while True:
+        try:
+            data = rpc({'op': 'bootstrap-plan'})
+            verify_dns(data)
+            result = rpc({'op': 'bootstrap-activate', 'fingerprint': data['fingerprint']})
+            if result['url'] != data['url']:
+                raise ToolError('bootstrap_plan_changed')
+            print('Buzz setup URL: '+data['url'], flush=True)
+            return data['url']
+        except (ToolError, OSError) as exc:
+            reason = str(exc) if isinstance(exc, ToolError) else 'bootstrap_broker_not_ready'
+            if reason != last:
+                print('Buzz automatic setup waiting: '+reason, flush=True)
+                last = reason
+            sleep(10)
+
+
 def main():
     os.umask(0o077)
-    app = Portal('/portal', os.environ['BUZZ_PUBLIC_URL'])
+    app = Portal('/portal', os.environ.get('BUZZ_PUBLIC_URL') or bootstrap_url())
     if not app.account:
         print('Buzz first setup code (valid 60 minutes): '+app.setup_code, flush=True)
     with Server(('0.0.0.0', 8080), app) as server:

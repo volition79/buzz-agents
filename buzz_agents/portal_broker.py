@@ -19,7 +19,7 @@ from .config import HEX, relay_url
 from .host import Deployer, execute, inspect_container, check_ownership, container_name
 from .bridge import bot_records
 from .policy import atomic_json, read_json
-from . import easy_schedule
+from . import easy_schedule, portal_bootstrap
 
 LIMIT = 512 * 1024
 STATE = Path('/var/lib/buzz-agents-v2')
@@ -176,12 +176,35 @@ class Broker:
         if not isinstance(request, dict):
             raise ToolError('invalid_request')
         op = request.get('op')
-        fields = {'status': set(), 'discover': set(), 'configure': {'owner', 'relay'},
+        fields = {'bootstrap-plan': set(), 'bootstrap-activate': {'fingerprint'}, 'status': set(), 'discover': set(), 'configure': {'owner', 'relay'},
                   'deploy': {'request'}, 'auth-start': {'pubkey'}, 'auth-poll': {'session'},
                   'auth-input': {'session', 'text'}, 'auth-cancel': {'session'},
                   'schedule-init': set(), 'schedule-save': {'schedule'}, 'schedule-disable': set()}
         if op not in fields or set(request) != fields[op] | {'op'}:
             raise ToolError('unsupported_broker_operation')
+        if op.startswith('bootstrap-'):
+            with self.lock:
+                ids = execute(['docker', 'container', 'ls', '-a', '--format', '{{.ID}}']).decode().split()
+                if len(ids) > 100:
+                    raise ToolError('too_many_containers_for_discovery')
+                containers = json.loads(execute(['docker', 'inspect', *ids])) if ids else []
+                data = portal_bootstrap.plan(containers, os.environ.get('HOSTNAME', ''))
+                if op == 'bootstrap-plan':
+                    return {'ok': True, **{key:data[key] for key in ('hostname','url','relay_hosts','fingerprint')}}
+                if request['fingerprint'] != data['fingerprint']:
+                    raise ToolError('bootstrap_plan_changed')
+                old = read_json(self.control / 'bootstrap.json', {})
+                if old and old.get('fingerprint') != data['fingerprint']:
+                    raise ToolError('bootstrap_existing_route_requires_review')
+                existing = inspect_container(data['route_name'])
+                if existing:
+                    portal_bootstrap.check_route(existing, data)
+                else:
+                    execute(portal_bootstrap.route_command(data))
+                if not existing or not existing.get('State', {}).get('Running'):
+                    execute(['docker', 'start', data['route_name']])
+                atomic_json(self.control / 'bootstrap.json', data)
+                return {'ok': True, 'url': data['url']}
         if op == 'discover':
             ids = execute(['docker', 'container', 'ls', '--format', '{{.ID}}']).decode().split()
             if len(ids) > 100:

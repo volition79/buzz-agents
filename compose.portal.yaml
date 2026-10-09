@@ -43,8 +43,6 @@ services:
   portal:
     image: ${BUZZ_PORTAL_IMAGE:?Set the published portal image digest}
     depends_on: [broker]
-    environment:
-      BUZZ_PUBLIC_URL: https://${COMPOSE_PROJECT_NAME}.${TRAEFIK_HOST:?Hostinger must supply TRAEFIK_HOST for URL deployment}
     user: "10002:10002"
     init: true
     read_only: true
@@ -60,13 +58,7 @@ services:
       - rpc:/rpc
     networks: [traefik-proxy]
     labels:
-      - traefik.enable=true
-      - traefik.docker.network=traefik-proxy
-      - traefik.http.routers.${COMPOSE_PROJECT_NAME}-setup.rule=Host(`${COMPOSE_PROJECT_NAME}.${TRAEFIK_HOST}`)
-      - traefik.http.routers.${COMPOSE_PROJECT_NAME}-setup.service=${COMPOSE_PROJECT_NAME}-setup
-      - traefik.http.routers.${COMPOSE_PROJECT_NAME}-setup.entrypoints=websecure
-      - traefik.http.routers.${COMPOSE_PROJECT_NAME}-setup.tls.certresolver=letsencrypt
-      - traefik.http.services.${COMPOSE_PROJECT_NAME}-setup.loadbalancer.server.port=8080
+      - traefik.enable=false
     logging:
       driver: json-file
       options: {max-size: 5m, max-file: "2"}

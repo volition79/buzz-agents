@@ -77,3 +77,10 @@ URL-04 docs/build: replace failed release-asset install guidance with Raw URL an
 Focused manual test fallback remains due absent project policy registry. No changes to AI/auth implementations or legacy SSH path.
 
 URL-01..04 verification: three release regressions passed; independent reviewer accepted source with explicit live gap. CI 37898496077 passed public Raw byte parity, platform-env negative/rename checks, anonymous image pulls, exact Compose runtime/portal HTTP/broker RPC. Canonical artifact SHA256 5cb2294cb946e14214cd4e660a1bd94018e42128beb04975ec67976bceaf650d. Only config/source/docs/verification changed; runtime images reused. Real Hostinger importer and TLS remain unproven.
+
+
+Automatic bootstrap extension (2026-10-09). Explicit user request adds no-env first install; existing local/publication/CI scope retained. No live VPS mutation.
+AUTO-01 startup: portal waits for fixed broker discovery, verifies candidate DNS against an existing Relay, binds activation to a plan fingerprint. Never weakens HTTPS/origin/auth or uses supplied nsec/root credentials. Unknown/custom/ambiguous bases wait with a safe reason.
+AUTO-02 broker: inspect own Docker identity/project and one own portal; derive a unique setup hostname only under discovered Hostinger srvNN.hstgr.cloud; create only an owned routing helper using exact own portal image ID, fixed command/network/limits, no mounts/socket. Preserve all existing Relay/Traefik containers. Plan and existing helper identity fences prevent overwrite.
+AUTO-03 route: bounded HTTP proxy preserves exact Host and forwards to the fixed own portal container, never a caller-specified target; caps request/response/concurrency; no raw request logs.
+AUTO-04 Compose/CI/docs: no domain variables before startup. Test absent discovery, DNS mismatch, ownership collision, plan drift and restart; real Docker fixture lifecycle before publication and anonymous exact-artifact smoke afterward. Platform fixture is not real Hostinger acceptance. Existing public Compose remains old verified candidate until new image validation/promotion.

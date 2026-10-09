@@ -14,6 +14,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   url-install:
+    if: ${{ inputs.verify_only }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -26,7 +27,6 @@ jobs:
           INSTALL_URL: https://raw.githubusercontent.com/${{ github.repository }}/${{ github.sha }}/docker-compose.yml
         run: python3 scripts/verify-url-install.py --url "$INSTALL_URL" --start
   candidate:
-    needs: url-install
     if: ${{ !inputs.verify_only }}
     runs-on: ubuntu-24.04
     timeout-minutes: 45
@@ -54,27 +54,13 @@ jobs:
           docker build --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" -t "$IMAGE_PREFIX-runtime:$GITHUB_SHA" .
           docker build -f Dockerfile.portal --target broker --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" -t "$IMAGE_PREFIX-broker:$GITHUB_SHA" .
           docker build -f Dockerfile.portal --target portal --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" -t "$IMAGE_PREFIX-portal:$GITHUB_SHA" .
-      - name: Start isolated CI stack and check role boundary
+      - name: Automatic startup without domain environment
         shell: bash
         run: |
           export BUZZ_RUNTIME_IMAGE="$IMAGE_PREFIX-runtime:$GITHUB_SHA"
           export BUZZ_BROKER_IMAGE="$IMAGE_PREFIX-broker:$GITHUB_SHA"
           export BUZZ_PORTAL_IMAGE="$IMAGE_PREFIX-portal:$GITHUB_SHA"
-          export COMPOSE_PROJECT_NAME=buzz-build-check
-          export TRAEFIK_HOST=fixture.example.invalid
-          docker network create traefik-proxy
-          docker compose -f compose.portal.yaml up -d
-          python3 - <<'PY'
-          import subprocess,time
-          check="import os,time; from pathlib import Path; from buzz_agents.portal import broker_call; assert os.geteuid()==10002; assert not Path('/var/run/docker.sock').exists(); assert broker_call({'op':'status'})['configured'] is False"
-          for attempt in range(15):
-              result=subprocess.run(['docker','compose','-f','compose.portal.yaml','exec','-T','portal','python','-c',check],capture_output=True)
-              if result.returncode==0:break
-              time.sleep(1)
-          else:raise SystemExit('isolated role-boundary smoke failed; no images published')
-          PY
-          docker compose -f compose.portal.yaml down
-          docker run --rm --network none --entrypoint docker "$BUZZ_BROKER_IMAGE" compose version
+          python3 scripts/verify-bootstrap-docker.py --compose compose.portal.yaml
       - name: Publish reviewed images
         env:
           GH_TOKEN: ${{ github.token }}

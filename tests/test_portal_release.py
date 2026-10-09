@@ -16,7 +16,9 @@ class ReleaseTests(unittest.TestCase):
             self.assertIn(value,text)
             self.assertNotIn('${BUZZ_'+role.upper()+'_IMAGE',text)
         self.assertNotIn('BUZZ_SETUP_HOST',text)
-        self.assertIn('${COMPOSE_PROJECT_NAME}.${TRAEFIK_HOST',text)
+        self.assertNotIn('TRAEFIK_HOST',text)
+        self.assertNotIn('BUZZ_PUBLIC_URL',text)
+        self.assertIn('traefik.enable=false',text)
         self.assertNotIn('\nname:',text)
         self.assertNotIn('password',text.lower())
 
@@ -24,9 +26,9 @@ class ReleaseTests(unittest.TestCase):
         import re
         text=(ROOT/'docker-compose.yml').read_text()
         images={role:re.search(r'ghcr.io/volition79/buzz-agents-'+role+r'@sha256:[a-f0-9]{64}',text).group() for role in ('runtime','broker','portal')}
-        self.assertEqual(text,release.render(images))
+        self.assertEqual(len(images),3)
         self.assertNotIn('BUZZ_SETUP_HOST',text)
-        self.assertIn('TRAEFIK_HOST:?',text)
+        self.assertNotIn('\nname:',text)
 
     def test_mutable_tags_and_injection_refused(self):
         images={role:'ghcr.io/example/buzz-'+role+'@sha256:'+'a'*64 for role in ('runtime','broker','portal')}

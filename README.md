@@ -37,3 +37,5 @@ python3 scripts/build-easy.py
 기존 원격 실행·보호 정책은 유지합니다. 기본 공유 폴더 선택은 `team`이며, 독립 폴더는 `private`를 지정합니다. 봇 간 멘션은 서로의 공개키를 allowlist에 허용해야 합니다.
 
 v0.2 문서와 테스트 로그는 이력입니다. 새 사용자 설치는 위 사용 방법을 따릅니다.
+
+자동 초기 설정 후보는 도메인 환경값 없이 기존 Hostinger 기본 도메인의 Buzz Relay를 검색합니다. `setup-route`가 추가 생성되며, 실제 URL 가져오기·TLS·AI 인증·Windows-off 수용 시험은 아직 별도입니다.

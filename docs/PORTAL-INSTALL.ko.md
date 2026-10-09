@@ -12,13 +12,17 @@ Docker Manager의 **컴포즈 → URL에서 Compose**에 입력할 주소:
 https://raw.githubusercontent.com/volition79/buzz-agents/main/docker-compose.yml
 ```
 
-URL 가져오기 전용 수정 후보입니다. 프로젝트 이름은 Hostinger가 지정하고, HTTPS 주소는 공식 Traefik 예시의 `${COMPOSE_PROJECT_NAME}.${TRAEFIK_HOST}`를 사용합니다. `BUZZ_SETUP_HOST`를 별도로 요구하지 않습니다. 이미지 3개는 기존 검증된 digest로 고정했습니다.
+도메인 환경변수를 요구하지 않는 자동 초기 설정 후보입니다. 기존 **Hostinger 기본 도메인의 Buzz Relay와 Traefik**이 먼저 실행되어 있어야 합니다.
 
-**아직 확인할 점:** 공식 예시는 이 변수 구성을 사용하지만, URL 가져오기에서 `TRAEFIK_HOST`가 자동 공급되는지는 보장하지 않습니다. 없으면 명시적으로 실패하도록 했습니다. 실제 Hostinger에서 YAML 유지·컨테이너 생성·HTTPS 접속이 확인되기 전까지 URL 설치 성공으로 소개하지 않습니다. 수동 YAML 입력이나 SSH 보정은 이 검증의 합격으로 인정하지 않습니다.
+시작한 broker가 기존 Relay 프로젝트의 소유자 공개키와 Traefik 호스트 라벨을 읽습니다. `srv숫자.hstgr.cloud` 기반 도메인이 하나로 확인되면 프로젝트별 `buzz-setup-고유값.srv숫자.hstgr.cloud` 주소를 구성합니다. portal이 DNS를 확인한 뒤, broker가 별도 `setup-route` 컨테이너를 생성합니다. 기존 Relay와 Traefik은 수정하지 않습니다. portal은 Docker 소켓 없이 실행됩니다.
+
+`TRAEFIK_HOST`, `BUZZ_SETUP_HOST`, root 비밀번호, 사람의 nsec를 입력하지 않습니다. 최초 관리자 코드와 설정 비밀번호는 계속 필요합니다. DNS 조회는 연결 가능성 검사이며 사용자 소유권 인증을 대체하지 않습니다.
+
+현재 자동 지원 범위는 Hostinger 기본 도메인입니다. 사용자 지정 도메인, 서로 다른 기본 도메인의 Relay 여러 개, DNS 미전파, 기존 라우팅 컨테이너 충돌은 `Buzz automatic setup waiting: 오류코드`로 대기합니다. 임의 주소로 실행하지 않습니다. 후보 선택/수동 도메인 입력 UI는 아직 제공하지 않습니다.
 
 ## 설치 및 실서버 검증 순서
 
-1. Docker Manager에 위 Compose URL로 배포합니다. 기존 `traefik-proxy` 네트워크와 HTTPS 인증서 발급기 `letsencrypt`를 사용합니다. Hostinger가 제공하는 도메인 변수가 있어야 하며, 생성된 주소의 DNS가 VPS를 가리켜야 합니다.
+1. Docker Manager에 위 Compose URL로 배포합니다. 기존 `traefik-proxy` 네트워크와 HTTPS 인증서 발급기 `letsencrypt`를 사용합니다. 환경값 추가 없이 배포합니다. 자동 구성 후 portal 로그의 `Buzz setup URL` 주소를 엽니다.
 2. 설정 화면을 엽니다. Docker Manager의 **portal 로그**에 나온 최초 설정 코드를 입력하고, 설정 화면용 비밀번호(12자 이상)를 정합니다. root 비밀번호와는 별개입니다. 최초 코드는 60분간 유효하며 사용 후 폐기됩니다. 만료 시 portal을 재시작하면 새 코드가 나옵니다.
 3. 기존 Relay를 자동으로 찾습니다. 주소·소유자 공개키를 확인하고 연결합니다. 여러 개면 선택하고, 찾지 못하면 두 공개 정보만 직접 입력합니다. 소유권을 Nostr 서명으로 새로 증명하는 기능은 아닙니다. Docker 관리자만 읽을 수 있는 최초 코드와 기존 Relay 설정을 신뢰하며, 봇 권한은 기존 Relay가 검증합니다.
 4. **Windows 연결 파일 받기** → ZIP 압축 풀기 → `Buzz-VPS-Connect.exe` 실행. 자기 서버 주소가 맞는지 확인합니다. 파일은 10분간 한 번만 사용 가능합니다.
@@ -61,7 +65,7 @@ docker build -f Dockerfile.portal --target broker -t buzz-agents-broker:0.4.0 .
 docker build -f Dockerfile.portal --target portal -t buzz-agents-portal:0.4.0 .
 ```
 
-검토 후 지정 레지스트리에 공개하고 immutable digest로 `BUZZ_RUNTIME_IMAGE`, `BUZZ_BROKER_IMAGE`, `BUZZ_PORTAL_IMAGE`를 고정합니다. `COMPOSE_PROJECT_NAME`·`TRAEFIK_HOST`는 실행 환경에서 공급합니다. 루트 `docker-compose.yml`은 공개 URL 설치의 기준 파일입니다.
+검토 후 지정 레지스트리에 공개하고 immutable digest로 `BUZZ_RUNTIME_IMAGE`, `BUZZ_BROKER_IMAGE`, `BUZZ_PORTAL_IMAGE`를 고정합니다. 프로젝트 이름은 실제 컨테이너의 Compose 라벨에서 읽고 도메인은 기존 Relay에서 검색합니다. 루트 `docker-compose.yml`은 공개 URL 설치의 기준 파일입니다.
 
 공개 준비용 `.github/workflows/portal-images.yml`도 포함됩니다. 저장소에 올리는 것만으로 실행되지 않고, **수동 workflow_dispatch** 때만 동작합니다. Windows 빌드·테스트 → Docker 이미지 빌드 → 별도 CI 서버에서 Compose/권한 경계 스모크 → GHCR push → 익명 pull 확인 → digest가 고정된 설치 Compose를 후보 릴리스에 첨부하는 순서입니다. 최초 GHCR 패키지가 비공개이면 익명 확인 단계에서 멈추므로, 저장소 소유자가 각 패키지를 Public으로 바꾼 뒤 다시 실행해야 합니다. 첫 CI 실행은 성공했습니다.
 
@@ -78,4 +82,9 @@ docker build -f Dockerfile.portal --target portal -t buzz-agents-portal:0.4.0 .
 - HTTPS 설정 화면이 정상 응답합니다.
 - 기존 Relay·Traefik은 계속 동작합니다.
 
-공식 근거: [URL 설치](https://www.hostinger.com/support/12040815-how-to-deploy-your-first-container-with-hostinger-docker-manager/), [Raw URL 예시](https://www.hostinger.com/support/deploy-on-hostinger-button/), [Traefik 변수](https://www.hostinger.com/support/connecting-multiple-docker-compose-projects-using-traefik-in-hostinger-docker-manager/). CI는 Hostinger 환경변수를 모사하며 실제 hPanel importer를 실행하지 않습니다.
+공식 근거: [URL 설치](https://www.hostinger.com/support/12040815-how-to-deploy-your-first-container-with-hostinger-docker-manager/), [Raw URL 예시](https://www.hostinger.com/support/deploy-on-hostinger-button/), [Traefik 변수](https://www.hostinger.com/support/connecting-multiple-docker-compose-projects-using-traefik-in-hostinger-docker-manager/). 자동 초기 설정 CI는 도메인 환경값을 제거하고 Docker Relay 메타데이터와 DNS를 테스트용으로 구성합니다. 실제 hPanel importer·공인 DNS·TLS 발급은 별도로 확인해야 합니다.
+
+
+## 자동 라우팅 컨테이너
+
+초기 Compose 서비스 3개 외에 `setup-route`가 추가됩니다. 같은 portal 이미지의 제한된 HTTP 전달 프로그램이며, 별도 인증 데이터·Docker 소켓·호스트 볼륨이 없습니다. 사용자 요청은 고정된 자기 portal로만 전달합니다. 같은 구성으로 재시작하면 재사용하며, 다른 이미지/구성의 기존 route는 자동 교체하지 않습니다. 이미지 업그레이드와 설치 삭제는 별도 관리 절차가 필요합니다.
