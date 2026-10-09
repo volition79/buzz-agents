@@ -6,6 +6,8 @@ The page now serializes its API and guide-image requests, completes status/devic
 
 Real-route Chrome regression passes delayed images, transient and persistent gateway replies, automatic owner fill, explicit retry, existing-password login and exactly-one login attempt on gateway failure. The original e0e6ccd assets fail the same replay before owner fill. Logout assertions now wait for the actual visible logged-out page rather than stale hidden form state. Existing Korean/English guide/browser checks and portal HTTP26 passed. Publication is recorded below when complete; live user retest remains outstanding.
 
+Published source `598e055f97eea93e938d2b578e1e1bfd105f0943`: [candidate CI37942173881](https://github.com/volition79/buzz-agents/actions/runs/37942173881) passed including the real-route browser incident checks. [Exact Raw CI37942744913](https://github.com/volition79/buzz-agents/actions/runs/37942744913) passed for install `daa506c4c993b720372ba96708d4f32cf8f4abc4`. Independent anonymous Compose SHA256 `ce850ff59e095b5afd78b9876096a15d47fc0ff929b9c525e26bff3ad285f13a`. Release manifest hashes and actual web/portal bytes match source. User installs; VPS unchanged.
+
 # Initial setup HTTP400 regression — 2026-10-09
 
 Observed on published source `daccc5f` through the real HTTPS setup URL: cold Chrome loads intermittently miss app.js or i18n.js; one captured runtime exception was missing BuzzI18n. Native form submission then requests /?, which the route correctly rejects. Public asset bytes matched the release. The retained route admits two concurrent connections while the page added a third parallel CSS/JS request. Direct-portal browser checks had omitted this bridge boundary.
