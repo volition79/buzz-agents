@@ -75,3 +75,5 @@ URL-02 root docker-compose.yml: publish digest-pinned complete config as raw Git
 URL-03 workflow/regression: fetch exact published Raw bytes, validate missing-env failure and supplied Hostinger-env resolution, pull/start exact remote artifact in disposable CI; this is not Hostinger importer evidence.
 URL-04 docs/build: replace failed release-asset install guidance with Raw URL and acceptance boundaries; include canonical install source in packages.
 Focused manual test fallback remains due absent project policy registry. No changes to AI/auth implementations or legacy SSH path.
+
+URL-01..04 verification: three release regressions passed; independent reviewer accepted source with explicit live gap. CI 37898496077 passed public Raw byte parity, platform-env negative/rename checks, anonymous image pulls, exact Compose runtime/portal HTTP/broker RPC. Canonical artifact SHA256 5cb2294cb946e14214cd4e660a1bd94018e42128beb04975ec67976bceaf650d. Only config/source/docs/verification changed; runtime images reused. Real Hostinger importer and TLS remain unproven.
