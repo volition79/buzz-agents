@@ -1,3 +1,9 @@
+# Screenshot guide and connection choices — 2026-10-09
+
+This candidate adds three real Buzz onboarding captures with Korean/English instructions and a copy button for the installation's saved Relay URL. Browser tests checked both languages, image loading, clipboard success/denial, user-data preservation and desktop/mobile layouts. Portal tests: 25 passed. Windows connection choices now distinguish a healthy connection, an explicit server rejection and unknown status; Enter keeps, reconnects or retries respectively. Linux race/vet and 11 native Windows tests passed, including TLS classification, EOF cancellation and existing save/rollback checks. Both package archives contain the three screenshot assets. These are local results; publication CI is recorded separately. The user performs VPS installation.
+
+Earlier publication evidence follows.
+
 # Browser language and restart-guide update — 2026-10-09
 
 This candidate adds automatic Korean/English UI selection (132 entries), English fallback, and project-menu restart instructions for initial setup codes. Chrome locale tests cover Korean, US/UK English, French fallback, localized static/dynamic text, recovery and unmodified user/provider content. Desktop/mobile checks and the existing browser connection flow passed; portal unit tests: 25 passed. The new i18n script is served through the same protected static handler. These are local fixture results; live VPS update and original real-AI/Windows-off acceptance are separate.

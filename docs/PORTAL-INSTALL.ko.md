@@ -32,6 +32,18 @@ https://raw.githubusercontent.com/volition79/buzz-agents/89f7ff848cbb250086a5e57
 
 설정 화면은 평소 닫아도 됩니다. 봇 생성·대화는 Windows Buzz에서 합니다. Windows 프로그램은 배포 시에만 서버에 연결하며 계속 켜놓는 중계기가 아닙니다. 다만 portal 컨테이너 자체를 중지하면 새 배포/상태 확인은 사용할 수 없습니다. 기존 봇·예약 컨테이너는 별도로 실행됩니다.
 
+## Windows Buzz 커뮤니티 연결 안내
+
+설정 페이지의 **Windows Buzz에서 내 서버에 들어가기**에 실제 화면 캡처 3장과 한국어·영어 안내가 있습니다.
+
+1. 연결 프로그램에서 저장 완료를 확인하고 Windows Buzz를 다시 실행합니다.
+2. `Choose your model settings` 화면은 `Skip for now`를 누릅니다.
+3. `Join or create a community`에서 맨 위 `Join a community`를 누릅니다.
+4. 설정 페이지의 **Windows Buzz에 입력할 내 커뮤니티 주소 → 주소 복사**를 누릅니다. 주소는 저장된 Relay 설정에서 가져오며 서버마다 다릅니다.
+5. Buzz의 `Invite link or community URL`에 붙여넣고 `Next`를 누릅니다.
+
+`I already have a community → I own the community`는 관찰된 버전에서 Builderlab 로그인으로 이어집니다. 이 Hostinger 연결에는 사용하지 않습니다. `buzz-setup-…` 주소는 설정 도우미 주소이며 커뮤니티 주소가 아닙니다. 이미지의 화면 배치는 Buzz 버전에 따라 달라질 수 있습니다.
+
 ## 선택: Windows 종료 후 예약
 
 설정 화면의 예약 항목에서 예약 봇 공개키를 확인합니다. 해당 신원을 Relay와 채널의 멤버로 승인하고, 대상 AI 봇의 허용 목록에 추가합니다. 채널 UUID·대상 봇·한국 시간·메시지를 입력하고 예약합니다. 이 권한 승인 단계는 자동으로 생략하지 않습니다.
@@ -45,7 +57,7 @@ https://raw.githubusercontent.com/volition79/buzz-agents/89f7ff848cbb250086a5e57
 | 최초 코드가 없거나 만료됨 | buzz-agents 오른쪽 **⋮ → 다시 시작** 후 portal의 최신 로그에서 새 코드를 복사 | 기존 Relay·작업 데이터 |
 | 설정 후 portal/VPS 재시작 | 기존 설정 비밀번호로 로그인. 미사용 연결 ZIP은 다시 받기 | 저장된 Windows 연결·봇·파일·AI 인증 |
 | 연결 ZIP이 10분 경과/이미 사용됨 | 설정 화면에서 **새 Windows 연결 파일 받기**, 압축을 모두 풀고 실행 | 이미 완료된 연결 |
-| 같은 PC에서 프로그램 재실행 | 기존 연결 상태 확인 후 Enter로 유지. 재연결은 Buzz 종료 후 `r` 선택 | 새 연결 저장 성공까지 기존 연결 파일 |
+| 같은 PC에서 프로그램 재실행 | 정상: Enter로 유지. 서버가 연결 해제·무효를 확인: Enter로 재연결. 확인 실패: Enter로 확인 재시도 / `r`로 재연결 / `n`으로 취소. 재연결 전 Buzz 종료 | 새 연결 저장 성공까지 기존 연결 파일 |
 | 다른 PC 추가 | 새 ZIP을 해당 PC에서 실행 | 다른 PC의 연결 |
 | 저장 실패 | 프로그램 안내대로 재시도. 장치 ID가 나오면 설정 화면의 그 ID만 해제하고 새 ZIP 받기 | 기존 연결 파일·VPS 작업 데이터 |
 | 비밀번호 분실 | 아래 접근 복구 절차 | 봇·파일·AI 인증·Windows 연결 |

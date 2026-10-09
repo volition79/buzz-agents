@@ -43,7 +43,7 @@ def main():
     for folder in ('buzz_agents', 'guard-bin', 'scripts', 'tests', 'web-provider', 'connect', 'provider', 'setup', '.github'):
         source.extend(p for p in (ROOT/folder).rglob('*') if p.is_file()
                       and '__pycache__' not in p.parts and 'assets' not in p.parts
-                      and p.suffix in ('.py', '.mjs', '.go', '.mod', '.sh', '.html', '.css', '.js', '.yml', '.yaml'))
+                      and p.suffix in ('.py', '.mjs', '.go', '.mod', '.sh', '.html', '.css', '.js', '.yml', '.yaml', '.png'))
     source.extend(p for p in (ROOT/'guard-bin').iterdir() if p.is_file())
     source.extend((ROOT/'docs').glob('*.md'))
     source.append(ROOT/'docs/THIRD_PARTY_GO_LICENSE.txt')

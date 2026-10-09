@@ -133,7 +133,32 @@
   "링크의 설정 코드를 입력했습니다. 새 비밀번호를 정하고 설정 시작을 누르세요.": "The setup code from the link has been filled in. Choose a new password and click Start setup.",
   "복구 코드를 입력했습니다. 새 비밀번호를 정해 주세요.": "Recovery code filled in. Choose a new password.",
   "이미 설정된 서버입니다. 기존 비밀번호로 로그인하세요.": "This server is already set up. Sign in with your existing password.",
-  "아직 최초 설정 전입니다. 최신 setup code로 시작하세요.": "Initial setup is not complete. Start with the latest setup code."
+  "아직 최초 설정 전입니다. 최신 setup code로 시작하세요.": "Initial setup is not complete. Start with the latest setup code.",
+  "Windows Buzz에서 내 서버에 들어가기": "Join your server in Windows Buzz",
+  "연결 프로그램에서 저장 완료를 확인한 뒤 Buzz를 다시 실행하세요. 처음 연결하는 경우 아래 화면 순서대로 진행합니다. 이미 내 커뮤니티에 연결되어 있다면 이 단계는 건너뛰세요.": "After the connection program confirms it saved your connection, reopen Buzz. For your first connection, follow the screens below. Skip these steps if you are already connected to your community.",
+  "연결 프로그램에서 어떤 키를 누르나요?": "Which key should I press in the connection program?",
+  "정상 연결이면 Enter로 유지합니다. 서버가 연결 해제·무효를 확인했다면 Buzz를 종료하고 Enter로 재연결합니다. 상태 확인 실패라면 Enter로 다시 확인하거나 R로 재연결, N으로 취소합니다. 저장 완료 메시지를 확인한 뒤 Buzz를 여세요.": "If the connection is healthy, press Enter to keep it. If the server confirms it is revoked or invalid, close Buzz and press Enter to reconnect. If its status is unknown, press Enter to check again, R to reconnect, or N to cancel. Open Buzz after the save confirmation.",
+  "기본 모델 설정은 나중에": "Set default models later",
+  "Choose your model settings 화면에서는 오른쪽 아래 Skip for now를 누르세요.": "On “Choose your model settings”, click “Skip for now” at the bottom right.",
+  "Buzz 기본 모델 설정 화면. 오른쪽 아래 Skip for now를 선택합니다.": "Buzz default model settings. Select Skip for now at the bottom right.",
+  "커뮤니티 참여 선택": "Choose to join a community",
+  "Join or create a community 화면에서 맨 위 Join a community를 누르세요.": "On “Join or create a community”, click the top option, “Join a community”.",
+  "Buzz 커뮤니티 선택 화면. 맨 위 Join a community를 선택합니다.": "Buzz community options. Select Join a community at the top.",
+  "I already have a community → I own the community는 Builderlab 로그인으로 이어집니다. 이 Hostinger 연결에서는 Join a community를 사용하세요.": "“I already have a community” → “I own the community” leads to Builderlab sign-in. Use “Join a community” for this Hostinger connection.",
+  "내 Relay 주소 붙여넣기": "Paste your Relay address",
+  "아래 주소를 복사해 Invite link or community URL에 붙여넣고, 화면 아래 Next를 누르세요.": "Copy the address below, paste it into “Invite link or community URL”, then click “Next” at the bottom of the screen.",
+  "Windows Buzz에 입력할 내 커뮤니티 주소": "Your community address for Windows Buzz",
+  "위에서 내 Relay를 연결하면 주소가 표시됩니다.": "Connect your Relay above to display its address.",
+  "주소 복사": "Copy address",
+  "이 주소는 내 Relay 설정에서 자동으로 가져옵니다. 현재 브라우저의 buzz-setup-… 주소는 설정 도우미이므로 Buzz에 입력하지 마세요.": "This address comes from your Relay configuration. The buzz-setup-… address in this browser is the setup helper; do not enter it in Buzz.",
+  "Buzz 커뮤니티 주소 입력 화면. Invite link or community URL에 내 Relay 주소를 입력합니다.": "Buzz community address screen. Enter your Relay address in Invite link or community URL.",
+  "연결이 거절되나요?": "Connection refused?",
+  "Hostinger Buzz 설치 때 소유자로 지정한 공개키와 현재 Windows Buzz의 공개키가 같은지 확인하세요. 다른 신원은 커뮤니티 소유자의 가입 승인이 필요할 수 있습니다.": "Check that your current Windows Buzz public key matches the owner public key configured when installing Buzz on Hostinger. A different identity may need approval from the community owner.",
+  "커뮤니티에 들어간 다음": "After joining your community",
+  "봇을 만들 때 실행 위치에서 Hostinger VPS — HTTPS를 선택합니다. 봇을 배포한 뒤 이 페이지의 봇 계정 로그인 단계로 돌아와 Codex·Claude 계정에 로그인하세요.": "When creating a bot, choose “Hostinger VPS — HTTPS” as its execution location. After deploying it, return to the bot account sign-in section on this page to sign in to Codex or Claude.",
+  "캡처는 연결 순서를 보여주는 예시입니다. Buzz 버전에 따라 화면 배치가 달라질 수 있습니다. 이미지를 누르면 크게 볼 수 있습니다.": "These captures illustrate the connection steps. Layouts may differ by Buzz version. Click an image to view it at full size.",
+  "주소를 복사했습니다. Windows Buzz의 주소 입력란에 붙여넣으세요.": "Address copied. Paste it into the address field in Windows Buzz.",
+  "자동 복사를 사용할 수 없습니다. 선택된 주소를 Ctrl+C로 복사하세요.": "Automatic copying is unavailable. Press Ctrl+C to copy the selected address."
 }};
   const preferred = navigator.languages?.[0] || navigator.language || 'en';
   const language = /^ko(?:-|$)/i.test(preferred) ? 'ko' : 'en';
@@ -146,7 +171,7 @@
     document.querySelectorAll('[data-i18n]').forEach(el => {
       el.textContent = t(el.dataset.i18n);
     });
-    for (const attribute of ['placeholder', 'aria-label', 'title']) {
+    for (const attribute of ['placeholder', 'aria-label', 'title', 'alt']) {
       document.querySelectorAll('[data-i18n-' + attribute + ']').forEach(el => {
         el.setAttribute(attribute, t(el.getAttribute('data-i18n-' + attribute)));
       });

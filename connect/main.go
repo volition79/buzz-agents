@@ -264,8 +264,8 @@ func main() {
 		return
 	}
 	fmt.Println("\n연결할 서버: " + p.Endpoint + "\n본인의 설정 화면 주소가 맞으면 Enter, 취소하려면 n을 입력하세요.")
-	answer, _ := in.ReadString('\n')
-	if strings.TrimSpace(answer) != "" {
+	answer, inputErr := in.ReadString('\n')
+	if inputErr != nil || strings.TrimSpace(answer) != "" {
 		fmt.Println("취소했습니다.")
 		return
 	}
@@ -280,21 +280,24 @@ func main() {
 	if oldErr == nil || raw != nil {
 		if oldErr == nil {
 			fmt.Println("기존 서버: " + old.Endpoint + "\n기존 장치 ID: " + old.DeviceID)
-			if deviceRequest(old, "check", client) {
-				fmt.Println("기존 Windows 연결이 정상입니다. 다시 설치할 필요가 없습니다.")
-			} else {
-				fmt.Println("기존 연결 상태를 확인하지 못했습니다. 서버 상태와 설정 화면의 연결 목록을 확인하세요.")
+		}
+		fmt.Println("재연결할 서버: " + p.Endpoint)
+		choice := chooseConnection(in, os.Stdout, func() connectionState {
+			if oldErr != nil {
+				return connectionDamaged
 			}
-		} else {
-			fmt.Println(oldErr.Error())
-		}
-		fmt.Println("기존 연결 유지: Enter / 재연결: r (먼저 Buzz를 종료하세요). 새 연결은 위에 표시한 서버에 저장됩니다.")
-		answer, _ := in.ReadString('\n')
-		if strings.TrimSpace(answer) != "r" {
-			fmt.Println("기존 연결을 유지했습니다.")
+			return checkConnection(old, client)
+		})
+		switch choice {
+		case connectionKeep:
+			fmt.Println("정상인 기존 연결을 유지했습니다.")
 			return
+		case connectionCancel:
+			fmt.Println("취소했습니다. 기존 연결 정보는 변경하지 않았습니다.")
+			return
+		case connectionReconnect:
+			replace = true
 		}
-		replace = true
 	}
 	if err := installConnection(p, home, client, replace, commitFile); err != nil {
 		fmt.Println("완료되지 않음: " + err.Error())

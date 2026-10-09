@@ -74,6 +74,35 @@ def main():
             assert 'Relay was found' in cdp.js("document.querySelector('#message').textContent")
             cdp.js("document.querySelector('#saveRelay').click()")
             cdp.until("document.querySelector('#relayBadge').textContent === 'Connected'")
+            # Saved Relay, not the setup hostname or a developer-specific address.
+            assert cdp.js("document.querySelector('#communityRelay').value") == 'wss://relay.example.com'
+            assert not cdp.js("document.querySelector('#copyCommunityRelay').disabled")
+            for locale, text in [('ko-KR,ko','주소를 복사했습니다'), ('en-US,en','Address copied')]:
+                cdp.call('Network.setUserAgentOverride', {'userAgent':ua, 'acceptLanguage':locale})
+                cdp.call('Page.navigate', {'url':app.url})
+                cdp.until("document.querySelector('#communityRelay')?.value === 'wss://relay.example.com'")
+                cdp.js("document.querySelectorAll('#buzzGuide img').forEach(i=>i.loading='eager')")
+                cdp.until("[...document.querySelectorAll('#buzzGuide img')].length === 3 && [...document.querySelectorAll('#buzzGuide img')].every(i=>i.complete && i.naturalWidth>0)")
+                assert 'Skip for now' in cdp.js("document.querySelector('#buzzGuide').textContent")
+                assert 'Join a community' in cdp.js("document.querySelector('#buzzGuide').textContent")
+                if locale.startswith('en'):
+                    assert not re.search('[가-힣]', cdp.js("document.querySelector('#buzzGuide').textContent"))
+                    assert not re.search('[가-힣]', cdp.js("[...document.querySelectorAll('#buzzGuide img')].map(i=>i.alt).join(' ')") )
+                # Clipboard mock only; never touch the user's real clipboard.
+                cdp.js("Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async value=>{window.copiedRelay=value}}})")
+                cdp.js("document.querySelector('#copyCommunityRelay').click()")
+                cdp.until("document.querySelector('#relayCopyStatus').textContent.includes("+json.dumps(text)+")")
+                assert cdp.js('window.copiedRelay') == 'wss://relay.example.com'
+                cdp.js("Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async()=>{throw new Error('denied')}}})")
+                cdp.js("document.querySelector('#copyCommunityRelay').click()")
+                cdp.until("document.querySelector('#relayCopyStatus').textContent.includes('Ctrl+C')")
+                assert cdp.js("document.querySelector('#communityRelay').selectionEnd") == len('wss://relay.example.com')
+                for width,height in [(1440,1120),(390,844)]:
+                    cdp.call('Emulation.setDeviceMetricsOverride', {'width':width,'height':height,'deviceScaleFactor':1,'mobile':width<500})
+                    cdp.js("document.querySelector('#buzzGuide').scrollIntoView()")
+                    assert cdp.js('document.documentElement.scrollWidth <= window.innerWidth'), 'guide overflow'
+                    cdp.shot(output/f'guide-{locale.split(",")[0]}-{width}.png')
+            cdp.call('Emulation.setDeviceMetricsOverride', {'width':1440,'height':1120,'deviceScaleFactor':1,'mobile':False})
             broker({'op':'deploy'})
             broker.bots[0]['name'] = '연결됨'  # Same as a translation key: never translate user data.
             cdp.js("document.querySelector('#refresh').click()")
@@ -101,7 +130,7 @@ def main():
                 cdp.shot(output/f'recovery-en-{width}.png')
             assert not cdp.errors, cdp.errors
             report = {'status':'passed', 'locales':checked, 'dynamic_messages':True, 'user_and_provider_text_preserved':True,
-                      'recovery':True, 'viewports':[[1440,1120],[390,844]], 'console_exceptions':0,
+                      'recovery':True, 'guide_images_and_copy_both_languages':True, 'viewports':[[1440,1120],[390,844]], 'console_exceptions':0,
                       'not_proven':['live VPS deployment','real AI login or task execution']}
             (output/'report.json').write_text(json.dumps(report,indent=2)+'\n')
             print(json.dumps(report))

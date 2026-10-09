@@ -275,7 +275,11 @@ class Handler(BaseHTTPRequestHandler):
         static = {'/': ('index.html', 'text/html; charset=utf-8'),
                   '/app.js': ('app.js', 'text/javascript; charset=utf-8'),
                   '/i18n.js': ('i18n.js', 'text/javascript; charset=utf-8'),
-                  '/style.css': ('style.css', 'text/css; charset=utf-8')}
+                  '/style.css': ('style.css', 'text/css; charset=utf-8'),
+                  '/guide/model-settings.png': ('guide/model-settings.png', 'image/png'),
+                  '/guide/community.png': ('guide/community.png', 'image/png'),
+                  '/guide/join-address.png': ('guide/join-address.png', 'image/png'),
+                  }
         if self.command == 'GET' and self.path in static:
             file, content_type = static[self.path]
             return self.respond(200, (WEB / file).read_bytes(), content_type)

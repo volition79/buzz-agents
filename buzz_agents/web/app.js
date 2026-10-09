@@ -54,6 +54,8 @@ async function refresh(){
   const data=await api('status');configured=data.configured;
   $('download').disabled=!configured;$('relayBadge').textContent=configured?t('연결됨'):t('연결 대기');$('step1').classList.toggle('done',configured);
   if(configured){$('relay').value=data.relay;$('owner').value=data.owner;}
+  $('communityRelay').value=configured?data.relay:'';
+  $('copyCommunityRelay').disabled=!configured;
   for(const id of ['relay','owner'])$(id).readOnly=configured;
   $('saveRelay').hidden=configured;$('discover').hidden=configured;
   $('bots').replaceChildren();const selected=$('scheduleBot').value;$('scheduleBot').replaceChildren();
@@ -109,3 +111,15 @@ async function boot(){try{
 }catch(e){message(e.message,true);}}
 window.addEventListener('hashchange',()=>{accessFragment=takeAccessFragment();if(accessFragment)boot();});
 boot();setInterval(poll,2000);
+
+action('copyCommunityRelay', async()=>{
+  const field=$('communityRelay');
+  if(!configured || !field.value)return;
+  try {
+    await navigator.clipboard.writeText(field.value);
+    $('relayCopyStatus').textContent=t('주소를 복사했습니다. Windows Buzz의 주소 입력란에 붙여넣으세요.');
+  } catch {
+    field.focus();field.select();
+    $('relayCopyStatus').textContent=t('자동 복사를 사용할 수 없습니다. 선택된 주소를 Ctrl+C로 복사하세요.');
+  }
+});
