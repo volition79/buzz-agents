@@ -4,9 +4,9 @@
 
 ## 현재 상태
 
-v0.4 공개 개발 후보입니다. GitHub에서 이미지 빌드·임시 Compose 실행·비로그인 다운로드 검증을 통과했습니다. 기존 후보의 실제 Hostinger 설치와 공인 HTTPS 접속은 확인했습니다. 기존 「열기」 버튼에서 설정 화면 접속은 확인했습니다. 이번 인증값 자동 입력·복구 개선 후보는 CI37929657380의 신규 설치·업데이트 시험을 통과했습니다. 실제 hPanel 인증값 전달과 공식 계정 인증·Windows 완전 종료 시험은 아직 남아 있습니다.
+v0.4 공개 개발 후보입니다. GitHub에서 이미지 빌드·임시 Compose 실행·비로그인 다운로드 검증을 통과했습니다. 기존 후보의 실제 Hostinger 설치와 공인 HTTPS 접속은 확인했습니다. 기존 「열기」 버튼에서 설정 화면 접속은 확인했습니다. 이번 다국어·재시작 안내 후보는 CI37933477258의 신규 설치·업데이트 시험을 통과했습니다. Hostinger ‘열기’의 인증값 자동 전달은 사용하지 않습니다. 공식 계정 인증·Windows 완전 종료 시험은 아직 남아 있습니다.
 
-인증값 자동 입력·복구 개선을 포함한 Docker Manager **컴포즈 → URL에서 Compose** 주소:
+한국어·영어 자동 표시와 재시작 안내를 포함한 Docker Manager **컴포즈 → URL에서 Compose** 주소:
 
 ```text
 https://raw.githubusercontent.com/volition79/buzz-agents/01d385829515df2870af5d6925e53c22a6d81183/docker-compose.yml
@@ -16,14 +16,14 @@ https://raw.githubusercontent.com/volition79/buzz-agents/01d385829515df2870af5d6
 
 시작한 broker가 기존 Relay 프로젝트의 소유자 공개키와 Traefik 호스트 라벨을 읽습니다. `srv숫자.hstgr.cloud` 기반 도메인이 하나로 확인되면 프로젝트별 `buzz-setup-고유값.srv숫자.hstgr.cloud` 주소를 구성합니다. portal이 DNS를 확인한 뒤, broker가 자기 프로젝트의 Compose 파일에 `setup-route` 서비스를 등록하고 실행합니다. 기존 Relay와 Traefik은 수정하지 않습니다. portal은 Docker 소켓 없이 실행됩니다.
 
-`TRAEFIK_HOST`, `BUZZ_SETUP_HOST`, root 비밀번호, 사람의 nsec를 입력하지 않습니다. 최초 관리자 코드와 설정 비밀번호는 계속 필요합니다. 링크에 코드가 전달되면 자동 입력하고, 없으면 로그에서 가져옵니다. DNS 조회는 연결 가능성 검사이며 사용자 소유권 인증을 대체하지 않습니다.
+`TRAEFIK_HOST`, `BUZZ_SETUP_HOST`, root 비밀번호, 사람의 nsec를 입력하지 않습니다. 최초 관리자 코드와 설정 비밀번호는 계속 필요합니다. Docker Manager의 portal 로그에서 최신 설정 코드를 복사해 입력합니다. DNS 조회는 연결 가능성 검사이며 사용자 소유권 인증을 대체하지 않습니다.
 
 현재 자동 지원 범위는 Hostinger 기본 도메인입니다. 사용자 지정 도메인, 서로 다른 기본 도메인의 Relay 여러 개, DNS 미전파, 기존 라우팅 컨테이너 충돌은 `Buzz automatic setup waiting: 오류코드`로 대기합니다. 임의 주소로 실행하지 않습니다. 후보 선택/수동 도메인 입력 UI는 아직 제공하지 않습니다.
 
 ## 설치 및 실서버 검증 순서
 
 1. Docker Manager에 위 Compose URL로 배포합니다. 먼저 Compose 기본 네트워크에서 시작한 뒤 기존 Relay·Traefik의 실제 네트워크와 HTTPS 라우터 설정을 검색합니다. 자기 portal만 발견한 네트워크에 연결하며, 기존 서비스의 네트워크는 바꾸지 않습니다. 환경값 추가 없이 배포합니다. 자동 구성 후 목록을 새로고침하고 **열기** 버튼으로 접속합니다. portal 로그의 `Buzz setup URL` 주소로도 접속할 수 있습니다.
-2. 설정 화면을 엽니다. 코드가 자동 입력되어 있으면 설정 화면용 비밀번호(12자 이상)를 정합니다. 비어 있으면 **Docker Manager → buzz-agents → 관리 → 로그**에서 portal의 최신 `Buzz first setup code`를 복사합니다. `Buzz first setup link`를 열어도 코드가 자동 입력됩니다. 발급 후 60분간 한 번만 유효하며 링크 방문만으로 설정이 완료되지는 않습니다. root 비밀번호와는 별개입니다.
+2. 설정 화면을 열고 **Docker Manager → buzz-agents → 관리 → 로그**에서 portal의 최신 `Buzz first setup code`를 복사해 입력합니다. 설정 화면용 비밀번호(12자 이상)를 정합니다. 코드는 발급 후 60분간 한 번만 유효합니다. 설정 화면 비밀번호는 root 비밀번호와 별개입니다.
 3. 기존 Relay를 자동으로 찾습니다. 주소·소유자 공개키를 확인하고 연결합니다. 여러 개면 선택하고, 찾지 못하면 두 공개 정보만 직접 입력합니다. 소유권을 Nostr 서명으로 새로 증명하는 기능은 아닙니다. Docker 관리자만 읽을 수 있는 최초 코드와 기존 Relay 설정을 신뢰하며, 봇 권한은 기존 Relay가 검증합니다.
 4. **Windows 연결 파일 받기** → ZIP 압축 풀기 → `Buzz-VPS-Connect.exe` 실행. 자기 서버 주소가 맞는지 확인합니다. 파일은 10분간 한 번만 사용 가능합니다.
 5. Windows Buzz를 다시 열고 봇 실행 위치에서 **Hostinger VPS — HTTPS**를 선택해 배포합니다. 연결기가 보이지 않으면 현재 Buzz 버전의 외부 backend 검색 경로를 확인해야 합니다. 실제 Windows Buzz 발견/실행 시험은 아직 남아 있습니다.
@@ -42,7 +42,7 @@ https://raw.githubusercontent.com/volition79/buzz-agents/01d385829515df2870af5d6
 
 | 상황 | 할 일 | 유지되는 것 |
 |---|---|---|
-| 최초 코드가 없거나 만료됨 | portal을 재시작하고 최신 로그의 새 코드를 사용. 또는 아래 명령으로 새 코드 발급 | 기존 Relay·작업 데이터 |
+| 최초 코드가 없거나 만료됨 | buzz-agents 오른쪽 **⋮ → 다시 시작** 후 portal의 최신 로그에서 새 코드를 복사 | 기존 Relay·작업 데이터 |
 | 설정 후 portal/VPS 재시작 | 기존 설정 비밀번호로 로그인. 미사용 연결 ZIP은 다시 받기 | 저장된 Windows 연결·봇·파일·AI 인증 |
 | 연결 ZIP이 10분 경과/이미 사용됨 | 설정 화면에서 **새 Windows 연결 파일 받기**, 압축을 모두 풀고 실행 | 이미 완료된 연결 |
 | 같은 PC에서 프로그램 재실행 | 기존 연결 상태 확인 후 Enter로 유지. 재연결은 Buzz 종료 후 `r` 선택 | 새 연결 저장 성공까지 기존 연결 파일 |
@@ -52,7 +52,7 @@ https://raw.githubusercontent.com/volition79/buzz-agents/01d385829515df2870af5d6
 
 **최신 코드 확인:** Docker Manager → buzz-agents → 관리 → 로그에서 portal 로그를 선택하거나 해당 줄을 찾습니다. 이전 코드가 남아 있어도 마지막으로 발급된 것만 사용하세요. 로그가 비어 있거나 불러오기에 실패하면 코드를 추측하지 말고 portal의 실행 상태부터 확인하세요.
 
-**코드 발급 / 비밀번호 복구:** Docker Manager 목록에서 buzz-agents를 펼쳐 **portal 컨테이너의 터미널**을 엽니다. 아래 명령을 실행합니다. VPS root 비밀번호를 이 프로그램에 입력하지 않습니다.
+**설정 완료 후 비밀번호 분실 시 접근 복구:** Docker Manager 목록에서 buzz-agents를 펼쳐 **portal 컨테이너의 터미널**을 엽니다. 아래 명령을 실행합니다. VPS root 비밀번호를 이 프로그램에 입력하지 않습니다.
 
 ```sh
 python -m buzz_agents.portal_recover

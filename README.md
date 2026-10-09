@@ -6,7 +6,7 @@
 - [검증 결과](docs/PORTAL-VERIFICATION.md)
 - 새 로컬 패키지: `dist/portal-v0.4/`
 
-공개 이미지 3개와 [설치 Compose](https://raw.githubusercontent.com/volition79/buzz-agents/main/docker-compose.yml)가 준비되었습니다. GitHub Docker 빌드·임시 실행·익명 다운로드 검증은 통과했으며, 기존 후보의 실제 Hostinger 설치와 공인 HTTPS는 확인했습니다. 기존 「열기」 접속은 확인됐으며, 새 후보는 코드 자동 입력·로그 대체 안내·비밀번호 복구·Windows 재연결을 포함합니다. Docker 업데이트 시 계정과 기존 연결 보존을 검증했습니다. 실제 hPanel의 인증값 전달과 KVM 2 Windows-off 검증은 아직 남아 있습니다.
+공개 이미지 3개와 [설치 Compose](https://raw.githubusercontent.com/volition79/buzz-agents/main/docker-compose.yml)가 준비되었습니다. GitHub Docker 빌드·임시 실행·익명 다운로드 검증은 통과했으며, 기존 후보의 실제 Hostinger 설치와 공인 HTTPS는 확인했습니다. 기존 「열기」 접속은 확인됐으며, 새 후보는 한국어·영어 자동 표시, 로그에서 설정 코드 복사, 메뉴를 통한 초기 설정 재시도, 비밀번호 복구·Windows 재연결을 포함합니다. Docker 업데이트 시 계정과 기존 연결 보존을 검증했습니다. Hostinger ‘열기’의 인증값 자동 전달은 사용하지 않습니다. KVM 2 Windows-off 검증은 아직 남아 있습니다.
 
 ## 보존된 v0.3 SSH 방식
 
@@ -38,4 +38,4 @@ python3 scripts/build-easy.py
 
 v0.2 문서와 테스트 로그는 이력입니다. 새 사용자 설치는 위 사용 방법을 따릅니다.
 
-자동 초기 설정 후보는 도메인 환경값 없이 기존 Hostinger 기본 도메인의 Buzz Relay를 검색합니다. `setup-route`가 추가 생성되며, 기존 후보의 URL 설치·공인 TLS는 확인했으며, 인증값 자동 전달·AI 인증·Windows-off 수용 시험은 별도입니다.
+자동 초기 설정 후보는 도메인 환경값 없이 기존 Hostinger 기본 도메인의 Buzz Relay를 검색합니다. `setup-route`가 추가 생성되며, 기존 후보의 URL 설치·공인 TLS는 확인했으며, AI 인증·Windows-off 수용 시험은 별도입니다.
