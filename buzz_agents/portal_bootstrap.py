@@ -96,7 +96,7 @@ def discover_routing(containers, routers):
     if len(candidates) != 1:
         raise ToolError('bootstrap_proxy_route_missing' if not candidates else 'bootstrap_proxy_route_ambiguous')
     proxy_id, network, entrypoints, resolver = candidates.pop()
-    return {'proxy_id': proxy_id, 'network': network, 'entrypoints': entrypoints, 'resolver': resolver}
+    return {'network': network, 'entrypoints': entrypoints, 'resolver': resolver}
 
 
 def verify_dns(data, resolver=socket.getaddrinfo):

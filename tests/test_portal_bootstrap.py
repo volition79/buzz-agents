@@ -77,6 +77,12 @@ class BootstrapTests(unittest.TestCase):
             self.assertIn('traefik.http.routers.'+data['route_name']+'.tls.certresolver=acme-custom',cmd)
             self.assertNotIn('traefik-proxy',cmd)
 
+    def test_proxy_recreation_with_same_settings_keeps_route_identity(self):
+        items=fixture()
+        before=boot.plan(items,'a'*12)
+        items[-1]['Id']='8'*64
+        self.assertEqual(boot.plan(items,'a'*12),before)
+
     def test_missing_or_ambiguous_proxy_network_refused(self):
         with self.assertRaisesRegex(ToolError,'proxy_route_missing'): boot.plan(fixture()[:-1],'a'*12)
         items=fixture()
