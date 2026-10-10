@@ -2,7 +2,7 @@
 
 This candidate replaces the fixed per-bot256 PID ceiling with a finite worker-scaled budget (10 workers:768). Existing running bots require explicit stop/redeploy when their limit differs. Login, workspace, identity and quota data are retained. Cgroup-v2 snapshots and safe diagnostic categories distinguish observed limit events from generic process-creation failures; ko/en setup shows last sampled usage.
 
-Local Python201-test suite plus final host31, native3, resource6 tests passed; Go provider tests and real Chrome language/health checks passed. Candidate CI below must pass before canonical Compose promotion. This is not proof of leak-free runtime, real Codex/Claude10-worker success or Windows-off scheduled completion. See [incident boundaries](process-limit-investigation.md).
+Published source `289bc3946cbb873975cf06749123ae49354484af` passed [candidate CI38020017912](https://github.com/volition79/buzz-agents/actions/runs/38020017912): Python204, Go race/vet, browser route and four Docker startup/upgrade fixtures. All7 anonymous release assets passed hash/size readback;38 runtime/web source files and both Windows binaries match local reviewed builds. Immutable install `c31586e078dff3e7e8de69da5b1410cdfb13f909` passed [exact URL CI38020378322](https://github.com/volition79/buzz-agents/actions/runs/38020378322). Compose SHA256: `84ee40c57efa25c06e3abb0f4b4461c3b0dd252ef9abc618146c8fdee41cc0a3`. VPS installation remains user-operated. This is not proof of leak-free runtime, real Codex/Claude10-worker success or Windows-off scheduled completion. See [incident boundaries](process-limit-investigation.md).
 
 Previous release evidence follows.
 
