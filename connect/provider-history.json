@@ -2,6 +2,11 @@
   "schema": 1,
   "releases": [
     {
+      "tag": "portal-candidate-06c848475608-33-1",
+      "sha256": "85cbd502d01dec01999a68809a3e8458d85ef382f560fe4565fdb4eb02575510",
+      "size": 6565376
+    },
+    {
       "tag": "portal-candidate-0ab0849a7f6d-25-1",
       "sha256": "852b9a6501fcfb219a33295cd4600aac3cb8a02bdaf481068ad7795f18d2409f",
       "size": 6564864
