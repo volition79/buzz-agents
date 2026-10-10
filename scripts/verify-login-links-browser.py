@@ -41,8 +41,9 @@ def main():
             for lang,width in [('ko-KR',1440),('en-US',390)]:
                 cdp.call('Network.setUserAgentOverride',{'userAgent':ua,'acceptLanguage':lang})
                 cdp.call('Emulation.setDeviceMetricsOverride',{'width':width,'height':1000,'deviceScaleFactor':1,'mobile':width<500})
+                cdp.js('window.__loginLinkPreviousDocument = true')
                 cdp.call('Page.navigate',{'url':app.url})
-                cdp.until("document.readyState === 'complete' && typeof startLogin === 'function' && !document.querySelector('#loginForm button').disabled")
+                cdp.until("typeof window.__loginLinkPreviousDocument === 'undefined' && document.readyState === 'complete' && typeof startLogin === 'function' && !document.querySelector('#loginForm button').disabled")
                 cdp.call('Emulation.setFocusEmulationEnabled', {'enabled':True})
                 if not app.account:
                     cdp.js("$('setupCode').value="+json.dumps(app.setup_code)+";$('password').value='test-password-long';document.querySelector('#loginForm button').click()")
@@ -58,8 +59,8 @@ def main():
                     assert cdp.js("document.querySelector('#authLinks a').target === '_blank' && document.querySelector('#authLinks a').rel === 'noopener noreferrer'")
                 cdp.call('Browser.grantPermissions',{'origin':app.url,'permissions':['clipboardReadWrite','clipboardSanitizedWrite']})
                 cdp.call('Runtime.evaluate',{'expression':"document.querySelector('.auth-link button').click()",'userGesture':True})
-                cdp.until("document.querySelector('.auth-link [role=status]').textContent.length > 0")
-                assert cdp.js('navigator.clipboard.readText()')==url
+                cdp.until("document.querySelector('.auth-link [role=status]').textContent === t('로그인 주소를 복사했습니다. 브라우저 주소창에 붙여넣으세요.')")
+                cdp.until("navigator.clipboard.readText().then(value => value === "+json.dumps(url)+")")
                 cdp.js("navigator.clipboard.writeText=async()=>{throw new Error('fixture clipboard denied')};document.querySelector('.auth-link button').click()")
                 cdp.until("document.activeElement.className === 'auth-url'")
                 assert cdp.js('document.activeElement.selectionEnd - document.activeElement.selectionStart')==len(url)
