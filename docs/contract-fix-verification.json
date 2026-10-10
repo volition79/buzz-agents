@@ -101,5 +101,16 @@
       "retry without reload"
     ],
     "docker_available": false
+  },
+  "publication": {
+    "source": "70dee396ee1f343b81929f69a0c9d7e1f65f5a53",
+    "release": "portal-candidate-70dee396ee1f-26-1",
+    "candidate_ci": 38015081911,
+    "install_commit": "ee741f5e9be0f4cee88e476e4446337136287b1b",
+    "exact_url_ci": 38015539605,
+    "anonymous_assets_verified": 7,
+    "windows_reproduced_go": "1.26.5",
+    "native_windows_connect_tests": "passed",
+    "vps_installed_by_assistant": false
   }
 }

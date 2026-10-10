@@ -1,5 +1,7 @@
 # Runtime and setup recovery candidate — 2026-10-10
 
+Published source70dee396ee1f343b81929f69a0c9d7e1f65f5a53 passed candidate CI38015081911. Release portal-candidate-70dee396ee1f-26-1: all7 manifest assets downloaded anonymously and verified. Windows executables reproduced with Go1.26.5; native Windows connector tests and provider info smoke passed. Immutable install ee741f5e9be0f4cee88e476e4446337136287b1b passed exact public URL Docker CI38015539605. Compose SHA256 da2f545d95f2b31a184e9e41cc21d8c7aa2d7e271080ceddd103d16ef93d8ee7. VPS untouched; user performs real-account and Windows-off tests.
+
 This candidate updates runtime, broker, portal and Windows connector together. It corrects shared Codex/Claude launch contracts, concurrency, worker cleanup and slot recovery, login retry isolation, safe diagnostics and provider upgrade handling. The bilingual setup guide now uses numbered screenshot panels; expired sign-in sessions can be retried without reloading. Release assets are derived from the verified manifest.
 
 Local source, process, Windows and browser checks are recorded in docs/contract-fix-verification.json and TASK.md. The user authorized publication and will perform VPS installation and real-account testing. CI image/bootstrap checks and exact immutable Raw URL verification must finish before install handoff. Real provider account/model execution and a new task after Windows power-off remain unverified.
