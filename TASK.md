@@ -1,3 +1,9 @@
+Candidate publication passed: source 06c8484756087803e04792af157ab1ee8a7cc76a,
+CI38052003782, tag portal-candidate-06c848475608-33-1. Seven public assets and
+39 source files verified anonymously; both Windows binaries match local bytes.
+242 Python tests pass in CI. Canonical Compose update changes only image digests;
+no runtime source changes after that CI. Exact URL installation check follows.
+
 ## 2026-10-10 Publication approved
 
 User requested publication of the completed guard recovery implementation.

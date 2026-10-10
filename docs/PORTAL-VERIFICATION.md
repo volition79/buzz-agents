@@ -1,3 +1,13 @@
+Published candidate `portal-candidate-06c848475608-33-1` from source
+`06c8484756087803e04792af157ab1ee8a7cc76a`.
+Candidate CI: https://github.com/volition79/buzz-agents/actions/runs/38052003782
+passed 242 Python tests, provider/connector race and vet checks, browser tests,
+four Docker startup/upgrade scenarios and anonymous image access.
+Independent anonymous readback verified seven manifest assets, checksums, 39
+runtime/web source files and both Windows binaries against local Go 1.26.5 builds.
+Canonical Compose below adopts only the three reviewed image digests.
+Exact Raw URL start verification is the remaining publication handoff check.
+
 # Runtime recovery and mobile pairing candidate — 2026-10-10
 
 New deployments use optional prompt budgets (0 = disabled), official 25-minute
