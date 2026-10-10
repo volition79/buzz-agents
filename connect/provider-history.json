@@ -1,0 +1,75 @@
+{
+  "schema": 1,
+  "releases": [
+    {
+      "tag": "portal-candidate-0ab0849a7f6d-25-1",
+      "sha256": "852b9a6501fcfb219a33295cd4600aac3cb8a02bdaf481068ad7795f18d2409f",
+      "size": 6564864
+    },
+    {
+      "tag": "portal-candidate-25672286bcee-14-1",
+      "sha256": "cf82a7026ba35941712b3ee14422c420ed6bbaf067f86796f8852de1d106636c",
+      "size": 6559232
+    },
+    {
+      "tag": "portal-candidate-289bc3946cbb-29-1",
+      "sha256": "004186c7e71b823259a6254658b5244c476e7eff3be159249102e0005af8f290",
+      "size": 6565376
+    },
+    {
+      "tag": "portal-candidate-3518e79bc21a-3-1",
+      "sha256": "3bf50e248155fed4ac4c00bb59e0b00428006e4d0be93512f85f56268d142a09",
+      "size": 6559232
+    },
+    {
+      "tag": "portal-candidate-4dda974a8239-17-1",
+      "sha256": "679e86972762f7331ce3ddc92c9de1623b205b58ca5c85ccc27cab7d6ca86e1b",
+      "size": 6558208
+    },
+    {
+      "tag": "portal-candidate-598e055f97ee-23-1",
+      "sha256": "679e86972762f7331ce3ddc92c9de1623b205b58ca5c85ccc27cab7d6ca86e1b",
+      "size": 6558208
+    },
+    {
+      "tag": "portal-candidate-70dee396ee1f-26-1",
+      "sha256": "852b9a6501fcfb219a33295cd4600aac3cb8a02bdaf481068ad7795f18d2409f",
+      "size": 6564864
+    },
+    {
+      "tag": "portal-candidate-8ae5df6d57c1-1-1",
+      "sha256": "b7c680d2612f575b4c7fdae192a2391612cf1ae50522029891a092615de68709",
+      "size": 6559232
+    },
+    {
+      "tag": "portal-candidate-9d6683aea675-6-1",
+      "sha256": "9ff1923b3a8dc76afcf3602403b2ea2cf924b1269b51316d847d8ed069180d4c",
+      "size": 6559232
+    },
+    {
+      "tag": "portal-candidate-a1f82117471d-11-1",
+      "sha256": "1540596853ef1154e52c73f18cc78b1d4f8c71faaca0e0f0b5bcee8a7eb0d357",
+      "size": 6559232
+    },
+    {
+      "tag": "portal-candidate-a404be735bc9-10-1",
+      "sha256": "f705df98f3daecac76556a2ad8747728e2e859e3aba3b737a14dd163c25259d9",
+      "size": 6559232
+    },
+    {
+      "tag": "portal-candidate-b54f2212b70a-15-1",
+      "sha256": "679e86972762f7331ce3ddc92c9de1623b205b58ca5c85ccc27cab7d6ca86e1b",
+      "size": 6558208
+    },
+    {
+      "tag": "portal-candidate-c172f6133332-19-1",
+      "sha256": "679e86972762f7331ce3ddc92c9de1623b205b58ca5c85ccc27cab7d6ca86e1b",
+      "size": 6558208
+    },
+    {
+      "tag": "portal-candidate-d2ed537e1043-21-1",
+      "sha256": "679e86972762f7331ce3ddc92c9de1623b205b58ca5c85ccc27cab7d6ca86e1b",
+      "size": 6558208
+    }
+  ]
+}

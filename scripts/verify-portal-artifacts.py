@@ -46,7 +46,7 @@ def main():
             assert not name.endswith(('.exe','.zip','.sqlite')),name
             assert archive.read(name)==(ROOT/name).read_bytes(),name
         for required in ['.github/workflows/portal-images.yml','connect/main.go','web-provider/main.go',
-                         'scripts/render-portal-release.py','scripts/build-portal.py','tests/test_portal.py']:
+                         'scripts/render-portal-release.py','scripts/build-portal.py','tests/test_portal.py','connect/provider-history.json']:
             assert required in archive.namelist(),required
     workflow=yaml.safe_load((ROOT/'.github/workflows/portal-images.yml').read_text())
     trigger=workflow.get('on',workflow.get(True)) # PyYAML YAML 1.1 parses 'on' as bool.

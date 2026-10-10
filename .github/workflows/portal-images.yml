@@ -36,6 +36,8 @@ jobs:
         with:
           go-version: '1.26.5'
           cache: false
+      - name: Verify complete public provider upgrade history
+        run: python3 scripts/provider-history.py --check --download-dir /tmp/buzz-provider-history
       - name: Build Windows candidate and run scoped tests
         shell: bash
         run: |
@@ -43,7 +45,7 @@ jobs:
           npm ci --ignore-scripts --no-audit --no-fund
           sudo env "PATH=$PATH" python3 -m unittest discover -s tests -v
           for module in web-provider connect; do
-            (cd "$module" && go test -race ./... && go vet ./...)
+            (cd "$module" && BUZZ_PROVIDER_HISTORY_DIR=/tmp/buzz-provider-history go test -race ./... && go vet ./...)
           done
           node --check buzz_agents/web/app.js
           node --check buzz_agents/web/i18n.js

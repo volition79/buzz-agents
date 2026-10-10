@@ -2,6 +2,12 @@
 
 각 사용자가 Windows Buzz에서 자신의 신원을 만들고, **자신의 공개키를 소유자로 지정한 Hostinger Buzz Relay**를 먼저 설치했다고 가정합니다. 기존 Relay와 Windows Buzz는 계속 사용합니다. nsec 개인키와 VPS root 비밀번호를 이 프로그램에 입력하지 않습니다.
 
+## Windows 연결 프로그램 업데이트
+
+새 설정 화면에서 연결 파일을 내려받아 실행하면, 이전 공식 버전의 연결기도 자동 갱신합니다. 정상 연결은 유지하고, 서버에서 무효로 확인된 연결은 화면 안내에 따라 재연결합니다. 기존 파일을 직접 삭제하거나 이름을 바꿀 필요가 없습니다. Buzz를 먼저 종료하세요. 출처를 확인할 수 없는 파일은 덮어쓰지 않습니다.
+
+기존 Docker 프로젝트를 직접 편집해 업데이트할 때는 `setup-route` 이미지를 변경하지 마세요. 검증된 기존 접속 경로를 유지하고 `portal`, `broker`, runtime 참조만 갱신합니다. 신규 설치는 아래 URL의 자동 구성을 사용합니다.
+
 ## 현재 상태
 
 2026-10-10 프로세스 제한 수정 후보: 고정 256 제한을 동시 실행 수에 맞게 조정했습니다(10개 기준 768). 프로세스·스레드 사용량과 제한 오류를 한국어·영어로 표시합니다. 기존 봇은 Windows Buzz에서 중지한 뒤 재배포해야 새 runtime과 제한이 적용됩니다. 로그인·작업 파일·사용량 기록은 보존합니다. 설정 화면에서 새 Windows 연결 파일을 받아 연결 프로그램도 한 번 실행하세요. 아래 URL은 검증된 최신 설치본을 가리킵니다. 실제 AI 응답·반복 실행·Windows 종료 시험은 별도로 확인해야 합니다.
@@ -11,7 +17,7 @@ v0.4 공개 개발 후보입니다. GitHub에서 이미지 빌드·임시 Compos
 캡처 기반 한국어·영어 안내, 실제 Relay 주소 복사와 Windows 연결 상태별 선택을 포함한 Docker Manager **컴포즈 → URL에서 Compose** 주소:
 
 ```text
-https://raw.githubusercontent.com/volition79/buzz-agents/c31586e078dff3e7e8de69da5b1410cdfb13f909/docker-compose.yml
+https://raw.githubusercontent.com/volition79/buzz-agents/main/docker-compose.yml
 ```
 
 최초 설정에서 HTTP400을 보았다면 이번 URL로 업데이트한 뒤 Docker Manager의 **열기**로 다시 접속하세요. 주소 끝에 `?`가 남은 오류 페이지를 새로고침하지 마세요. portal 로그의 최신 최초 설정 코드를 사용합니다. 설정 버튼은 화면 준비가 끝나면 활성화됩니다.

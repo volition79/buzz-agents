@@ -38,16 +38,34 @@ type Connection struct {
 
 var tokenPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{32,100}$`)
 
-// Exact hashes from these public candidate manifests. web-provider source is
-// unchanged across these releases (8ae5df6d57c1..25672286bcee). These exact
-// reviewed predecessors may be upgraded; unknown executables remain untouched.
-var compatibleProviders = map[string]bool{
-	"679e86972762f7331ce3ddc92c9de1623b205b58ca5c85ccc27cab7d6ca86e1b": true, // d2ed537e1043-21-1 manifest, deterministic pre-diagnostics build
-	"1540596853ef1154e52c73f18cc78b1d4f8c71faaca0e0f0b5bcee8a7eb0d357": true, // a1f82117471d-11-1
-	"f705df98f3daecac76556a2ad8747728e2e859e3aba3b737a14dd163c25259d9": true, // a404be735bc9-10-1
-	"9ff1923b3a8dc76afcf3602403b2ea2cf924b1269b51316d847d8ed069180d4c": true, // 9d6683aea675-6-1 (installed portal image)
-	"3bf50e248155fed4ac4c00bb59e0b00428006e4d0be93512f85f56268d142a09": true, // 3518e79bc21a-3-1
-	"b7c680d2612f575b4c7fdae192a2391612cf1ae50522029891a092615de68709": true, // 8ae5df6d57c1-1-1
+// Offline catalog of verified official releases. CI checks completeness against
+// published manifests and hashes every distinct executable before publication.
+//
+//go:embed provider-history.json
+var providerHistory []byte
+
+var compatibleProviders = loadProviderHistory()
+
+func loadProviderHistory() map[string]bool {
+	var history struct {
+		Schema   int `json:"schema"`
+		Releases []struct {
+			Tag    string `json:"tag"`
+			SHA256 string `json:"sha256"`
+			Size   int64  `json:"size"`
+		} `json:"releases"`
+	}
+	if json.Unmarshal(providerHistory, &history) != nil || history.Schema != 1 || len(history.Releases) == 0 {
+		panic("invalid embedded provider history")
+	}
+	result := map[string]bool{}
+	for _, r := range history.Releases {
+		if !regexp.MustCompile(`^[a-f0-9]{64}$`).MatchString(r.SHA256) || r.Size < 1 || r.Size > 32*1024*1024 {
+			panic("invalid embedded provider record")
+		}
+		result[r.SHA256] = true
+	}
+	return result
 }
 
 func compatibleProvider(data []byte) bool {

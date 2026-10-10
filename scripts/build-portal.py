@@ -47,6 +47,7 @@ def main():
     source.extend(p for p in (ROOT/'guard-bin').iterdir() if p.is_file())
     source.extend((ROOT/'docs').glob('*.md'))
     source.append(ROOT/'docs/THIRD_PARTY_GO_LICENSE.txt')
+    source.append(ROOT/'connect/provider-history.json')
     with zipfile.ZipFile(output/'public-source.zip', 'w', zipfile.ZIP_DEFLATED) as archive:
         for path in sorted(set(source)):
             info = zipfile.ZipInfo(path.relative_to(ROOT).as_posix(), (2026,10,9,0,0,0))

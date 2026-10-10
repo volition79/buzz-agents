@@ -1,3 +1,11 @@
+# Windows provider upgrade history — 2026-10-10
+
+Fixes official previous-provider rejection during reconnect. The installer embeds a reviewed offline catalog of public provider hashes. The release workflow verifies completeness against all public candidate manifests and checks actual EXE bytes (including embedded backends in early installers); missing or changed releases block publication. Unknown or modified executables remain protected.
+
+Release maintainers: run `python3 scripts/provider-history.py --write --download-dir /tmp/buzz-provider-history`, review and commit the catalog, then publish. CI uses `--check` before building and supplies verified binaries to real upgrade tests. No credential or installed-user configuration is changed by these tests. Live VPS/AI acceptance remains separate.
+
+Previous evidence follows.
+
 # PID/thread capacity candidate — 2026-10-10
 
 This candidate replaces the fixed per-bot256 PID ceiling with a finite worker-scaled budget (10 workers:768). Existing running bots require explicit stop/redeploy when their limit differs. Login, workspace, identity and quota data are retained. Cgroup-v2 snapshots and safe diagnostic categories distinguish observed limit events from generic process-creation failures; ko/en setup shows last sampled usage.
