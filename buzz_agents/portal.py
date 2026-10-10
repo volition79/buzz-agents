@@ -278,6 +278,11 @@ class Handler(BaseHTTPRequestHandler):
                   '/style.css': ('style.css', 'text/css; charset=utf-8'),
                   '/guide/model-settings.png': ('guide/model-settings.png', 'image/png'),
                   '/guide/community.png': ('guide/community.png', 'image/png'),
+                  '/guide/community-ready.png': ('guide/community-ready.png', 'image/png'),
+                  '/guide/runtimes-ready.png': ('guide/runtimes-ready.png', 'image/png'),
+                  '/guide/agent-model.png': ('guide/agent-model.png', 'image/png'),
+                  '/guide/run-on-vps.png': ('guide/run-on-vps.png', 'image/png'),
+                  '/guide/agent-status.png': ('guide/agent-status.png', 'image/png'),
                   '/guide/join-address.png': ('guide/join-address.png', 'image/png'),
                   }
         if self.command == 'GET' and self.path == '/setup.js':

@@ -306,8 +306,12 @@ class BrokerTests(unittest.TestCase):
                     broker.dispatch({'op': 'configure', 'owner': 'c'*64, 'relay': RELAY})
                 image[0]['Id'] = 'sha256:'+'e'*64
             with patch('buzz_agents.portal_broker.execute', return_value=json.dumps(image).encode()):
-                with self.assertRaisesRegex(ToolError, 'image_upgrade_requires_review'):
-                    broker.dispatch({'op': 'configure', 'owner': OWNER, 'relay': RELAY})
+                self.assertTrue(broker.dispatch({'op': 'configure', 'owner': OWNER, 'relay': RELAY})['ok'])
+                saved=json.loads(Path(tmp,'settings.json').read_text())
+                self.assertEqual(saved['image_id'],image[0]['Id'])
+                self.assertEqual(saved['resource_policy'],'host-v1')
+                self.assertNotIn('max_bots',saved)
+                self.assertNotIn('memory_budget_mb',saved)
 
     def test_legacy_registry_not_overwritten(self):
         with tempfile.TemporaryDirectory() as tmp:

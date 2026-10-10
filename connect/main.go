@@ -39,9 +39,10 @@ type Connection struct {
 var tokenPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{32,100}$`)
 
 // Exact hashes from these public candidate manifests. web-provider source is
-// unchanged across these releases (8ae5df6d57c1..25672286bcee). Preserve the
-// approved installed binary, never execute or overwrite an unknown one.
+// unchanged across these releases (8ae5df6d57c1..25672286bcee). These exact
+// reviewed predecessors may be upgraded; unknown executables remain untouched.
 var compatibleProviders = map[string]bool{
+	"679e86972762f7331ce3ddc92c9de1623b205b58ca5c85ccc27cab7d6ca86e1b": true, // d2ed537e1043-21-1 manifest, deterministic pre-diagnostics build
 	"1540596853ef1154e52c73f18cc78b1d4f8c71faaca0e0f0b5bcee8a7eb0d357": true, // a1f82117471d-11-1
 	"f705df98f3daecac76556a2ad8747728e2e859e3aba3b737a14dd163c25259d9": true, // a404be735bc9-10-1
 	"9ff1923b3a8dc76afcf3602403b2ea2cf924b1269b51316d847d8ed069180d4c": true, // 9d6683aea675-6-1 (installed portal image)
@@ -142,6 +143,80 @@ func deviceRequest(c Connection, action string, client *http.Client) bool {
 	return action != "check" || value.DeviceID == c.DeviceID
 }
 
+// Called with the installation lock held. Stage beside the executable and use
+// MoveFileEx on Windows: a running/locked target fails without deleting it.
+func installProvider(home string, commit func(string, string, bool) error) error {
+	bin := filepath.Join(home, ".local", "bin")
+	if err := os.MkdirAll(bin, 0755); err != nil {
+		return err
+	}
+	target := filepath.Join(bin, "buzz-backend-hostinger-https.exe")
+	info, err := os.Lstat(target)
+	existed := err == nil
+	if err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	if existed && !info.Mode().IsRegular() {
+		return errors.New("연결기 파일이 일반 파일이 아닙니다. 기존 파일을 보존했습니다.")
+	}
+	var before []byte
+	if existed {
+		before, err = os.ReadFile(target)
+		if err != nil {
+			return err
+		}
+		if bytes.Equal(before, provider) {
+			return nil
+		}
+		if !compatibleProvider(before) {
+			return errors.New("알 수 없는 HTTPS 연결기가 있어 덮어쓰지 않습니다. 기존 연결기를 확인해 주세요.")
+		}
+	}
+	f, err := os.CreateTemp(bin, ".buzz-provider-*.tmp")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(f.Name())
+	defer f.Close()
+	if _, err = f.Write(provider); err != nil {
+		return err
+	}
+	if err = f.Chmod(0755); err != nil {
+		return err
+	}
+	if err = f.Sync(); err != nil {
+		return err
+	}
+	if err = f.Close(); err != nil {
+		return err
+	}
+	// Recheck after staging so another actor's changed file is never knowingly
+	// replaced. The installation lock serializes our own concurrent installers.
+	current, err := os.ReadFile(target)
+	if existed {
+		currentInfo, statErr := os.Lstat(target)
+		if err != nil || statErr != nil || !currentInfo.Mode().IsRegular() || !bytes.Equal(current, before) {
+			return errors.New("설치 중 연결기 파일이 변경되었습니다. 다시 실행해 주세요.")
+		}
+	} else if !os.IsNotExist(err) {
+		return errors.New("설치 중 연결기 파일이 생성되었습니다. 다시 실행해 주세요.")
+	}
+	if err := commit(f.Name(), target, existed); err != nil {
+		return errors.New("연결기를 업데이트하지 못했습니다. Buzz를 종료한 뒤 다시 실행하세요. 기존 연결 정보는 보존했습니다.")
+	}
+	return nil
+}
+
+func upgradeConnectedProvider(home string) error {
+	dir := filepath.Join(home, ".buzz-agents-web")
+	unlock, err := lockInstall(filepath.Join(dir, "connect.lock"))
+	if err != nil {
+		return errors.New("다른 연결 프로그램을 닫은 뒤 다시 실행하세요.")
+	}
+	defer unlock()
+	return installProvider(home, commitFile)
+}
+
 func install(p Pairing, home string, client *http.Client) error {
 	return installConnection(p, home, client, false, commitFile)
 }
@@ -171,20 +246,8 @@ func installConnection(p Pairing, home string, client *http.Client, replace bool
 	if readErr != nil && before == nil && existed {
 		return errors.New("기존 연결 파일에 접근하지 못했습니다. 파일을 변경하지 않았습니다.")
 	}
-	bin := filepath.Join(home, ".local", "bin")
-	target := filepath.Join(bin, "buzz-backend-hostinger-https.exe")
-	if oldBytes, err := os.ReadFile(target); err == nil && !compatibleProvider(oldBytes) {
-		return errors.New("다른 버전의 HTTPS 연결기가 있어 자동으로 덮어쓰지 않습니다.")
-	} else if err != nil && !os.IsNotExist(err) {
+	if err := installProvider(home, commitFile); err != nil {
 		return err
-	}
-	if err := os.MkdirAll(bin, 0755); err != nil {
-		return err
-	}
-	if _, err := os.Stat(target); os.IsNotExist(err) {
-		if err := os.WriteFile(target, provider, 0755); err != nil {
-			return err
-		}
 	}
 	// Open a protected staging file BEFORE consuming the one-use grant.
 	f, err := os.CreateTemp(dir, ".connection-*.tmp")
@@ -290,7 +353,11 @@ func main() {
 		})
 		switch choice {
 		case connectionKeep:
-			fmt.Println("정상인 기존 연결을 유지했습니다.")
+			if err := upgradeConnectedProvider(home); err != nil {
+				fmt.Println("완료되지 않음: " + err.Error())
+				return
+			}
+			fmt.Println("정상인 기존 연결을 유지하고 연결기를 확인·업데이트했습니다. Buzz를 다시 실행하세요.")
 			return
 		case connectionCancel:
 			fmt.Println("취소했습니다. 기존 연결 정보는 변경하지 않았습니다.")

@@ -3,3 +3,25 @@
 header{gap:14px}header button{white-space:nowrap}
 
 .buzz-guide{margin-top:32px;border-top:1px solid #c9cdbf;padding-top:22px}.buzz-guide>summary{font-size:19px;font-weight:700;cursor:pointer}.buzz-guide p{max-width:720px}.guide-steps{list-style:none;counter-reset:guide;padding:0;margin:24px 0}.guide-steps>li{counter-increment:guide;border-top:1px solid #d5d9cc;padding:22px 0}.guide-steps h3:before{content:counter(guide,decimal-leading-zero);font:italic 24px Georgia,serif;color:#527049;margin-right:14px}.guide-image{display:block;margin:18px 0;border:1px solid #c2cabb;border-radius:6px;overflow:hidden}.guide-image img{display:block;width:100%;height:auto}.guide-note,.guide-tip{background:#e9eddf;padding:14px 18px;border-radius:4px}.guide-tip summary{cursor:pointer;font-weight:700}.guide-tip p{margin-bottom:0}.guide-address{padding:16px 20px;background:#e8ecdf;border-radius:6px}.guide-address label{margin-top:0}.guide-address input{font:13px/1.6 Consolas,monospace;background:#fbfcf6}.guide-address button{margin-top:10px}.guide-address .hint:empty{display:none}
+
+/* A compact, numbered field guide. Hidden panels retain form state. */
+#buzzGuide{margin-top:0;border-top:0;padding-top:0}
+.guide-tabs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:22px 0;scroll-margin-top:24px}
+.guide-tabs button{display:flex;align-items:center;gap:10px;text-align:left;background:#e7ebdf;color:#50634d;border:1px solid transparent;min-height:58px;padding:10px 12px}
+.guide-tabs b{font:italic 23px Georgia,serif;color:#647d50}
+.guide-tabs button[aria-selected="true"]{background:#234c39;color:#fff;border-color:#234c39}
+.guide-tabs button[aria-selected="true"] b{color:#d7e9a4}
+.guide-panel{padding:4px 0 12px;overflow-wrap:anywhere}
+.guide-panel>h3{font-size:23px;margin:4px 0 14px;font-weight:500}
+.guide-panel .guide-image{background:#e5e7de}
+.guide-panel .guide-image img{height:auto;max-height:320px;object-fit:contain}
+.guide-panel .guide-tip{margin:12px 0;font-size:13px}
+.community-step{border-bottom:1px solid #cbd3c0;padding:14px 0}
+.community-step>summary{cursor:pointer;font-weight:600}
+.community-step[open]>summary{color:#234c39}
+.guide-navigation{display:flex;align-items:center;justify-content:space-between;gap:12px;border-top:1px solid #c9cdbf;padding-top:18px}
+#guideProgress{font:italic 18px Georgia,serif;color:#637253}
+.guide-navigation button:disabled{cursor:default}
+.guide-account-link{display:inline-block;font-weight:700;text-underline-offset:4px}
+#botsPanel{scroll-margin-top:28px}
+@media(max-width:650px){.guide-tabs{grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}.guide-tabs button{font-size:12px;min-height:54px;padding:9px}.guide-tabs b{font-size:20px}.guide-panel>h3{font-size:21px}.guide-panel .guide-image img{max-height:230px}.guide-navigation button{padding:10px 13px}}

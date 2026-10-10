@@ -47,8 +47,8 @@ func info() map[string]any {
 			"properties": map[string]any{
 				"ssh_alias":        map[string]any{"type": "string", "title": "OpenSSH host alias", "default": "buzz-vps"},
 				"workspace":        map[string]any{"type": "string", "title": "VPS workspace group", "default": "team"},
-				"memory_mb":        map[string]any{"type": "integer", "title": "RAM limit (MiB)", "minimum": 512, "maximum": 4096, "default": 1536},
-				"cpus":             map[string]any{"type": "number", "title": "CPU limit", "minimum": 0.1, "maximum": 1.5, "default": 0.75},
+				"memory_mb":        map[string]any{"type": "integer", "title": "RAM limit (MiB)", "minimum": 512, "default": 1536},
+				"cpus":             map[string]any{"type": "number", "title": "CPU limit", "minimum": 0.1, "default": 0.75},
 				"max_turn_seconds": map[string]any{"type": "integer", "title": "Maximum time per AI turn (seconds)", "minimum": 60, "maximum": 7200, "default": 1800},
 				"turn_limit":       map[string]any{"type": "integer", "title": "Maximum prompt starts per window", "minimum": 1, "maximum": 500, "default": 20},
 				"window_seconds":   map[string]any{"type": "integer", "title": "Rate window (seconds)", "minimum": 60, "maximum": 86400, "default": 3600},
@@ -98,7 +98,7 @@ func deploy(ctx context.Context, request Request, raw []byte) (map[string]any, e
 	if err != nil || decodeErr != nil {
 		// A failed SSH command can have applied a deploy; do not auto-retry.
 		// Valid server error codes are safe; never echo stderr or an arbitrary server message.
-		if code, ok := answer["error"].(string); ok && regexp.MustCompile(`^[A-Za-z0-9_]{1,160}$`).MatchString(code) {
+		if code, ok := answer["error"].(string); ok && publicErrors[code] {
 			return nil, fmt.Errorf("%s", code)
 		}
 		return nil, fmt.Errorf("ssh_deploy_unconfirmed_check_host_do_not_blindly_retry")
@@ -136,14 +136,20 @@ func sshArgs(alias string) ([]string, error) {
 }
 
 func run(input io.Reader, output io.Writer) int {
+	return runUsing(input, output, io.Discard)
+}
+
+func runUsing(input io.Reader, output io.Writer, diagnostics io.Writer) int {
 	raw, err := io.ReadAll(io.LimitReader(input, maxBytes+1))
 	if err != nil || len(raw) > maxBytes {
 		json.NewEncoder(output).Encode(map[string]any{"ok": false, "error": "request_too_large"})
+		fmt.Fprintln(diagnostics, "Hostinger VPS: request_too_large")
 		return 1
 	}
 	var request Request
 	if json.Unmarshal(raw, &request) != nil {
 		json.NewEncoder(output).Encode(map[string]any{"ok": false, "error": "invalid_json"})
+		fmt.Fprintln(diagnostics, "Hostinger VPS: invalid_json")
 		return 1
 	}
 	var answer map[string]any
@@ -159,9 +165,10 @@ func run(input io.Reader, output io.Writer) int {
 	}
 	if err != nil {
 		json.NewEncoder(output).Encode(map[string]any{"ok": false, "error": err.Error()})
+		fmt.Fprintln(diagnostics, "Hostinger VPS:", err.Error())
 		return 1
 	}
 	json.NewEncoder(output).Encode(answer)
 	return 0
 }
-func main() { os.Exit(run(os.Stdin, os.Stdout)) }
+func main() { os.Exit(runUsing(os.Stdin, os.Stdout, os.Stderr)) }

@@ -5,6 +5,7 @@ import logging
 import os
 from pathlib import Path
 import selectors
+import secrets
 import signal
 import stat
 import subprocess
@@ -12,6 +13,7 @@ import threading
 import time
 from .common import ToolError, clean_env
 from .policy import Policy, Broker, atomic_json, read_json
+from .diagnostics import RuntimeDiagnostics
 
 UID = 10001
 
@@ -28,28 +30,46 @@ def load_config(path):
     return json.loads(data)
 
 
-def runtime_env(config, socket_path):
+def runtime_parallelism(config):
+    # Existing configs without an explicit pool size retain their old limit.
+    value = config["env"].get("BUZZ_ACP_AGENTS", "1")
+    if not isinstance(value, str) or not value.isascii() or not value.isdigit() or not 1 <= int(value) <= 32:
+        raise ToolError("invalid_parallelism")
+    return int(value)
+
+
+def runtime_env(config, socket_path, startup_consumed=True):
     env = clean_env()
     env.update(config["env"])
-    env.update(HOME="/home/agent", USER="agent", LOGNAME="agent", PYTHONPATH="/app",
+    env.pop("BUZZ_ACP_REPLAY_FLOOR", None)
+    if not startup_consumed:
+        env.update(config.get("startup_env", {}))
+    env["BUZZ_MANAGED_AGENT_START_NONCE"] = secrets.token_hex(16)
+    env.update(BUZZ_ACP_AGENTS=str(runtime_parallelism(config)), HOME="/home/agent", USER="agent", LOGNAME="agent", PYTHONPATH="/app",
                NO_BROWSER="1", BUZZ_ACP_AGENT_COMMAND="/app/guard-bin/" + config["command"],
                BUZZ_ACP_AGENT_ARGS="", BUZZ_NATIVE_COMMAND=config["command"],
                BUZZ_GUARD_SOCKET=str(socket_path), PYTHONDONTWRITEBYTECODE="1")
     return env
 
 
-def stop_group(process):
-    for sig, delay in ((signal.SIGTERM, 3), (signal.SIGKILL, 1)):
-        try:
-            os.killpg(process.pid, sig)
-        except ProcessLookupError:
-            pass
-        if delay:
-            time.sleep(delay)
+def stop_group(process, grace=60, drain=None):
+    """Allow native shutdown to finish while draining its bounded output pipes."""
     try:
-        process.wait(timeout=5)
-    except subprocess.TimeoutExpired:
+        os.killpg(process.pid, signal.SIGTERM)
+    except ProcessLookupError:
         pass
+    deadline = time.monotonic() + grace
+    while process.poll() is None and time.monotonic() < deadline:
+        if drain:
+            drain()
+        else:
+            time.sleep(min(0.05, max(0, deadline - time.monotonic())))
+    # Reap remaining descendants even when the group leader has already exited.
+    try:
+        os.killpg(process.pid, signal.SIGKILL)
+    except ProcessLookupError:
+        pass
+    process.wait(timeout=5)
 
 
 def state_on_start(previous):
@@ -73,9 +93,12 @@ def main():
         signal.signal(sig, lambda *_: stopping.set())
     previous = read_json(state_dir / "runtime.json")
     status, reason = state_on_start(previous)
+    startup_consumed = bool((previous or {}).get("startup_consumed", False))
+    latest_diagnostic = (previous or {}).get("diagnostic", "")
     def save(status, reason=""):
         atomic_json(state_dir / "runtime.json", {"status": status, "reason": reason,
-                    "pubkey": config["pubkey"], "updated_at": time.time()})
+                    "pubkey": config["pubkey"], "updated_at": time.time(),
+                    "startup_consumed": startup_consumed, "diagnostic": latest_diagnostic})
     if status == "ready" and not (state_dir / ("auth-" + config["provider"] + ".json")).is_file():
         status, reason = "needs_login", "first_subscription_login_required"
     save(status, reason)
@@ -93,7 +116,7 @@ def main():
             raise ToolError("supervisor_directory_permissions")
     socket_path = Path("/tmp/buzz-guard.sock")
     socket_path.unlink(missing_ok=True)
-    policy = Policy(state_dir, state_dir / "slots", config["policy"], concurrency=1)
+    policy = Policy(state_dir, state_dir / "slots", config["policy"], concurrency=runtime_parallelism(config))
     broker = Broker(socket_path, policy)
     os.chown(socket_path, 0, UID)
     os.chmod(socket_path, 0o660)
@@ -101,26 +124,46 @@ def main():
     thread.start()
     process = None
     selector = selectors.DefaultSelector()
+    diagnostic_streams = {}
+    def drain():
+        nonlocal latest_diagnostic
+        for event, _ in selector.select(0.05):
+            chunk = os.read(event.fd, 65536)
+            if not chunk:
+                selector.unregister(event.fileobj)
+                continue
+            for code in diagnostic_streams[event.fd].feed(chunk):
+                latest_diagnostic = code
+                logging.warning("native_diagnostic:%s", code)
     try:
+        launch_env = runtime_env(config, socket_path, startup_consumed)
+        startup_consumed = True
+        latest_diagnostic = ""  # A new launch owns a new diagnostic generation.
         save("running")  # Never resurrect if the supervisor dies before it can record a safe stop.
         process = subprocess.Popen(["buzz-acp", "--agent-args", ""], cwd="/workspace",
-                    env=runtime_env(config, socket_path), stdin=subprocess.DEVNULL,
+                    env=launch_env, stdin=subprocess.DEVNULL,
                     stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True,
                     user=UID, group=UID, extra_groups=[], umask=0o077, close_fds=True)
         for stream in (process.stdout, process.stderr):
             os.set_blocking(stream.fileno(), False)
             selector.register(stream, selectors.EVENT_READ)
+            diagnostic_streams[stream.fileno()] = RuntimeDiagnostics()
         logging.info("native_started:%s:%s", config["pubkey"], config["provider"])
         while process.poll() is None and not stopping.is_set() and not policy.check():
-            for event, _ in selector.select(0.2):
-                chunk = os.read(event.fd, 65536)
-                if not chunk:
-                    selector.unregister(event.fileobj)
-                # No raw provider output, prompts, credentials or environment in hPanel logs.
+            drain()
+        # Collect final initialization/error bytes after fast native exit.
+        for _ in range(5):
+            if not selector.get_map():
+                break
+            drain()
         if stopping.is_set():
             # Normal Docker/host stop: native conversations may restart on host boot,
             # but incomplete model actions are not reissued by this package.
-            save("ready", "external_graceful_stop")
+            stop_group(process, drain=drain)
+            if process.returncode == 0:
+                save("ready", "external_graceful_stop")
+            else:
+                save("held", "external_stop_incomplete")
         elif policy.tripped:
             save("held", policy.tripped)
         elif process.returncode == 0:
@@ -132,7 +175,7 @@ def main():
         logging.error("native_supervisor_fault")
     finally:
         if process is not None:
-            stop_group(process)
+            stop_group(process, drain=drain)
         policy.close()
         broker.shutdown()
         broker.server_close()

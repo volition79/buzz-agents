@@ -1,0 +1,19 @@
+{
+  "incident": "PROVIDER-ERROR-01",
+  "date": "2026-10-10",
+  "source_commit": "dc8f51ee75752f57ec407593c3e7edb51a35ad3a",
+  "source_dirty": true,
+  "official_reference_commit": "326e2301cb4b1edcb8a72d01ac4b19a83545365f",
+  "installed_buzz_display_version": "0.5.27",
+  "exact_version_source_verified": false,
+  "observed_error": "provider failed (exit code 1, empty stderr)",
+  "observed_safe_metadata": {
+    "agent_command": "claude-agent-acp",
+    "agent_args": [],
+    "parallelism": 10,
+    "backend_id": "hostinger-https"
+  },
+  "replay": "synthetic official launch shape with replaced keys; not original transmitted request",
+  "baseline_reproduced": "set_bot_parallelism_to_one",
+  "live_success_confirmed": false
+}

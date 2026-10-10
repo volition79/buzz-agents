@@ -1,0 +1,105 @@
+{
+  "task": "CONTRACT-FIX-02",
+  "date": "2026-10-10",
+  "status": "local-candidate-not-deployed",
+  "upstream_desktop": "326e2301cb4b1edcb8a72d01ac4b19a83545365f",
+  "upstream_runtime": "4db7bb0e7f904b2f0ea232aacae6cd7f6b8a3b39",
+  "python": {
+    "full_suite": {
+      "passed": 172,
+      "log": "/tmp/buzz-contract-final-python.log"
+    },
+    "after_final_diagnostic_change": {
+      "process_passed": 9,
+      "contract_passed": 13
+    }
+  },
+  "go": {
+    "modules": [
+      "web-provider",
+      "connect",
+      "provider"
+    ],
+    "race": "passed",
+    "vet": "passed"
+  },
+  "windows": {
+    "connect_native_tests": "passed",
+    "provider_info_and_stderr_smoke": "passed"
+  },
+  "independent_review": {
+    "agents": 1,
+    "latest_diagnostic_followup": "no additional blocker found"
+  },
+  "not_run": [
+    "Docker image build: docker unavailable in local environment",
+    "live Hostinger deployment",
+    "real VPS Claude/Codex login and task",
+    "new task after Windows power-off"
+  ],
+  "release": {
+    "published": false,
+    "installed": false,
+    "canonical_compose_changed": false,
+    "local_directory": "dist/contract-fix-20261010"
+  },
+  "followup_fix03": {
+    "status": "local-fixed-not-deployed",
+    "before_fix": {
+      "official_group_kill": "AI descendant survived SIGKILL",
+      "restart_diagnostic": "held/stopped/needs_login lost diagnosis"
+    },
+    "after_fix": {
+      "process_tests": 10,
+      "diagnostic_restart_tests": 2,
+      "contract_tests": 13,
+      "host_native_tests": 25,
+      "policy_guard_tests": 20,
+      "total": 70
+    },
+    "linux_capability": "pidfd/proc passed on WSL; Docker image probe not run",
+    "local_package": "dist/contract-fix-20261010",
+    "live_deployed": false
+  },
+  "followup_fix04": {
+    "status": "local-fixed-not-deployed",
+    "coverage": {
+      "process_both_adapter_names": 20,
+      "policy_guard": 21,
+      "login_capacity_both_providers": 2,
+      "portal": 26,
+      "release_manifest": 4,
+      "native_diagnostic_restart": 2,
+      "host_native": 25,
+      "contract_regressions": 13
+    },
+    "total": 113,
+    "boundaries": [
+      "fake ACP adapters, not real provider accounts",
+      "no Docker build or VPS deployment",
+      "Windows-off new task not verified"
+    ]
+  },
+  "followup_fix05": {
+    "status": "local-fixed-not-deployed",
+    "tests": {
+      "login_capacity": 3,
+      "release": 4,
+      "portal": 26
+    },
+    "total": 33,
+    "release_handoff": "CLI list, Bash array quoting, Korean and spaced filenames, sha256sum readback passed",
+    "live_deployed": false
+  },
+  "login_expiry_01": {
+    "status": "local-fixed-not-deployed",
+    "browser": "real Chrome and local HTTP; ko/en; Codex/Claude auth mocked",
+    "checked": [
+      "poll/input/cancel expiry",
+      "transient session retention",
+      "old response preserves newer session",
+      "retry without reload"
+    ],
+    "docker_available": false
+  }
+}

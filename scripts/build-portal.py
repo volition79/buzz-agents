@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def main():
-    output = ROOT / 'dist/portal-v0.4'
+    output = Path(os.environ.get('BUZZ_BUILD_OUTPUT', str(ROOT / 'dist/portal-v0.4')))
     output.mkdir(parents=True, exist_ok=True)
     assets = ROOT / 'connect/assets'
     assets.mkdir(parents=True, exist_ok=True)

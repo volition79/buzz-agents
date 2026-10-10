@@ -175,7 +175,9 @@ Buzz의 기본 봇 생성/편집 UI에서 이름·역할·모델을 설정합니
 | `window_seconds` | 3600 | 호출 수를 셀 시간 구간 |
 | `daily_limit` | 100 | 최근 24시간의 AI 턴 시작 상한 |
 
-봇 하나의 `parallelism`은 1로 설정합니다. 여러 봇이 서로 실행하는 것은 허용되며 전체 직렬 잠금은 없습니다.
+Buzz의 봇별 동시 실행 설정(1~32, 기본값 10)을 VPS에서도 그대로 사용합니다. 사용자가 VPS의 CPU·메모리와 봇 수에 맞게 직접 조절하세요. 10은 동시 실행 상한이며 항상 10개 작업을 실행한다는 뜻은 아닙니다. 봇의 CPU·메모리 제한은 전체 작업이 공유하며, 작업 시작 횟수 제한도 봇 단위로 합산합니다.
+
+VPS agents honor Buzz per-agent concurrency (1–32, default 10). Adjust the count yourself for available CPU, memory, and the number of bots. This is a maximum, not ten continuously running tasks. All workers share the bot container’s CPU/memory limits and aggregate start quotas.
 `owner-only` 또는 명시적 `allowlist`를 사용합니다. 공개 `anyone` 모드는 이 패키지에서 거부합니다.
 
 **주의:** 공식 Buzz의 같은 소유자 봇 취급은 런타임 버전에 따릅니다. `owner-only`를 사람만 허용하는 것으로
@@ -278,3 +280,24 @@ python3 -m buzz_agents.host retire <봇의_64자리_HEX_공개키> --confirm-sto
 완전한 자료 삭제는 백업 및 계정 연결 회수를 확인한 뒤 운영자가 별도로 결정합니다.
 
 동일 봇의 실행기를 Codex에서 Claude로 바꿀 경우에도 두 공급자의 인증 홈은 별도로 유지합니다.
+
+
+## Local contract correction candidate — 2026-10-10
+
+The candidate must include a newly built **runtime**, broker, portal and Windows connection tool. Existing canonical Compose still references the previously published images; it is intentionally unchanged until publication/testing is authorized. The publication workflow now builds all three images from one source revision.
+
+Run the updated connection tool once to upgrade a recognized old HTTPS provider. Existing connection credentials are preserved. Unknown local provider binaries are not overwritten. For existing bots, stop them in Buzz before redeploying to the new runtime. A running old-image bot reports `stop_native_bot_before_image_upgrade` rather than being silently replaced.
+
+Local regression coverage includes real validator errors, replay-floor identity and one-start consumption, fresh nonce, active cancellation, adapter EOF/crash isolation, safe diagnostic categories, graceful and forced process shutdown, host capacity budgeting and connection binary replacement. A prompt error no longer trips every worker. Quota/storage/deadline violations still hold the whole bot as a safety policy. Unknown adapter failures remain generic; classifier output is evidence of a message category, not a definitive cause.
+
+Supported boundary: Codex ACP / Claude Agent ACP, owner-attested private Relay, empty custom argv. Model dropdown discovery belongs to Windows Buzz's local runtime, not this HTTPS provider. Model list recovery by waiting/reopening is a troubleshooting hint, not a proven root-cause fix. Live policy changes require stop/redeploy. VPS account login remains separate from local Windows login.
+
+동시 실행 기본값은 10(1~32 선택)입니다. 사용자가 VPS 성능에 맞게 조절해야 하며 자동 성능 튜닝을 의미하지 않습니다. CPU/RAM은 실제 Docker host 용량으로 검증합니다. 기존 기본 5120MiB/8봇 제한은 host-v1 정책으로 이행하며, 사용자 지정 제한은 보존합니다. 같은 값을 수동으로 고정하려면 resource_policy=fixed를 사용합니다.
+
+배포 후 필수 실제 검증: Claude·Codex 각각 로그인 → Buzz 메시지와 도구 실행 → 실패 분류 로그 확인 → 정상 중지/재배포 → Windows 완전 종료 후 VPS에서 **새 작업** 시작·완료 확인. 이 검증 전에는 24시간 무인 운용 완료로 소개하지 않습니다.
+
+완료된 로그인은 동시 로그인 8개 한도에서 제외됩니다. 최근 완료 출력은 제한적으로 보관하며 오래된 화면의 세션이 사라지면 새 로그인을 시작합니다. 강제 종료된 AI 작업의 슬롯은 해당 프로세스 그룹이 모두 종료된 뒤 회수하고, 사용량 기록은 유지합니다.
+
+Release pipeline: build-portal.py creates the artifact manifest; render-portal-release.py adds the final digest-pinned Compose and SHA256SUMS. Immediately before publication, run its --verify mode. Existing artifact hash mismatches fail the release.
+
+로그인 만료 정리가 실패하면 `login_cleanup_pending`만 기록하고 다른 봇의 로그인은 계속 허용합니다. 실패한 실행의 종료를 확인하기 전에는 해당 봇의 중복 로그인을 막고 실행 한도도 유지합니다. 이후 요청에서 30초 간격으로 정리를 재시도합니다. 배포 파일 목록은 `render-portal-release.py --list-assets --output ...`의 검증 결과를 사용합니다.

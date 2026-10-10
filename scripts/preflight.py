@@ -2,6 +2,7 @@
 import hashlib
 import json
 import os
+import signal
 from pathlib import Path
 import subprocess
 import sys
@@ -17,6 +18,14 @@ def run(argv):
 
 
 def main():
+    # Guard cleanup pins process identities using Linux pidfds. Fail the image
+    # capability probe rather than discovering missing support during a task.
+    fd = os.pidfd_open(os.getpid())
+    try:
+        signal.pidfd_send_signal(fd, 0)
+        Path("/proc/self/stat").read_text()
+    finally:
+        os.close(fd)
     native = run(["buzz-acp", "--help"])
     for flag in ("--agent-command", "--agent-args", "--respond-to", "--max-turn-duration", "--session-policy"):
         if flag not in native:

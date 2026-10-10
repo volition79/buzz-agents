@@ -1,12 +1,14 @@
 """Transparent ACP JSON-lines proxy; protects prompt starts, never chooses coworkers."""
 import json
 import os
+from pathlib import Path
 import selectors
+import signal
 import socket
 import subprocess
 import sys
 import time
-from .common import clean_env
+from .diagnostics import RuntimeDiagnostics
 
 MAX_LINE = 4 * 1024 * 1024
 
@@ -37,7 +39,6 @@ class Proxy:
     def from_host(self, message):
         if message.get("method") == "session/prompt" and "id" in message:
             if len(self.waiting) >= 4:
-                self.call({"op": "trip"})
                 self.fail(message)
                 self.stopped = True
             else:
@@ -76,19 +77,62 @@ class Proxy:
             if ticket:
                 self.call({"op": "release", "ticket": ticket})
                 if "error" in message:
-                    self.call({"op": "trip"})
-                    self.stopped = True
+                    print("buzz-agents-diagnostic:runtime_prompt_failed", file=sys.stderr, flush=True)
         self.to_host(message)
+
+
+def stop_adapter(child, timeout=3):
+    """Kill only peers in this guard's upstream-owned Linux process group.
+
+    Keeping the adapter in this group is essential: Buzz kills this group with
+    SIGKILL, which cannot run our finally block. For an ordinary adapter failure
+    the guard stays alive to verify cleanup and release its own prompt tickets.
+    """
+    group = os.getpgrp()
+    if group != os.getpid():
+        raise RuntimeError("guard_process_group_not_owned")
+    deadline = time.monotonic() + timeout
+    while True:
+        live = False
+        child.poll()  # Reap the direct child; orphan zombies need no more signal.
+        for entry in Path("/proc").iterdir():
+            if not entry.name.isdigit() or int(entry.name) == os.getpid():
+                continue
+            try:
+                fields = (entry / "stat").read_text().rsplit(")", 1)[1].split()
+                if int(fields[2]) != group or fields[0] == "Z":
+                    continue
+                live = True
+                pid = int(entry.name)
+                # Pin the process identity before signaling, avoiding PID reuse.
+                fd = os.pidfd_open(pid)
+                try:
+                    if os.getpgid(pid) == group:
+                        signal.pidfd_send_signal(fd, signal.SIGKILL)
+                finally:
+                    os.close(fd)
+            except (FileNotFoundError, ProcessLookupError):
+                continue
+        if not live:
+            child.wait(timeout=1)
+            return
+        if time.monotonic() >= deadline:
+            raise RuntimeError("adapter_cleanup_incomplete")
+        time.sleep(0.01)
 
 
 def main():
     command = os.environ.get("BUZZ_NATIVE_COMMAND")
     if command not in ("codex-acp", "claude-agent-acp"):
         return 2
+    # Upstream already makes the guard a group leader. Standalone invocation
+    # must not share the caller's group either. Never move the adapter out.
+    if os.getpgrp() != os.getpid():
+        os.setpgid(0, 0)
     # These are the bot's own credentials and native settings, never host SSH keys.
     env = {k: v for k, v in os.environ.items() if not k.startswith("BUZZ_GUARD_") and k != "BUZZ_NATIVE_COMMAND"}
     child = subprocess.Popen([command], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                             stderr=subprocess.DEVNULL, env=env, close_fds=True, bufsize=0)
+                             stderr=subprocess.PIPE, env=env, close_fds=True, bufsize=0)
     selector = selectors.DefaultSelector()
     buffers = {"host": bytearray(), "agent": bytearray()}
     pending = {"to_agent": bytearray(), "to_host": bytearray()}
@@ -103,6 +147,13 @@ def main():
             raise ValueError("output_limit")
         pending[label].extend(raw)
     proxy = Proxy(lambda m: enqueue("to_agent", m), lambda m: enqueue("to_host", m))
+    selector.register(child.stderr, selectors.EVENT_READ, "diagnostic")
+    os.set_blocking(child.stderr.fileno(), False)
+    diagnostics = RuntimeDiagnostics()
+    def terminate(*_):
+        raise SystemExit(0)
+    for sig in (signal.SIGTERM, signal.SIGINT):
+        signal.signal(sig, terminate)
     stop_at = None
     try:
         while True:
@@ -119,15 +170,20 @@ def main():
                 return 3
             if child.poll() is not None:
                 # Even an exit0 is not a complete ACP conversation if it breaks mid-turn.
-                if proxy.active or proxy.waiting:
-                    broker({"op": "trip"})
+                print("buzz-agents-diagnostic:runtime_adapter_exited", file=sys.stderr, flush=True)
                 return 3
             for event, _ in selector.select(0.05):
                 chunk = os.read(event.fd, 65536)
+                if event.data == "diagnostic":
+                    if not chunk:
+                        selector.unregister(event.fileobj)
+                    for code in diagnostics.feed(chunk):
+                        print("buzz-agents-diagnostic:" + code, file=sys.stderr, flush=True)
+                    continue
                 if not chunk:
                     if event.data == "host":
                         return 0
-                    broker({"op": "trip"})
+                    print("buzz-agents-diagnostic:runtime_adapter_exited", file=sys.stderr, flush=True)
                     return 3
                 buffer = buffers[event.data]
                 buffer.extend(chunk)
@@ -142,15 +198,37 @@ def main():
                     (proxy.from_host if event.data == "host" else proxy.from_agent)(message)
             proxy.tick()
     except (OSError, ValueError, KeyError):
-        try:
-            broker({"op": "trip"})
-        except Exception:
-            pass
+        print("buzz-agents-diagnostic:runtime_protocol_failed", file=sys.stderr, flush=True)
         return 3
     finally:
         selector.close()
-        child.kill()
-        child.wait(timeout=5)
+        cleaned = False
+        try:
+            stop_adapter(child)
+            cleaned = True
+        except (OSError, ValueError, RuntimeError, subprocess.TimeoutExpired):
+            print("buzz-agents-diagnostic:runtime_protocol_failed", file=sys.stderr, flush=True)
+            try:
+                broker({"op": "trip"})
+            except (OSError, ValueError):
+                pass
+        # A fast failing adapter may exit before the selector observes stderr.
+        # Nonblocking and byte bounded even if an escaped child holds the pipe.
+        for _ in range(4):
+            try:
+                chunk = os.read(child.stderr.fileno(), 65536)
+            except (BlockingIOError, OSError):
+                break
+            if not chunk:
+                break
+            for code in diagnostics.feed(chunk):
+                print("buzz-agents-diagnostic:" + code, file=sys.stderr, flush=True)
+        # Release slots only after the failed adapter is dead. Starts stay charged.
+        for ticket in (proxy.active.values() if cleaned else ()):
+            try:
+                broker({"op": "release", "ticket": ticket})
+            except (OSError, ValueError):
+                pass
 
 
 if __name__ == "__main__":

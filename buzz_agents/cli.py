@@ -43,7 +43,7 @@ def authenticate_locked(provider):
     if result.returncode:
         raise ToolError("official_login_failed")
     atomic_json(Path("/native-state") / ("auth-" + provider + ".json"), {"official_login_returned_zero": True})
-    atomic_json(Path("/native-state/runtime.json"), {"status": "ready", "reason": "explicit_login", "pubkey": config["pubkey"]})
+    atomic_json(Path("/native-state/runtime.json"), {**state, "status": "ready", "reason": "explicit_login", "pubkey": config["pubkey"]})
     return {"ok": True, "note": "Native bot is rearmed after official login. Verify a real model reply."}
 
 

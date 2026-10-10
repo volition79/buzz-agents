@@ -11,7 +11,7 @@ class ConfigTests(unittest.TestCase):
         a, b = config(), config('claude-agent-acp', 'f'*64)
         self.assertEqual(a['provider'],'codex'); self.assertEqual(b['provider'],'claude')
         self.assertNotEqual(a['pubkey'],b['pubkey'])
-        self.assertNotEqual(a['workspace'],b['workspace'])
+        self.assertEqual(a['workspace'],'team');self.assertEqual(b['workspace'],'team')
         self.assertNotIn('stage',a); self.assertNotIn('order',a)
 
     def test_arbitrary_bot_name_role_and_model_survive(self):
@@ -74,7 +74,7 @@ class ConfigTests(unittest.TestCase):
         self.assertLess(int(c['env']['BUZZ_ACP_IDLE_TIMEOUT']),120)
 
     def test_unsafe_options_refused(self):
-        for options in ({'memory_mb':99999},{'cpus':float('nan')},{'workspace':'../../root'},
+        for options in ({'memory_mb':16777217},{'cpus':float('nan')},{'workspace':'../../root'},
                         {'turn_limit':0},{'max_turn_seconds':True},{'daily_limit':0}):
             with self.subTest(options=options), self.assertRaises(ToolError): config(options=options)
 
@@ -99,9 +99,44 @@ class ConfigTests(unittest.TestCase):
         c=normalize(a,{},OWNER,RELAY,derive=lambda _:PUBKEY)
         self.assertEqual(c['env']['BUZZ_ACP_RESPOND_TO_ALLOWLIST'],'e'*64)
 
-    def test_multiple_per_bot_turns_refused_but_multiple_bots_allowed(self):
-        a=agent(); a['parallelism']=2
-        with self.assertRaises(ToolError): normalize(a,{},OWNER,RELAY,derive=lambda _:PUBKEY)
+    def test_desktop_default_workers_are_preserved(self):
+        # Synthetic official launch shape; observed local record uses default10.
+        # Source/provenance and limits are recorded in fixtures/provider-error.json.
+        for command, model_key in [('codex-acp', 'BUZZ_ACP_MODEL'), ('claude-agent-acp', 'ANTHROPIC_MODEL')]:
+            a=agent(command); a['parallelism']=10
+            a['launch']['policy_env']={
+                'BUZZ_ACP_AGENTS':'10', 'BUZZ_ACP_RELAY_OBSERVER':'true',
+                'BUZZ_ACP_LAZY_POOL':'true', 'BUZZ_ACP_SESSION_POLICY':'channel',
+                model_key:'selected-model'}
+            c=normalize(a,{},OWNER,RELAY,derive=lambda _:PUBKEY)
+            self.assertEqual(c['env']['BUZZ_ACP_AGENTS'],'10')
+            self.assertEqual(c['env'][model_key],'selected-model')
+            self.assertEqual(a['parallelism'],10)  # Input remains unchanged.
+            self.assertEqual(c['memory_mb'],1536)
+            self.assertEqual(c['command'],command)
+
+    def test_user_counts_and_missing_count_default(self):
+        for count in (1,2,10,32):
+            a=agent();a['parallelism']=count
+            a['launch']['policy_env']['BUZZ_ACP_AGENTS']=str(count)
+            c=normalize(a,{},OWNER,RELAY,derive=lambda _:PUBKEY)
+            self.assertEqual(c['env']['BUZZ_ACP_AGENTS'],str(count))
+            a['launch']['policy_env'].pop('BUZZ_ACP_AGENTS')
+            c=normalize(a,{},OWNER,RELAY,derive=lambda _:PUBKEY)
+            self.assertEqual(c['env']['BUZZ_ACP_AGENTS'],str(count))
+        a.pop('parallelism')
+        c=normalize(a,{},OWNER,RELAY,derive=lambda _:PUBKEY)
+        self.assertEqual(c['env']['BUZZ_ACP_AGENTS'],'10')
+
+    def test_invalid_parallelism_is_not_silently_capped(self):
+        for count in (0, -1, 33, True, '10', 1.5):
+            a=agent();a['parallelism']=count
+            with self.subTest(count=count), self.assertRaisesRegex(ToolError,'invalid_parallelism'):
+                normalize(a,{},OWNER,RELAY,derive=lambda _:PUBKEY)
+        for count in ('0','33','1.5','-1','secret'):
+            a=agent();a['launch']['policy_env']['BUZZ_ACP_AGENTS']=count
+            with self.subTest(count=count), self.assertRaisesRegex(ToolError,'invalid_parallelism'):
+                normalize(a,{},OWNER,RELAY,derive=lambda _:PUBKEY)
 
     def test_nsec_checksum_not_just_prefix(self):
         self.assertEqual(decode_nsec('0'*63+'1'),'0'*63+'1')

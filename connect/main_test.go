@@ -222,7 +222,7 @@ func TestHealthyConnectionCheckDoesNotConsumePairing(t *testing.T) {
 	}
 }
 
-func TestReviewedCompatibleProviderIsKept(t *testing.T) {
+func TestReviewedCompatibleProviderIsUpgraded(t *testing.T) {
 	home := t.TempDir()
 	bin := filepath.Join(home, ".local", "bin")
 	os.MkdirAll(bin, 0700)
@@ -240,10 +240,70 @@ func TestReviewedCompatibleProviderIsKept(t *testing.T) {
 		t.Fatal(err)
 	}
 	after, _ := os.ReadFile(target)
-	if string(after) != string(old) {
-		t.Fatal("reviewed provider overwritten")
+	if string(after) != string(provider) {
+		t.Fatal("reviewed provider not upgraded")
 	}
 	if compatibleProvider(append(old, byte('!'))) {
 		t.Fatal("modified provider accepted")
+	}
+}
+
+func TestProviderUpgradeFailurePreservesExecutableAndCredentials(t *testing.T) {
+	home := t.TempDir()
+	bin := filepath.Join(home, ".local", "bin")
+	os.MkdirAll(bin, 0700)
+	dir := filepath.Join(home, ".buzz-agents-web")
+	os.MkdirAll(dir, 0700)
+	old := []byte("reviewed-previous-build")
+	hash := fmt.Sprintf("%x", sha256.Sum256(old))
+	compatibleProviders[hash] = true
+	defer delete(compatibleProviders, hash)
+	target := filepath.Join(bin, "buzz-backend-hostinger-https.exe")
+	os.WriteFile(target, old, 0755)
+	config := filepath.Join(dir, "connection.json")
+	credential := []byte(`{"credential":"do-not-change"}`)
+	os.WriteFile(config, credential, 0600)
+	if err := installProvider(home, func(string, string, bool) error { return os.ErrPermission }); err == nil {
+		t.Fatal("locked target accepted")
+	}
+	got, _ := os.ReadFile(target)
+	if string(got) != string(old) {
+		t.Fatal("original executable lost")
+	}
+	got, _ = os.ReadFile(config)
+	if string(got) != string(credential) {
+		t.Fatal("credentials changed")
+	}
+	files, _ := filepath.Glob(filepath.Join(bin, ".buzz-provider-*.tmp"))
+	if len(files) != 0 {
+		t.Fatal("staging retained")
+	}
+	if err := upgradeConnectedProvider(home); err != nil {
+		t.Fatal(err)
+	}
+	got, _ = os.ReadFile(target)
+	if string(got) != string(provider) {
+		t.Fatal("healthy connection did not upgrade")
+	}
+	got, _ = os.ReadFile(config)
+	if string(got) != string(credential) {
+		t.Fatal("healthy upgrade changed credentials")
+	}
+	if err := installProvider(home, func(string, string, bool) error { t.Fatal("identical executable replaced"); return nil }); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestNonRegularProviderTargetPreserved(t *testing.T) {
+	home := t.TempDir()
+	target := filepath.Join(home, ".local", "bin", "buzz-backend-hostinger-https.exe")
+	if err := os.MkdirAll(target, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := installProvider(home, commitFile); err == nil {
+		t.Fatal("directory accepted as executable")
+	}
+	if info, err := os.Stat(target); err != nil || !info.IsDir() {
+		t.Fatal("existing directory changed")
 	}
 }

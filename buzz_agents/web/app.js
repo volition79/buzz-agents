@@ -51,6 +51,16 @@ async function api(path, body={}) {
   });
   if(result.blob)return result.blob;
   const {response,data}=result;
+  if (data.error==='login_session_expired' && ['auth/poll','auth/input','auth/cancel'].includes(path)) {
+    if(authSession===body.session) {
+      authSession=null;
+      $('authForm').hidden=true;$('cancelAuth').hidden=true;
+      $('authInput').value='';$('terminal').textContent='';$('authLinks').replaceChildren();
+      $('authStatus').textContent=errors.login_session_expired;
+    }
+    // Cancellation of an already absent session is complete, including logout.
+    if(path==='auth/cancel')return {ok:true,expired:true};
+  }
   if (response.status===401 && data.error==='settings_login_required') {authSession=null;$('workspace').hidden=true;$('logout').hidden=true;$('loginPanel').hidden=false;await boot();}
   if (!response.ok || !data.ok) throw new Error(errors[data.error] || t('처리하지 못했습니다: ')+(data.error || response.status));
   return data;
@@ -135,7 +145,7 @@ action('discover',discover);action('refresh',refresh);
 action('retryStartup',enter);
 action('download',async()=>{const ids=new Set(knownDevices),blob=await api('pair/bundle');pendingPairing={ids,deadline:Date.now()+600000};const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='Buzz-Windows-Connect.zip';a.click();setTimeout(()=>URL.revokeObjectURL(url),10000);message(t('압축을 풀고 Buzz-VPS-Connect.exe를 실행해 주세요. 연결 파일은 10분 후 만료됩니다.'));});
 action('authForm',async()=>{if(!authSession)return;const input=$('authInput').value;$('authInput').value='';await api('auth/input',{session:authSession,text:input});},'submit');
-action('cancelAuth',async()=>{if(authSession)await api('auth/cancel',{session:authSession});authSession=null;$('authForm').hidden=true;$('cancelAuth').hidden=true;$('terminal').textContent='';$('authLinks').replaceChildren();$('authStatus').textContent=t('로그인 세션을 중지했습니다.');await refresh();});
+action('cancelAuth',async()=>{const result=authSession?await api('auth/cancel',{session:authSession}):null;authSession=null;$('authForm').hidden=true;$('cancelAuth').hidden=true;$('authInput').value='';$('terminal').textContent='';$('authLinks').replaceChildren();$('authStatus').textContent=result?.expired?errors.login_session_expired:t('로그인 세션을 중지했습니다.');await refresh();});
 action('scheduleInit',async()=>{const result=await api('schedule/init');$('schedulerKey').textContent=result.pubkey;});
 action('scheduleForm',async()=>{await api('schedule/save',{schedule:{channel_id:$('channel').value.trim(),bot_pubkey:$('scheduleBot').value,prompt:$('prompt').value,time:$('scheduleTime').value,membership_confirmed:$('membership').checked}});message(t('매일 예약을 저장했습니다. 메시지 전달과 AI 작업 완료를 실제로 확인하세요.'));},'submit');
 action('scheduleDisable',async()=>{await api('schedule/disable');message(t('예약을 중지했습니다. 이미 실행 중인 AI 작업은 취소되지 않습니다.'));});
@@ -179,3 +189,34 @@ action('copyCommunityRelay', async()=>{
     $('relayCopyStatus').textContent=t('자동 복사를 사용할 수 없습니다. 선택된 주소를 Ctrl+C로 복사하세요.');
   }
 });
+
+// Guide navigation is explanatory only: visiting a tab never marks setup done.
+const guideTabs=[...document.querySelectorAll('#buzzGuide [role="tab"]')];
+let guideIndex=0;
+function showGuideStep(index, focus=false, scroll=false) {
+  guideIndex=Math.max(0,Math.min(guideTabs.length-1,index));
+  guideTabs.forEach((tab,i)=>{
+    const active=i===guideIndex;
+    tab.setAttribute('aria-selected',String(active));tab.tabIndex=active?0:-1;
+    $(tab.getAttribute('aria-controls')).hidden=!active;
+  });
+  $('guidePrev').disabled=guideIndex===0;
+  $('guideNext').disabled=guideIndex===guideTabs.length-1;
+  $('guideProgress').textContent=(guideIndex+1)+' / '+guideTabs.length;
+  if(focus)guideTabs[guideIndex].focus({preventScroll:true});
+  if(scroll)document.querySelector('.guide-tabs').scrollIntoView({block:'start'});
+}
+guideTabs.forEach((tab,index)=>{
+  tab.addEventListener('click',()=>showGuideStep(index));
+  tab.addEventListener('keydown',event=>{
+    let next;
+    if(event.key==='ArrowRight')next=(index+1)%guideTabs.length;
+    else if(event.key==='ArrowLeft')next=(index+guideTabs.length-1)%guideTabs.length;
+    else if(event.key==='Home')next=0;
+    else if(event.key==='End')next=guideTabs.length-1;
+    else return;
+    event.preventDefault();showGuideStep(next,true);
+  });
+});
+$('guidePrev').addEventListener('click',()=>showGuideStep(guideIndex-1,true,true));
+$('guideNext').addEventListener('click',()=>showGuideStep(guideIndex+1,true,true));

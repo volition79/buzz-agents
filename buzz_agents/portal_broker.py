@@ -9,6 +9,7 @@ from pathlib import Path
 import pty
 import re
 import secrets
+import select
 import socketserver
 import subprocess
 import termios
@@ -73,8 +74,15 @@ class LoginSessions:
             self.expire()
             if any(v['pubkey'] == pubkey and v['process'].poll() is None for v in self.items.values()):
                 raise ToolError('authentication_already_in_progress')
-            if len(self.items) >= 8:
+            if sum(v['process'].poll() is None for v in self.items.values()) >= 8:
                 raise ToolError('too_many_login_sessions')
+            # Keep recent completed output for polling, but not indefinitely.
+            completed = sorted((v['created'], sid) for sid, v in self.items.items()
+                               if v['process'].poll() is not None)
+            for _, sid in completed[:-7]:
+                self.items[sid]['reader_stop'].set()
+                os.close(self.items[sid]['fd'])
+                del self.items[sid]
             master, slave = pty.openpty()
             attributes = termios.tcgetattr(slave)
             attributes[3] &= ~termios.ECHO
@@ -91,15 +99,18 @@ class LoginSessions:
                 os.close(slave)
             sid = secrets.token_urlsafe(32)
             self.items[sid] = {'pubkey': pubkey, 'fd': master, 'process': process, 'job': job,
-                               'created': self.clock(), 'output': bytearray(), 'truncated': False}
-            threading.Thread(target=self._read, args=(sid,), daemon=True).start()
+                               'created': self.clock(), 'output': bytearray(), 'truncated': False,
+                               'reader_stop': threading.Event()}
+            reader_fd = os.dup(master)
+            threading.Thread(target=self._read, args=(self.items[sid], reader_fd), daemon=True).start()
             return {'ok': True, 'session': sid, 'expires_in': 600}
 
-    def _read(self, sid):
-        item = self.items[sid]
+    def _read(self, item, reader_fd):
         try:
-            while True:
-                data = os.read(item['fd'], 4096)
+            while not item['reader_stop'].is_set():
+                if not select.select([reader_fd], [], [], .2)[0]:
+                    continue
+                data = os.read(reader_fd, 4096)
                 if not data:
                     break
                 with self.lock:
@@ -109,18 +120,32 @@ class LoginSessions:
                         item['truncated'] = True
         except OSError:
             pass
+        finally:
+            os.close(reader_fd)
 
     def expire(self):
         for sid, item in list(self.items.items()):
             if self.clock() - item['created'] > 660:
-                self.cancel(sid)
+                if self.clock() < item.get('cleanup_retry_at', 0):
+                    continue
+                try:
+                    self.cancel(sid)
+                except (ToolError, OSError, subprocess.SubprocessError):
+                    # Retain the running job and its capacity reservation. A failed
+                    # Docker cleanup must not block unrelated login operations or
+                    # permit overlapping authentication for this same bot.
+                    item['cleanup_retry_at'] = self.clock() + 30
+                    print('login_cleanup_pending', flush=True)
+                    continue
+                item['reader_stop'].set()
                 os.close(item['fd'])
                 del self.items[sid]
 
     def get(self, sid):
         with self.lock:
             self.expire()
-            if not isinstance(sid, str) or sid not in self.items:
+            if (not isinstance(sid, str) or sid not in self.items
+                    or self.clock() - self.items[sid]['created'] > 660):
                 raise ToolError('login_session_expired')
             return self.items[sid]
 
@@ -186,6 +211,13 @@ class Broker:
         data = read_json(self.control / 'settings.json', {})
         if not data:
             raise ToolError('configure_relay_first')
+        legacy_default = (not data.get('resource_policy') and
+                          data.get('memory_budget_mb') == 5120 and data.get('max_bots') == 8)
+        if data.get('image') != self.image or legacy_default:
+            # New broker's administrator-selected image is verified through the
+            # same configure boundary. Existing running bots remain untouched.
+            self.dispatch({'op': 'configure', 'owner': data['owner'], 'relay': data['relay']})
+            data = read_json(self.control / 'settings.json')
         return data
 
     def dispatch(self, request):
@@ -245,10 +277,22 @@ class Broker:
                 labels = image.get('Config', {}).get('Labels') or {}
                 if labels.get('org.opencontainers.image.title') != 'buzz-agents':
                     raise ToolError('runtime_image_identity_mismatch')
-                settings = {'state_dir': str(self.root), 'owner': owner, 'relay': relay,
-                            'image': self.image, 'image_id': image['Id'], 'memory_budget_mb': 5120, 'max_bots': 8}
-                if old and old['image_id'] != settings['image_id']:
-                    raise ToolError('image_upgrade_requires_review')
+                if not re.fullmatch(r'sha256:[0-9a-f]{64}', image.get('Id', '')):
+                    raise ToolError('runtime_image_identity_mismatch')
+                settings = {**old, 'state_dir': str(self.root), 'owner': owner, 'relay': relay,
+                            'image': self.image, 'image_id': image['Id']}
+                # The pre-policy generator always wrote exactly this pair. An
+                # explicit fixed marker, or any customized value, is preserved.
+                legacy_default = (not old.get('resource_policy') and
+                                  old.get('memory_budget_mb') == 5120 and old.get('max_bots') == 8)
+                if not old or legacy_default:
+                    settings.pop('memory_budget_mb', None)
+                    settings.pop('max_bots', None)
+                    settings['resource_policy'] = 'host-v1'
+                elif 'resource_policy' not in settings:
+                    settings['resource_policy'] = 'fixed'
+                # Updating the selected verified image does not replace any bot.
+                # Deployer still refuses upgrading a live native instance.
                 atomic_json(self.control / 'settings.json', settings)
                 return {'ok': True}
             if op == 'status':

@@ -10,13 +10,14 @@ import sys
 import time
 from .common import ToolError
 from .config import HEX, normalize
+from .diagnostics import validation_error
 from .policy import atomic_json, read_json
 
 SETTINGS = Path("/opt/buzz-agents/host/settings.json")
 MANAGED = "buzz-agents-native-v2"
 
 
-def execute(argv, data=None, timeout=90):
+def execute(argv, data=None, timeout=90, validation_response=False):
     try:
         result = subprocess.run(argv, input=None if data is None else json.dumps(data).encode(),
                                 capture_output=True, timeout=timeout, check=False,
@@ -24,10 +25,46 @@ def execute(argv, data=None, timeout=90):
     except (OSError, subprocess.TimeoutExpired):
         raise ToolError("host_command_failed_or_timed_out") from None
     if result.returncode:
-        raise ToolError("host_command_failed")
+        code = validation_error(result.stdout) if validation_response and len(result.stdout) <= 512 * 1024 else None
+        raise ToolError(code or "host_command_failed")
     if len(result.stdout) > 2 * 1024 * 1024:
         raise ToolError("host_response_too_large")
     return result.stdout
+
+
+def host_capacity(runner=execute):
+    """Docker daemon capacity, not the broker container's cgroup allowance."""
+    try:
+        value = json.loads(runner(["docker", "info", "--format", "{{json .}}"], timeout=20))
+        cpus, memory = value["NCPU"], value["MemTotal"]
+        if type(cpus) is not int or cpus < 1 or type(memory) is not int or memory < 1:
+            raise ValueError()
+    except (ValueError, KeyError, TypeError):
+        raise ToolError("host_capacity_unavailable") from None
+    memory_mb = memory // (1024 * 1024)
+    reserve_mb = max(2048, (memory_mb + 3) // 4)
+    return {"cpus": cpus, "memory_mb": memory_mb,
+            "reserve_mb": reserve_mb, "budget_mb": max(0, memory_mb - reserve_mb)}
+
+
+def check_resources(config, registry, settings, capacity):
+    max_bots = settings.get("max_bots")
+    if max_bots is not None:
+        if type(max_bots) is not int or max_bots < 1:
+            raise ToolError("invalid_host_settings")
+        if config["pubkey"] not in registry and len(registry) >= max_bots:
+            raise ToolError("registered_bot_limit")
+    if config["cpus"] > capacity["cpus"]:
+        raise ToolError("requested_cpu_exceeds_host")
+    budget = settings.get("memory_budget_mb", capacity["budget_mb"])
+    if type(budget) is not int or budget < 1:
+        raise ToolError("host_memory_reserve_exhausted" if budget == 0 else "invalid_host_settings")
+    # Explicit budgets are preserved, but never promise more than physical RAM
+    # minus the documented OS/Relay reserve after a host downgrade.
+    budget = min(budget, capacity["budget_mb"])
+    memory = config["memory_mb"] + sum(c["memory_mb"] for k, c in registry.items() if k != config["pubkey"])
+    if memory > budget:
+        raise ToolError("aggregate_memory_budget_exceeded")
 
 
 def inspect_container(name):
@@ -73,7 +110,7 @@ def service(config, settings):
         "command": ["python", "-m", "buzz_agents.native"], "user": "0:0",
         "init": True, "restart": "unless-stopped", "read_only": True,
         "cap_drop": ["ALL"], "cap_add": ["SETUID", "SETGID", "KILL", "CHOWN", "DAC_OVERRIDE"],
-        "security_opt": ["no-new-privileges:true"], "stop_grace_period": "45s",
+        "security_opt": ["no-new-privileges:true"], "stop_grace_period": "75s",
         "cpus": config["cpus"], "mem_limit": f"{config['memory_mb']}m",
         "memswap_limit": f"{config['memory_mb']}m", "pids_limit": 256,
         "tmpfs": ["/tmp:size=128m,mode=1777,nosuid,nodev"],
@@ -113,7 +150,7 @@ class Deployer:
                         "--cap-drop", "ALL", "--security-opt", "no-new-privileges:true", "-i",
                         "--entrypoint", "python", self.settings["image"], "-m", "buzz_agents.cli", "validate"],
                         {"agent": request["agent"], "provider_config": request.get("provider_config", {}),
-                         "owner": self.settings["owner"], "relay": self.settings["relay"]})
+                         "owner": self.settings["owner"], "relay": self.settings["relay"]}, validation_response=True)
         # This reply contains the agent's secret: it is NEVER sent to the desktop/logs.
         value = json.loads(raw)
         if value.get("ok") is False:
@@ -151,7 +188,7 @@ class Deployer:
                 state = read_json(self.root / "bots" / pubkey / "state" / "runtime.json", {})
                 if actual.get("State", {}).get("Running") and state.get("status") not in ("stopped", "held", "needs_login"):
                     raise ToolError("stop_native_bot_before_retiring")
-                self.run(["docker", "stop", "--time", "45", container_name(pubkey)], timeout=60)
+                self.run(["docker", "stop", "--time", "70", container_name(pubkey)], timeout=80)
                 self.run(["docker", "rm", container_name(pubkey)])
             del registry[pubkey]
             atomic_json(self.root / "registry.json", registry)
@@ -176,14 +213,10 @@ class Deployer:
                 if pubkey in registry and registry[pubkey]["fingerprint"] == config["fingerprint"]:
                     return {"ok": True, "agent_id": name, "action": "already_deployed"}
                 raise ToolError("stop_native_bot_before_changing_settings")
-        if pubkey not in registry and len(registry) >= self.settings.get("max_bots", 8):
-            raise ToolError("registered_bot_limit")
-        memory = config["memory_mb"] + sum(c["memory_mb"] for k, c in registry.items() if k != pubkey)
-        if memory > self.settings.get("memory_budget_mb", 5120):
-            raise ToolError("aggregate_memory_budget_exceeded")
+        check_resources(config, registry, self.settings, host_capacity(self.run))
         if actual:
             # Previous container must fully stop before state/config can be replaced.
-            self.run(["docker", "stop", "--time", "45", name], timeout=60)
+            self.run(["docker", "stop", "--time", "70", name], timeout=80)
         for path in (folder, folder / "config", folder / "state", folder / "state" / "slots"):
             private_directory(path)
         private_directory(folder / "home")

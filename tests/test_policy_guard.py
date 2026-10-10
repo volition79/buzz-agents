@@ -57,7 +57,74 @@ class PolicyTests(unittest.TestCase):
         from unittest.mock import patch
         with patch('buzz_agents.policy.atomic_json',side_effect=OSError('disk full')):
             self.assertEqual(self.policy.acquire()['error'],'quota_storage_failed')
-        self.assertIsNone(self.policy.active)
+        self.assertEqual(self.policy.active,{})
+
+    def test_user_selected_concurrency_through_real_socket(self):
+        for count in (1, 2, 10, 32):
+            with self.subTest(count=count):
+                self.policy.close()
+                (self.root/'quota.json').unlink(missing_ok=True)
+                limits=dict(self.limits,turn_limit=100,daily_limit=200)
+                self.policy=Policy(self.root,self.root/'slots',limits,concurrency=count)
+                path=self.root/'parallel.sock';server=Broker(path,self.policy)
+                thread=threading.Thread(target=server.serve_forever);thread.start()
+                try:
+                    tickets=[broker({'op':'acquire'},str(path)) for _ in range(count)]
+                    self.assertTrue(all(t['ok'] for t in tickets))
+                    self.assertEqual(len(self.policy.active),count)
+                    self.assertEqual(broker({'op':'acquire'},str(path))['error'],'busy')
+                    token=tickets[0]['ticket']
+                    self.assertTrue(broker({'op':'release','ticket':token},str(path))['ok'])
+                    self.assertFalse(broker({'op':'release','ticket':token},str(path))['ok'])
+                    self.assertTrue(broker({'op':'acquire'},str(path))['ok'])
+                    self.assertEqual(len(json.loads((self.root/'quota.json').read_text())['starts']),count+1)
+                finally:
+                    server.shutdown();server.server_close();thread.join();path.unlink()
+
+    def test_each_concurrent_ticket_has_its_own_deadline(self):
+        self.policy.close()
+        self.policy=Policy(self.root,self.root/'slots',self.limits,concurrency=2,
+                           clock=lambda:self.now[0],monotonic=lambda:self.mono[0])
+        first=self.policy.acquire()
+        self.mono[0]+=5
+        self.policy.acquire()
+        self.policy.release(first['ticket'])
+        self.mono[0]+=6
+        self.assertEqual(self.policy.check(),'')
+        self.mono[0]+=5
+        self.assertEqual(self.policy.check(),'turn_deadline')
+
+    def test_dead_owner_with_live_descendant_keeps_slot_until_group_dies(self):
+        import subprocess,sys,signal,time
+        path=self.root/'lifetime.sock';server=Broker(path,self.policy)
+        thread=threading.Thread(target=server.serve_forever);thread.start()
+        code="""import subprocess,sys,time,json
+from buzz_agents.guard import broker
+answer=broker({'op':'acquire'},sys.argv[1])
+child=subprocess.Popen([sys.executable,'-c','import time;time.sleep(60)'])
+print(json.dumps({'ticket':answer['ticket'],'child':child.pid}),flush=True)
+time.sleep(60)
+"""
+        process=subprocess.Popen([sys.executable,'-c',code,str(path)],stdout=subprocess.PIPE,process_group=0)
+        try:
+            data=json.loads(process.stdout.readline())
+            process.kill();process.wait(timeout=3)
+            self.assertEqual(self.policy.check(),'')
+            self.assertIn(data['ticket'],self.policy.active)
+            self.assertEqual(self.policy.acquire()['error'],'busy')
+            os.killpg(process.pid,signal.SIGKILL)
+            for _ in range(100):
+                self.policy.check()
+                if not self.policy.active:break
+                time.sleep(.01)
+            self.assertEqual(self.policy.active,{})
+            self.assertEqual(self.policy.owners,{})
+            self.assertEqual(len(self.policy.data['starts']),1)
+        finally:
+            try:os.killpg(process.pid,signal.SIGKILL)
+            except ProcessLookupError:pass
+            process.wait(timeout=3);process.stdout.close()
+            server.shutdown();server.server_close();thread.join()
 
 
 class ProxyTests(unittest.TestCase):
@@ -82,10 +149,10 @@ class ProxyTests(unittest.TestCase):
         response={'jsonrpc':'2.0','id':1,'result':{'stopReason':'end_turn'}}
         self.proxy.from_agent(response);self.assertEqual(self.to_host[-1],response)
         self.assertEqual(self.calls[-1]['op'],'release')
-    def test_failure_trips_only_this_bot(self):
+    def test_failure_releases_worker_without_tripping_bot(self):
         self.proxy.from_host(self.prompt);self.proxy.tick()
         self.proxy.from_agent({'id':1,'error':{'code':-32000,'message':'auth expired'}})
-        self.assertTrue(self.proxy.stopped);self.assertEqual(self.calls[-1]['op'],'trip')
+        self.assertFalse(self.proxy.stopped);self.assertEqual(self.calls[-1]['op'],'release')
     def test_permission_request_with_matching_id_is_not_completion(self):
         self.proxy.from_host(self.prompt);self.proxy.tick()
         self.proxy.from_agent({'id':1,'method':'session/request_permission','params':{}})
@@ -105,3 +172,13 @@ class ProxyTests(unittest.TestCase):
         self.proxy.from_host(self.prompt);self.proxy.tick()
         self.assertTrue(self.proxy.stopped);self.assertEqual(self.to_agent,[])
         self.assertIn('error',self.to_host[-1])
+
+    def test_active_cancel_keeps_slot_until_final_response(self):
+        self.proxy.from_host(self.prompt);self.proxy.tick()
+        cancel={'method':'session/cancel','params':{'sessionId':'s'}}
+        self.proxy.from_host(cancel)
+        self.assertEqual(self.to_agent[-1],cancel)
+        self.assertTrue(self.proxy.active)
+        self.assertFalse(any(c['op']=='release' for c in self.calls))
+        self.proxy.from_agent({'id':1,'result':{'stopReason':'cancelled'}})
+        self.assertEqual(self.calls[-1]['op'],'release')

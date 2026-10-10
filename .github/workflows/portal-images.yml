@@ -51,20 +51,12 @@ jobs:
         run: |
           python3 -m pip install websocket-client==1.9.0
           python3 scripts/verify-portal-route-browser.py
-      - name: Build portal and broker; retain runtime digest
+      - name: Build runtime, portal and broker from the same reviewed source
         shell: bash
         run: |
           IMAGE_PREFIX="ghcr.io/${GITHUB_REPOSITORY,,}"
           echo "IMAGE_PREFIX=$IMAGE_PREFIX" >> "$GITHUB_ENV"
-          python3 - <<'PYCODE'
-          import os,re
-          from pathlib import Path
-          text=Path('docker-compose.yml').read_text()
-          with open(os.environ['GITHUB_ENV'],'a') as output:
-              for role in ('runtime',):
-                  image=re.search(r'ghcr.io/volition79/buzz-agents-'+role+r'@sha256:[a-f0-9]{64}',text).group()
-                  output.write('BUZZ_'+role.upper()+'_IMAGE='+image+'\n')
-          PYCODE
+          docker build -f Dockerfile --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" -t "$IMAGE_PREFIX-runtime:$GITHUB_SHA" .
           docker build -f Dockerfile.portal --target broker --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" -t "$IMAGE_PREFIX-broker:$GITHUB_SHA" .
           docker build -f Dockerfile.portal --target portal --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" -t "$IMAGE_PREFIX-portal:$GITHUB_SHA" .
           # A loopback-only registry supplies immutable references before public publication.
@@ -72,7 +64,10 @@ jobs:
           docker tag "$IMAGE_PREFIX-portal:$GITHUB_SHA" "localhost/buzz-agents-portal:$GITHUB_SHA"
           docker push "localhost/buzz-agents-portal:$GITHUB_SHA"
           echo "BUZZ_PORTAL_IMAGE=$(docker image inspect "localhost/buzz-agents-portal:$GITHUB_SHA" --format '{{index .RepoDigests 0}}')" >> "$GITHUB_ENV"
-      - name: Pull retained images
+          docker tag "$IMAGE_PREFIX-runtime:$GITHUB_SHA" "localhost/buzz-agents-runtime:$GITHUB_SHA"
+          docker push "localhost/buzz-agents-runtime:$GITHUB_SHA"
+          echo "BUZZ_RUNTIME_IMAGE=$(docker image inspect "localhost/buzz-agents-runtime:$GITHUB_SHA" --format '{{index .RepoDigests 0}}')" >> "$GITHUB_ENV"
+      - name: Pull exact candidate images
         run: |
           docker pull "$BUZZ_RUNTIME_IMAGE"
           docker pull "$BUZZ_PORTAL_IMAGE"
@@ -90,6 +85,10 @@ jobs:
         shell: bash
         run: |
           printf '%s' "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          docker push "$IMAGE_PREFIX-runtime:$GITHUB_SHA"
+          RUNTIME_REF=$(docker image inspect "$IMAGE_PREFIX-runtime:$GITHUB_SHA" --format '{{range .RepoDigests}}{{println .}}{{end}}' | awk '/^ghcr.io\// {print; exit}')
+          export BUZZ_RUNTIME_IMAGE="$RUNTIME_REF"
+          echo "BUZZ_RUNTIME_IMAGE=$RUNTIME_REF" >> "$GITHUB_ENV"
           docker push "$IMAGE_PREFIX-broker:$GITHUB_SHA"
           docker push "$IMAGE_PREFIX-portal:$GITHUB_SHA"
           PORTAL_REF=$(docker image inspect "$IMAGE_PREFIX-portal:$GITHUB_SHA" --format '{{range .RepoDigests}}{{println .}}{{end}}' | awk '/^ghcr.io\// {print; exit}')
@@ -121,9 +120,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
+          python3 scripts/render-portal-release.py --list-assets --output dist/portal-v0.4/compose.install.yaml > /tmp/buzz-release-assets.txt
+          mapfile -t RELEASE_ASSETS < /tmp/buzz-release-assets.txt
           RELEASE_TAG="portal-candidate-${GITHUB_SHA:0:12}-${GITHUB_RUN_NUMBER}-${GITHUB_RUN_ATTEMPT}"
           gh release create "$RELEASE_TAG" --target "$GITHUB_SHA" --prerelease \
             --title "Buzz portal v0.4 candidate" --notes-file docs/PORTAL-VERIFICATION.md \
-            dist/portal-v0.4/compose.install.yaml dist/portal-v0.4/manifest.json \
-            dist/portal-v0.4/Buzz-VPS-Connect.exe dist/portal-v0.4/docker-build-context.zip
+            "${RELEASE_ASSETS[@]}"
           echo "New image candidate Compose (requires review before replacing canonical docker-compose.yml): https://github.com/$GITHUB_REPOSITORY/releases/download/$RELEASE_TAG/compose.install.yaml" >> "$GITHUB_STEP_SUMMARY"

@@ -6,7 +6,7 @@ import unittest
 from copy import deepcopy
 from buzz_agents.common import ToolError
 from buzz_agents.host import Deployer, compose_document, labels, container_name, service_name
-from buzz_agents.native import state_on_start, runtime_env
+from buzz_agents.native import state_on_start, runtime_env, runtime_parallelism
 from buzz_agents.policy import atomic_json, read_json
 from helpers import config,settings, PUBKEY
 
@@ -18,6 +18,7 @@ class HostTests(unittest.TestCase):
         def runner(argv,data=None,timeout=None):
             self.commands.append(argv)
             if argv[:3]==['docker','image','inspect']:return json.dumps([{'Id':self.settings['image_id']}]).encode()
+            if argv[:2]==['docker','info']:return json.dumps({'NCPU':16,'MemTotal':64*1024**3}).encode()
             if 'up' in argv:
                 self.actual={'State':{'Running':True},'Image':self.settings['image_id'],'Config':{'Labels':labels(self.config)}}
             return b''
@@ -72,6 +73,21 @@ class HostTests(unittest.TestCase):
     def test_total_memory_is_bounded(self):
         self.deploy.deploy({});self.actual=None;self.config=config(pub='e'*64,options={'memory_mb':4096})
         with self.assertRaisesRegex(ToolError,'memory_budget'):self.deploy.deploy({})
+    def test_high_spec_host_accepts_large_bot_with_auto_budget(self):
+        self.settings.pop('memory_budget_mb');self.settings.pop('max_bots')
+        self.config=config(options={'memory_mb':16384,'cpus':8})
+        self.assertTrue(self.deploy.deploy({})['ok'])
+    def test_requested_cpu_exceeding_host_fails_before_mutation(self):
+        self.config=config(options={'cpus':17})
+        with self.assertRaisesRegex(ToolError,'requested_cpu_exceeds_host'):self.deploy.deploy({})
+        self.assertFalse(any('up' in c or 'stop' in c for c in self.commands))
+    def test_running_old_image_requires_stop_after_selection_upgrade(self):
+        self.deploy.deploy({})
+        atomic_json(self.root/'bots'/PUBKEY/'state/runtime.json',{'status':'running'})
+        self.settings['image_id']='sha256:'+'e'*64
+        self.commands.clear()
+        with self.assertRaisesRegex(ToolError,'stop_native_bot_before_image_upgrade'):self.deploy.deploy({})
+        self.assertFalse(any('up' in c or 'stop' in c for c in self.commands))
     def test_changed_local_image_is_refused(self):
         self.deploy.run=lambda *a,**k:json.dumps([{'Id':'sha256:'+'e'*64}]).encode()
         with self.assertRaisesRegex(ToolError,'image_changed'):self.deploy.deploy({})
@@ -127,3 +143,14 @@ class NativeTests(unittest.TestCase):
             env=runtime_env(config(command),'/tmp/sock')
             self.assertEqual(Path(env['BUZZ_ACP_AGENT_COMMAND']).name,command)
             self.assertNotIn('/app/guard-bin',env.get('PATH',''))
+
+
+class ConcurrencyEnvironmentTests(unittest.TestCase):
+    def test_pool_and_policy_use_same_selected_count(self):
+        for count in (1,2,10,32):
+            c=config();c['env']['BUZZ_ACP_AGENTS']=str(count)
+            self.assertEqual(runtime_parallelism(c),count)
+            self.assertEqual(runtime_env(c,'/tmp/sock')['BUZZ_ACP_AGENTS'],str(count))
+        c=config();c['env'].pop('BUZZ_ACP_AGENTS',None)
+        self.assertEqual(runtime_parallelism(c),1)
+        self.assertEqual(runtime_env(c,'/tmp/sock')['BUZZ_ACP_AGENTS'],'1')

@@ -114,3 +114,11 @@ func TestEasySetupUsesDedicatedConfig(t *testing.T) {
 		t.Fatal("legacy alias redirected")
 	}
 }
+
+func TestProtocolFailureVisibleToBuzzStderr(t *testing.T) {
+	var out, diagnostic bytes.Buffer
+	status := runUsing(strings.NewReader(`{"op":"not-supported"}`), &out, &diagnostic)
+	if status != 1 || !strings.Contains(diagnostic.String(), "unsupported_operation") {
+		t.Fatal(status, diagnostic.String())
+	}
+}

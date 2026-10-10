@@ -4,6 +4,9 @@ import json
 import os
 from pathlib import Path
 import secrets
+import select
+import socket
+import struct
 import socketserver
 import threading
 import time
@@ -47,19 +50,57 @@ def atomic_json(path, value, mode=0o600):
 class Policy:
     """Each native prompt consumes a durable ticket; faults never auto-reset it."""
     def __init__(self, directory, slots, limits, concurrency=1, clock=time.time, monotonic=time.monotonic):
+        if type(concurrency) is not int or not 1 <= concurrency <= 32:
+            raise ToolError("invalid_parallelism")
         self.directory, self.slots = Path(directory), Path(slots)
         self.limits, self.concurrency = limits, concurrency
         self.clock, self.monotonic = clock, monotonic
         self.lock = threading.RLock()
-        self.active = None
+        self.active = {}
+        self.owners = {}
         self.tripped = ""
         self.data = read_json(self.directory / "quota.json", {"starts": [], "last": 0})
 
-    def acquire(self):
+    def acquire(self, owner=None):
+        # owner is kernel-derived (pidfd, process group), never request JSON.
+        with self.lock:
+            try:
+                self.reap_dead_owners()
+                result = self._acquire()
+                if result.get("ok") and owner is not None:
+                    self.owners[result["ticket"]] = owner
+                    owner = None
+                return result
+            finally:
+                if owner is not None:
+                    os.close(owner[0])
+
+    def reap_dead_owners(self):
+        for token, (fd, group) in list(self.owners.items()):
+            if not select.select([fd], [], [], 0)[0]:
+                continue
+            # A dead guard alone is insufficient: ordinary adapter descendants
+            # must also be gone before a slot can be reused. Never kill by a
+            # potentially recycled PID/PGID here; uncertain cleanup stays held.
+            live = False
+            for entry in Path("/proc").iterdir():
+                if not entry.name.isdigit():
+                    continue
+                try:
+                    fields = (entry / "stat").read_text().rsplit(")", 1)[1].split()
+                    if int(fields[2]) == group and fields[0] != "Z":
+                        live = True
+                        break
+                except (FileNotFoundError, ProcessLookupError):
+                    continue
+            if not live:
+                self.release(token)
+
+    def _acquire(self):
         with self.lock:
             if self.tripped:
                 return {"ok": False, "error": self.tripped}
-            if self.active:
+            if len(self.active) >= self.concurrency:
                 return {"ok": False, "error": "busy"}
             now = self.clock()
             if now + 2 < self.data["last"]:
@@ -85,7 +126,7 @@ class Policy:
             try:
                 self.data = {"starts": starts + [now], "last": now}
                 atomic_json(self.directory / "quota.json", self.data)
-                self.active = (token, slot, self.monotonic() + self.limits["max_turn_seconds"])
+                self.active[token] = (slot, self.monotonic() + self.limits["max_turn_seconds"])
                 return {"ok": True, "ticket": token}
             except Exception:
                 os.close(slot)
@@ -93,10 +134,13 @@ class Policy:
 
     def release(self, token):
         with self.lock:
-            if not self.active or not isinstance(token, str) or not secrets.compare_digest(self.active[0], token):
+            if not isinstance(token, str) or token not in self.active:
                 return {"ok": False, "error": "invalid_ticket"}
-            os.close(self.active[1])
-            self.active = None
+            owner = self.owners.pop(token, None)
+            if owner is not None:
+                os.close(owner[0])
+            slot, _ = self.active.pop(token)
+            os.close(slot)
             return {"ok": True}
 
     def trip(self, reason):
@@ -106,15 +150,22 @@ class Policy:
 
     def check(self):
         with self.lock:
-            if self.active and self.monotonic() >= self.active[2]:
+            try:
+                self.reap_dead_owners()
+            except (OSError, ValueError, IndexError):
+                self.trip("worker_lifetime_check_failed")
+            if any(self.monotonic() >= deadline for _, deadline in self.active.values()):
                 self.trip("turn_deadline")
             return self.tripped
 
     def close(self):
         with self.lock:
-            if self.active:
-                os.close(self.active[1])
-                self.active = None
+            for slot, _ in self.active.values():
+                os.close(slot)
+            self.active.clear()
+            for fd, _ in self.owners.values():
+                os.close(fd)
+            self.owners.clear()
 
 
 class Broker(socketserver.UnixStreamServer):
@@ -132,7 +183,20 @@ class BrokerHandler(socketserver.StreamRequestHandler):
                 raise ValueError()
             request = json.loads(raw)
             if request.get("op") == "acquire":
-                result = self.server.policy.acquire()
+                pid, _, _ = struct.unpack("3i", self.connection.getsockopt(
+                    socket.SOL_SOCKET, socket.SO_PEERCRED, struct.calcsize("3i")))
+                fd = os.pidfd_open(pid)
+                try:
+                    group = os.getpgid(pid)
+                except BaseException:
+                    os.close(fd)
+                    raise
+                if group == pid:
+                    result = self.server.policy.acquire((fd, group))
+                else:
+                    # Legacy/manual clients have no privately owned worker group.
+                    os.close(fd)
+                    result = self.server.policy.acquire()
             elif request.get("op") == "release":
                 result = self.server.policy.release(request.get("ticket"))
             elif request.get("op") == "trip":

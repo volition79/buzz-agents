@@ -20,6 +20,7 @@ import websocket
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from buzz_agents.portal import Portal, Server
+from buzz_agents.common import ToolError
 
 
 class FixtureBroker:
@@ -27,9 +28,12 @@ class FixtureBroker:
         self.configured = False
         self.bots = []
         self.owner = 'a'*64
+        self.auth_error = None
 
     def __call__(self, request):
         op = request['op']
+        if self.auth_error and op == self.auth_error[0]:
+            raise ToolError(self.auth_error[1])
         if op == 'discover':
             return {'ok': True, 'relays': [{'relay':'wss://relay.example.com','owner':self.owner,'membership_required':True}]}
         if op == 'configure':
@@ -81,6 +85,33 @@ class CDP:
     def shot(self, path):
         data=self.call('Page.captureScreenshot',{'format':'png','captureBeyondViewport':False})['data']
         path.write_bytes(base64.b64decode(data))
+
+
+
+def verify_login_expiry(cdp, broker):
+    # Actual page functions + HTTP responses; only Docker/official auth is simulated.
+    for provider_key in ('b', 'c'):
+        for path in ('poll', 'input', 'cancel'):
+            broker.auth_error = None
+            cdp.js("startLogin({pubkey:"+json.dumps(provider_key*64)+",name:'fixture'})")
+            broker.auth_error = ('auth-'+path, 'host_command_failed')
+            cdp.js("api('auth/"+path+"',{session:authSession,text:'test-code'}).catch(()=>{})")
+            assert cdp.js('authSession !== null'), 'transient error lost live session'
+            broker.auth_error = ('auth-'+path, 'login_session_expired')
+            cdp.js("api('auth/"+path+"',{session:authSession,text:'test-code'}).catch(()=>{})")
+            assert cdp.js('authSession === null')
+            assert cdp.js("$('authForm').hidden && $('cancelAuth').hidden && $('authInput').value === ''")
+            assert cdp.js("$('authStatus').textContent === errors.login_session_expired")
+    broker.auth_error = None
+    cdp.js("startLogin({pubkey:'"+'b'*64+"',name:'retry'})")
+    assert cdp.js('authSession !== null'), 'retry still blocked'
+    broker.auth_error = ('auth-poll', 'login_session_expired')
+    cdp.js("api('auth/poll',{session:'older-session'}).catch(()=>{})")
+    assert cdp.js('authSession !== null'), 'old response cleared newer session'
+    broker.auth_error = ('auth-cancel', 'login_session_expired')
+    cdp.js("$('cancelAuth').click()")
+    cdp.until("authSession === null && $('authStatus').textContent === errors.login_session_expired")
+    broker.auth_error = None
 
 
 def main():
@@ -165,6 +196,7 @@ def main():
             cdp.shot(output/'setup-login-session.png')
             cdp.js("document.querySelector('#cancelAuth').click()")
             cdp.until("document.querySelector('#authStatus').textContent.includes('중지했습니다')")
+            verify_login_expiry(cdp, app.rpc)
             output_text=io.StringIO()
             with redirect_stdout(output_text): app.issue_access_code()
             code=output_text.getvalue().split('/#recovery_code=')[1].splitlines()[0]
@@ -186,7 +218,7 @@ def main():
             report={'status':'passed','browser':'Google Chrome headless / CDP',
                     'viewports':[[1440,1120],[390,844]],'console_exceptions':0,
                     'checked':['fragment autofill and immediate URL scrubbing','no-value/manual fallback','malformed/duplicate fragment rejection','expired setup retry','recovery preserves devices and requires new login','first claim','auto Relay discovery confirmation','bundle download','one-use pairing',
-                               'device deploy HTTP','bot list','PTY UI input/cancel','mobile overflow'],
+                               'device deploy HTTP','bot list','PTY UI input/cancel','expired login retry and transient preservation for both providers','mobile overflow'],
                     'simulated':['Docker broker','official provider login','Windows installer'],
                     'not_proven':['Docker deployment','real AI login/reply','Windows-off scheduled task']}
             (output/'browser-report.json').write_text(json.dumps(report,indent=2)+'\n')

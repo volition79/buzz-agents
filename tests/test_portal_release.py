@@ -38,4 +38,27 @@ class ReleaseTests(unittest.TestCase):
             with self.assertRaises(ValueError):release.render({**images,'runtime':bad})
 
 
+class FinalManifestTests(unittest.TestCase):
+    def test_compose_covered_and_tampering_refused(self):
+        import tempfile,json,hashlib
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d);payload=root/'fixture.exe';payload.write_bytes(b'original')
+            files={'fixture.exe':{'sha256':hashlib.sha256(payload.read_bytes()).hexdigest(),'size':8}}
+            (root/'manifest.json').write_text(json.dumps({'files':files}))
+            output=root/'compose.install.yaml'
+            images={role:'ghcr.io/example/'+role+'@sha256:'+'a'*64 for role in ('runtime','broker','portal')}
+            release.write_release(images,output)
+            release.verify_release(output)
+            self.assertIn(output.name,json.loads((root/'manifest.json').read_text())['files'])
+            self.assertIn(output.name,(root/'SHA256SUMS').read_text())
+            self.assertEqual({p.name for p in release.release_assets(output)},
+                             {'fixture.exe','compose.install.yaml','manifest.json','SHA256SUMS'})
+            output.write_text(output.read_text()+'# changed\n')
+            with self.assertRaisesRegex(ValueError,'manifest_hash_mismatch'):release.verify_release(output)
+            with self.assertRaisesRegex(ValueError,'manifest_hash_mismatch'):release.release_assets(output)
+            release.write_release(images,output)
+            payload.write_bytes(b'tampered')
+            with self.assertRaisesRegex(ValueError,'manifest_hash_mismatch'):release.write_release(images,output)
+
+
 if __name__=='__main__':unittest.main()

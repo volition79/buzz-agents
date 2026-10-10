@@ -1,3 +1,9 @@
+# Runtime and setup recovery candidate — 2026-10-10
+
+This candidate updates runtime, broker, portal and Windows connector together. It corrects shared Codex/Claude launch contracts, concurrency, worker cleanup and slot recovery, login retry isolation, safe diagnostics and provider upgrade handling. The bilingual setup guide now uses numbered screenshot panels; expired sign-in sessions can be retried without reloading. Release assets are derived from the verified manifest.
+
+Local source, process, Windows and browser checks are recorded in docs/contract-fix-verification.json and TASK.md. The user authorized publication and will perform VPS installation and real-account testing. CI image/bootstrap checks and exact immutable Raw URL verification must finish before install handoff. Real provider account/model execution and a new task after Windows power-off remain unverified.
+
 # Post-login automatic discovery regression — 2026-10-09
 
 User confirmed manual Relay/HEX discovery works, while login followed by automatic loading displayed a non-JSON Bad Gateway error. Read-only unauthenticated probes did not capture the exact failed authenticated request. On source e0e6ccd, a real two-slot route with one-second guide-image latency reproduces a successful claim followed by missing automatic owner fill. This supports a request-overlap failure; it does not claim access to the user's authenticated Network history.

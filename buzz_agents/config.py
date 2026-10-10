@@ -20,6 +20,7 @@ ENV_ALLOWED = {
     "BUZZ_ACP_NO_MEMORY", "BUZZ_ACP_NO_BASE_PROMPT", "BUZZ_ACP_EXIT_AFTER_INACTIVITY",
     "BUZZ_ACP_MULTIPLE_EVENT_HANDLING", "BUZZ_ACP_MAX_TURNS_PER_SESSION",
     "BUZZ_ACP_DEDUP", "BUZZ_ACP_RESPOND_TO", "BUZZ_ACP_RESPOND_TO_ALLOWLIST",
+    "BUZZ_ACP_REPLAY_FLOOR", "LANG", "LC_ALL", "TZ", "BUZZ_ACP_MEMORY",
 }
 
 
@@ -84,6 +85,8 @@ def public_key(key):
 def normalize(agent, options, owner, relay, *, derive=public_key):
     if not isinstance(agent, dict) or not isinstance(options, dict) or not HEX.fullmatch(owner):
         raise ToolError("invalid_payload")
+    if str(agent.get("provider", "")).strip() == "relay-mesh":
+        raise ToolError("relay_mesh_not_supported")
     allowed_options = {"ssh_alias", "workspace", "memory_mb", "cpus", "max_turn_seconds", "turn_limit", "window_seconds", "daily_limit"}
     if set(options) - allowed_options:
         raise ToolError("unsupported_provider_configuration")
@@ -123,6 +126,12 @@ def normalize(agent, options, owner, relay, *, derive=public_key):
             if not isinstance(value, str) or "\x00" in value or len(value.encode()) > 65536:
                 raise ToolError("invalid_environment")
             env[name] = value
+    startup_env = {}
+    if "BUZZ_ACP_REPLAY_FLOOR" in env:
+        floor = env.pop("BUZZ_ACP_REPLAY_FLOOR")
+        if not re.fullmatch(r"[0-9]{1,20}", floor) or int(floor) >= 2**64:
+            raise ToolError("invalid_replay_floor")
+        startup_env["BUZZ_ACP_REPLAY_FLOOR"] = floor
     name = agent.get("name")
     if not isinstance(name, str) or not 1 <= len(name.strip()) <= 100 or any(ord(c) < 32 for c in name):
         raise ToolError("invalid_name")
@@ -134,15 +143,18 @@ def normalize(agent, options, owner, relay, *, derive=public_key):
         raise ToolError("invalid_allowlist")
     if respond == "allowlist" and not allow:
         raise ToolError("allowlist_required")
-    # Basic package deliberately serializes turns; multiple named bots remain free.
-    if agent.get("parallelism", 1) not in (None, 1) or env.get("BUZZ_ACP_AGENTS", "1") != "1":
-        raise ToolError("set_bot_parallelism_to_one")
+    # Respect the resolved Buzz launch count; legacy payloads default to ten.
+    requested = agent.get("parallelism")
+    if requested is not None:
+        integer(requested, 1, 32, "invalid_parallelism")
+    native_workers = env.get("BUZZ_ACP_AGENTS", str(requested if requested is not None else 10))
+    if not re.fullmatch(r"[1-9][0-9]?", native_workers) or int(native_workers) > 32:
+        raise ToolError("invalid_parallelism")
     env.update(BUZZ_PRIVATE_KEY=key, NOSTR_PRIVATE_KEY=key, BUZZ_RELAY_URL=relay_url(relay),
                BUZZ_AUTH_TAG=json.dumps(auth, separators=(",", ":")), BUZZ_ACP_AGENT_OWNER=owner,
-               BUZZ_ACP_RESPOND_TO=respond, BUZZ_ACP_AGENTS="1", BUZZ_ACP_SUBSCRIBE="mentions",
+               BUZZ_ACP_RESPOND_TO=respond, BUZZ_ACP_AGENTS=native_workers, BUZZ_ACP_SUBSCRIBE="mentions",
                BUZZ_ACP_RESPOND_TO_ALLOWLIST=",".join(allow), BUZZ_ACP_NO_PRESENCE="false",
-               BUZZ_ACP_NO_IGNORE_SELF="false", BUZZ_ACP_HEARTBEAT_INTERVAL="0",
-               BUZZ_ACP_MULTIPLE_EVENT_HANDLING="queue", BUZZ_ACP_DEDUP="queue")
+               BUZZ_ACP_NO_IGNORE_SELF="false", BUZZ_ACP_HEARTBEAT_INTERVAL="0")
     # Policy bounds, not a prescribed collaboration order.
     max_seconds = integer(options.get("max_turn_seconds", 1800), 60, 7200, "invalid_turn_seconds")
     try:
@@ -158,14 +170,14 @@ def normalize(agent, options, owner, relay, *, derive=public_key):
     except ValueError:
         raise ToolError("invalid_idle_timeout") from None
     env["BUZZ_ACP_IDLE_TIMEOUT"] = str(max(1, min(idle, max_seconds - 1)))
-    workspace = options.get("workspace", "private")
+    workspace = options.get("workspace", "team")
     if workspace == "private":
         workspace = "bot-" + pubkey[:20]
     if not isinstance(workspace, str) or not SLUG.fullmatch(workspace):
         raise ToolError("invalid_workspace")
-    memory = integer(options.get("memory_mb", 1536), 512, 4096, "invalid_memory")
+    memory = integer(options.get("memory_mb", 1536), 512, 16777216, "invalid_memory")
     cpus = options.get("cpus", 0.75)
-    if type(cpus) not in (int, float) or not 0.1 <= cpus <= 1.5:
+    if type(cpus) not in (int, float) or not 0.1 <= cpus <= 1048576:
         raise ToolError("invalid_cpu")
     policy = {"max_turn_seconds": max_seconds,
               "turn_limit": integer(options.get("turn_limit", 20), 1, 500, "invalid_turn_limit"),
@@ -175,4 +187,5 @@ def normalize(agent, options, owner, relay, *, derive=public_key):
               "provider": COMMANDS[command], "command": command, "env": env,
               "workspace": workspace, "memory_mb": memory, "cpus": cpus, "policy": policy}
     result["fingerprint"] = hashlib.sha256(json.dumps(result, sort_keys=True).encode()).hexdigest()
+    result["startup_env"] = startup_env
     return result
