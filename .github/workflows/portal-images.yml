@@ -54,6 +54,7 @@ jobs:
           python3 -m pip install websocket-client==1.9.0
           python3 scripts/verify-portal-route-browser.py
           python3 scripts/verify-bot-update-browser.py
+          python3 scripts/verify-login-links-browser.py
       - name: Build runtime, portal and broker from the same reviewed source
         shell: bash
         run: |

@@ -1,0 +1,11 @@
+# Claude login links / Claude 로그인 링크
+
+The portal previously recognized claude.ai, console.anthropic.com and platform.claude.com, but not the current Claude subscription authorization endpoint `https://claude.com/cai/oauth/authorize`. The pinned ACP 0.88.0 depends on official SDK 0.3.293. Its Linux x64 binary contains this endpoint (binary SHA256 `8968405e26db478af44eabc4635ab5ca557057b702a54460a59c13e1b253e978`). The original link renderer accepts the Codex fixture but produces zero links for this Claude URL. This reproduces the reported symptom; the user's private OAuth transcript was not collected.
+
+The portal now renders **Open official sign-in** and **Copy address**, plus a selectable full address. The complete OAuth query is retained. Terminal ANSI formatting and OSC8 destinations are handled separately; arbitrary hard-wrapped text is not guessed into an authorization URL. Only HTTPS official hosts are accepted, with the new claude.com host restricted to its authorization path; userinfo and non-default ports are rejected. Repeated polling preserves selection and copy feedback. Clipboard denial selects the address for manual copying. Korean/English follow the browser language.
+
+기존 설치는 새 `portal.image`만 적용해도 이 화면 수정이 반영됩니다. 프로젝트 이름, 볼륨, Relay, setup-route를 유지하세요. 배포 후 설정 페이지를 새로고침하고 Claude 봇의 로그인 버튼을 누르세요. **공식 로그인 열기** 또는 **주소 복사**를 이용한 뒤 화면의 인증 안내를 진행하세요. 봇 삭제·재생성이나 Windows 연결 재설정은 필요하지 않습니다. 만료된 로그인은 로그인 버튼으로 새로 시작하세요.
+
+For this UI fix, existing installations need only the newly published `portal.image`. Preserve the project name, volumes, Relay and setup-route. After deployment refresh the settings page and start Claude sign-in. Open or copy the official URL and follow the authentication instructions. Do not recreate bots or reset Windows pairing. Restart an expired sign-in using the bot's login button.
+
+Verification: `tests/test_login_links.py` tests exact query retention, plain/ANSI/OSC8 links, partial terminal output, deduplication and hostile destinations. `scripts/verify-login-links-browser.py` uses actual Chrome/HTTP in Korean desktop and English mobile, with simulated provider output; it checks links, real clipboard readback, denied-clipboard fallback, polling focus, code submission, cancellation, and Codex compatibility. No real subscription login or live VPS mutation is performed.

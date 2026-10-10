@@ -166,8 +166,45 @@ async function refresh(){
   for(const device of devices.devices){const row=document.createElement('div'),name=document.createElement('span'),button=document.createElement('button');name.textContent=device.name+' · ID '+device.id;button.className='quiet';button.textContent=t('연결 해제');button.onclick=async()=>{if(!confirm(t('이 Windows 연결 권한을 해제할까요? VPS의 실행 중인 봇은 유지됩니다.')))return;try{await api('revoke',{id:device.id});await refresh();}catch(e){message(e.message,true);}};row.append(name,button);$('devices').append(row);}
 }
 async function startLogin(bot){if(authSession)throw new Error(t('현재 로그인 세션을 먼저 마치거나 중지해 주세요.'));const result=await api('auth/start',{pubkey:bot.pubkey});authSession=result.session;$('authTitle').textContent=bot.name+t(' · 공식 로그인');$('authPanel').hidden=false;$('authForm').hidden=false;$('cancelAuth').hidden=false;$('terminal').textContent=t('VPS에서 공식 로그인을 시작하고 있습니다…');$('authStatus').textContent=t('최대 10분 동안 진행됩니다.');$('authLinks').replaceChildren();$('authPanel').scrollIntoView({behavior:'smooth',block:'center'});}
-function officialLinks(text){const hosts=['auth.openai.com','chatgpt.com','claude.ai','console.anthropic.com','platform.claude.com'];$('authLinks').replaceChildren();for(const raw of new Set(text.match(/https:\/\/[^\s<>"\x1b]+/g)||[])){try{const u=new URL(raw);if(!hosts.includes(u.hostname)||u.username||u.password)continue;const a=document.createElement('a');a.href=u.href;a.target='_blank';a.rel='noopener noreferrer';a.textContent=t('공식 로그인 열기 ↗ (')+u.hostname+')';$('authLinks').append(a);}catch{}}}
-async function poll(){if(initializing||pollBusy||$('workspace').hidden||document.hidden)return;pollBusy=true;try{if(authSession){const data=await api('auth/poll',{session:authSession});const text=data.output.replace(/\x1b\[[0-?]*[ -/]*[@-~]/g,'').replace(/\x1b\][^\x07]*(?:\x07|\x1b\\)/g,'');$('terminal').textContent=text;officialLinks(text);if(data.done){authSession=null;$('authForm').hidden=true;$('cancelAuth').hidden=true;$('authStatus').textContent=data.success?t('공식 로그인 명령이 완료되었습니다. Buzz에서 실제 답변을 확인하세요.'):t('로그인이 완료되지 않았습니다. 위 안내를 확인하고 다시 시도하세요.');await refresh();}}else if(++tick%3===0)await refresh();}catch(e){message(e.message,true);}finally{pollBusy=false;}}
+function stripLoginControls(text){
+  return text.replace(/\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g,'')
+    .replace(/\x1b\][^\x07\x1b]*$/g,'')
+    .replace(/\x1b\[[0-?]*[ -/]*[@-~]/g,'');
+}
+function extractLoginLinks(text){
+  const candidates=[];
+  // Keep OSC8 destinations before removing terminal markup from visible text.
+  for(const match of text.matchAll(/\x1b\]8;[^;\x07\x1b]*;([^\x07\x1b]*)(?:\x07|\x1b\\)/g))candidates.push(match[1]);
+  candidates.push(...(stripLoginControls(text).match(/https:\/\/[^\s<>"'\x00-\x1f]+/g)||[]));
+  const hosts=['auth.openai.com','chatgpt.com','claude.ai','console.anthropic.com','platform.claude.com'];
+  const links=[];
+  for(const raw of candidates){try{
+    if(/[\s\\\x00-\x1f]/.test(raw))continue;
+    const u=new URL(raw);
+    const official=hosts.includes(u.hostname)||(u.hostname==='claude.com'&&u.pathname==='/cai/oauth/authorize');
+    if(u.protocol!=='https:'||!official||u.username||u.password||u.port)continue;
+    if(!links.includes(u.href))links.push(u.href);
+  }catch{}}
+  return links;
+}
+function officialLinks(text){
+  const target=$('authLinks'),links=extractLoginLinks(text);
+  // Polling must not discard focus/selection while the user copies an address.
+  if(JSON.stringify(links)===JSON.stringify([...target.querySelectorAll('a')].map(a=>a.href)))return;
+  target.replaceChildren();
+  for(const href of links){
+    const row=document.createElement('div');row.className='auth-link';
+    const a=document.createElement('a');a.href=href;a.target='_blank';a.rel='noopener noreferrer';a.referrerPolicy='no-referrer';
+    a.textContent=t('공식 로그인 열기 ↗ (')+new URL(href).hostname+')';
+    const field=document.createElement('input');field.type='text';field.readOnly=true;field.value=href;field.className='auth-url';field.setAttribute('aria-label',t('공식 로그인 주소'));field.spellcheck=false;
+    const status=document.createElement('span');status.className='hint';status.setAttribute('role','status');
+    const copy=document.createElement('button');copy.type='button';copy.className='secondary';copy.textContent=t('주소 복사');
+    copy.addEventListener('click',async()=>{try{await navigator.clipboard.writeText(href);status.textContent=t('로그인 주소를 복사했습니다. 브라우저 주소창에 붙여넣으세요.');}
+      catch{field.focus();field.select();status.textContent=t('자동 복사를 사용할 수 없습니다. 선택된 주소를 직접 복사하세요.');}});
+    row.append(a,copy,field,status);target.append(row);
+  }
+}
+async function poll(){if(initializing||pollBusy||$('workspace').hidden||document.hidden)return;pollBusy=true;try{if(authSession){const data=await api('auth/poll',{session:authSession});const text=stripLoginControls(data.output);$('terminal').textContent=text;officialLinks(data.output);if(data.done){authSession=null;$('authForm').hidden=true;$('cancelAuth').hidden=true;$('authStatus').textContent=data.success?t('공식 로그인 명령이 완료되었습니다. Buzz에서 실제 답변을 확인하세요.'):t('로그인이 완료되지 않았습니다. 위 안내를 확인하고 다시 시도하세요.');await refresh();}}else if(++tick%3===0)await refresh();}catch(e){message(e.message,true);}finally{pollBusy=false;}}
 action('loginForm',async()=>{await api('login',{setup_code:$('setupCode').value,password:$('password').value});$('setupCode').value='';$('password').value='';$('message').hidden=true;await enter();},'submit');
 action('showRecovery',()=>recoveryMode(true));
 action('cancelRecovery',()=>{$('recoveryCode').value='';$('recoveryPassword').value='';recoveryMode(false);});

@@ -2,6 +2,9 @@
 // Korean source copy is the message key. Add another catalog to support another locale.
 (() => {
   const catalogs = {en: {
+"공식 로그인 주소": "Official sign-in URL",
+"로그인 주소를 복사했습니다. 브라우저 주소창에 붙여넣으세요.": "Sign-in URL copied. Paste it into your browser address bar.",
+"자동 복사를 사용할 수 없습니다. 선택된 주소를 직접 복사하세요.": "Automatic copying is unavailable. Copy the selected URL manually.",
 "기존 봇은 업데이트·다시 시작으로 새 실행 버전을 적용할 수 있습니다. 로그인과 작업 파일은 유지됩니다. 실행 중인 작업은 중단됩니다.": "Use Update / restart to apply the installed runtime to an existing bot. Sign-ins and work files are retained. Active work will be interrupted.",
 "기존 봇 업데이트": "Update existing bot",
 "이 봇을 중지하고 현재 서버에 설치된 실행 버전으로 다시 시작합니다. 같은 봇의 역할·모델·로그인·작업 파일을 유지합니다. 진행 중인 작업의 자동 재개는 보장하지 않습니다.": "Stop this bot and restart it with the runtime installed on this server. Its role, model, sign-in and work files are retained. Active tasks may not resume automatically.",

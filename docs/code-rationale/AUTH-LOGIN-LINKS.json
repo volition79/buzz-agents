@@ -1,0 +1,85 @@
+{
+  "id": "AUTH-LOGIN-LINKS",
+  "reason": "Current official Claude subscription OAuth endpoint was omitted from portal link allowlist; expose clickable and copyable login address without altering authentication.",
+  "invariants": [
+    "Preserve complete official OAuth URL and existing Codex flow",
+    "Reject unrelated hosts, credential-bearing URLs and non-HTTPS links",
+    "Preserve user selection during polling and support clipboard denial"
+  ],
+  "evidence_level": "documented",
+  "evidence": [
+    "docs/AUTH-LOGIN-LINKS.md",
+    "tests/test_login_links.py",
+    "scripts/verify-login-links-browser.py"
+  ],
+  "status": "active",
+  "importance_score": 620,
+  "importance_reason": "Official account authentication link integrity and usability",
+  "anchors": [
+    {
+      "path": "buzz_agents/web/app.js",
+      "function": "extractLoginLinks / officialLinks",
+      "role": "helper",
+      "start_line": 169,
+      "end_line": 206,
+      "code": "function stripLoginControls(text){\n  return text.replace(/\\x1b\\][^\\x07\\x1b]*(?:\\x07|\\x1b\\\\)/g,'')\n    .replace(/\\x1b\\][^\\x07\\x1b]*$/g,'')\n    .replace(/\\x1b\\[[0-?]*[ -/]*[@-~]/g,'');\n}\nfunction extractLoginLinks(text){\n  const candidates=[];\n  // Keep OSC8 destinations before removing terminal markup from visible text.\n  for(const match of text.matchAll(/\\x1b\\]8;[^;\\x07\\x1b]*;([^\\x07\\x1b]*)(?:\\x07|\\x1b\\\\)/g))candidates.push(match[1]);\n  candidates.push(...(stripLoginControls(text).match(/https:\\/\\/[^\\s<>\"'\\x00-\\x1f]+/g)||[]));\n  const hosts=['auth.openai.com','chatgpt.com','claude.ai','console.anthropic.com','platform.claude.com'];\n  const links=[];\n  for(const raw of candidates){try{\n    if(/[\\s\\\\\\x00-\\x1f]/.test(raw))continue;\n    const u=new URL(raw);\n    const official=hosts.includes(u.hostname)||(u.hostname==='claude.com'&&u.pathname==='/cai/oauth/authorize');\n    if(u.protocol!=='https:'||!official||u.username||u.password||u.port)continue;\n    if(!links.includes(u.href))links.push(u.href);\n  }catch{}}\n  return links;\n}\nfunction officialLinks(text){\n  const target=$('authLinks'),links=extractLoginLinks(text);\n  // Polling must not discard focus/selection while the user copies an address.\n  if(JSON.stringify(links)===JSON.stringify([...target.querySelectorAll('a')].map(a=>a.href)))return;\n  target.replaceChildren();\n  for(const href of links){\n    const row=document.createElement('div');row.className='auth-link';\n    const a=document.createElement('a');a.href=href;a.target='_blank';a.rel='noopener noreferrer';a.referrerPolicy='no-referrer';\n    a.textContent=t('공식 로그인 열기 ↗ (')+new URL(href).hostname+')';\n    const field=document.createElement('input');field.type='text';field.readOnly=true;field.value=href;field.className='auth-url';field.setAttribute('aria-label',t('공식 로그인 주소'));field.spellcheck=false;\n    const status=document.createElement('span');status.className='hint';status.setAttribute('role','status');\n    const copy=document.createElement('button');copy.type='button';copy.className='secondary';copy.textContent=t('주소 복사');\n    copy.addEventListener('click',async()=>{try{await navigator.clipboard.writeText(href);status.textContent=t('로그인 주소를 복사했습니다. 브라우저 주소창에 붙여넣으세요.');}\n      catch{field.focus();field.select();status.textContent=t('자동 복사를 사용할 수 없습니다. 선택된 주소를 직접 복사하세요.');}});\n    row.append(a,copy,field,status);target.append(row);\n  }\n}\n",
+      "code_sha256": "095b40ba34429fdd10ec5232fefdde7a309f608cca2aa89df360dc05d8403bfb",
+      "file_sha256": "8ea63766346ee25b1bdd09b1c904edf47c19a8093d7d635ed522d9121a9d3698"
+    }
+  ],
+  "decision_context": {
+    "schema": "sonol.code-rationale-context.v1",
+    "authoring_environment": {
+      "os": "Linux WSL",
+      "provider": "Codex",
+      "execution_environment": "local repository"
+    },
+    "targets": [
+      {
+        "os": "browser",
+        "provider": "Claude and Codex sign-in links",
+        "execution_environment": "ko/en desktop/mobile browser",
+        "applicability": "affected",
+        "reason": "Portal UI only; provider process unchanged"
+      }
+    ],
+    "conditions": [
+      {
+        "condition": "Official CLI emits login URL",
+        "relevance": "applies",
+        "reason": "Domain and terminal markup extraction"
+      }
+    ],
+    "boundaries": [
+      {
+        "path": "buzz_agents/web/app.js",
+        "logical_owner": "officialLinks",
+        "role": "helper",
+        "review": "Exact host checks and raw transcript handling"
+      }
+    ],
+    "verification": [
+      {
+        "assertion_id": "login-links",
+        "test_reference": "scripts/verify-login-links-browser.py",
+        "environment": {
+          "os": "linux",
+          "provider": "synthetic provider output",
+          "execution_environment": "native Chrome and HTTP"
+        },
+        "status": "passed",
+        "evidence_kind": "native_execution",
+        "evidence": [
+          "docs/AUTH-LOGIN-LINKS.md",
+          "TASK.md"
+        ]
+      }
+    ]
+  },
+  "related_decision_ids": [],
+  "schema": "sonol.code-rationale.v1",
+  "source": {
+    "commit": "f4aaf752d10d3265d7397f6b54d0fd5c1f2224ba"
+  },
+  "assessment_status": "assessed"
+}
