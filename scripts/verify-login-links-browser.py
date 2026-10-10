@@ -1,6 +1,7 @@
 """Real browser/HTTP login links, simulated provider authentication; no live VPS or credentials."""
 import importlib.util
 import json
+import os
 from pathlib import Path
 import re
 import subprocess
@@ -27,7 +28,7 @@ def main():
         root=Path(tmp);broker=Broker();app=f.Portal(root/'state','http://127.0.0.1',local=True,rpc=broker)
         server=f.Server(('127.0.0.1',0),app);app.url='http://127.0.0.1:'+str(server.server_port)
         threading.Thread(target=server.serve_forever,daemon=True).start()
-        chrome=subprocess.Popen(['google-chrome','--headless=new','--no-sandbox','--disable-dev-shm-usage','--remote-debugging-port=0','--user-data-dir='+str(root/'chrome'),'about:blank'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+        chrome=subprocess.Popen(['google-chrome',*([] if os.environ.get('BUZZ_TEST_HEADED')=='1' else ['--headless=new']),'--no-sandbox','--disable-dev-shm-usage','--remote-debugging-port=0','--user-data-dir='+str(root/'chrome'),'about:blank'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
         cdp=None
         try:
             deadline=time.monotonic()+15
@@ -58,6 +59,9 @@ def main():
                     assert cdp.js("document.querySelector('.auth-url').value") == url
                     assert cdp.js("document.querySelector('#authLinks a').target === '_blank' && document.querySelector('#authLinks a').rel === 'noopener noreferrer'")
                 cdp.call('Browser.grantPermissions',{'origin':app.url,'permissions':['clipboardReadWrite','clipboardSanitizedWrite']})
+                # Headed Chrome under Xvfb in CI provides an actual display clipboard.
+                probe=cdp.js("navigator.clipboard.writeText('clipboard-fixture-probe').then(()=>navigator.clipboard.readText())")
+                assert probe=='clipboard-fixture-probe', 'Browser display clipboard failed its independent write/read probe'
                 cdp.call('Runtime.evaluate',{'expression':"document.querySelector('.auth-link button').click()",'userGesture':True})
                 cdp.until("document.querySelector('.auth-link [role=status]').textContent === t('로그인 주소를 복사했습니다. 브라우저 주소창에 붙여넣으세요.')")
                 cdp.until("navigator.clipboard.readText().then(value => value === "+json.dumps(url)+")")
