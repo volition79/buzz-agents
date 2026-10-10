@@ -49,14 +49,47 @@ class RuntimeDiagnostics:
             ("runtime_model_unavailable", (b"model not found", b"invalid model", b"model is not available")),
             ("runtime_adapter_initialization_failed", (b"agent initialize failed", b"agent timed out during init", b"agent failed to spawn")),
             ("runtime_relay_connection_failed", (b"connection refused", b"failed to connect", b"tls error")),
+            ("runtime_process_creation_failed", (b"cannot fork", b"resource temporarily unavailable", b"unable to create new native thread")),
+            ("runtime_approval_review_failed", (b"automatic approval review failed:",)),
             ("runtime_configuration_invalid", (b"configuration error", b"unexpected argument", b"invalid value")),
         )
         result = []
         patterns += tuple((code, (code.encode(),)) for code in (
-            "runtime_prompt_failed", "runtime_adapter_exited", "runtime_protocol_failed"))
+            "runtime_prompt_failed", "runtime_adapter_exited", "runtime_protocol_failed",
+            "runtime_approval_review_failed", "runtime_process_creation_failed"))
         for code, needles in patterns:
             if code not in self.seen and (any(n in data for n in needles) or
                                           ("buzz-agents-diagnostic:" + code).encode() in data):
                 self.seen.add(code)
                 result.append(code)
         return result
+
+
+DIAGNOSTIC_CODES = frozenset("""runtime_authentication_required runtime_rate_limited
+runtime_model_unavailable runtime_adapter_initialization_failed runtime_relay_connection_failed
+runtime_configuration_invalid runtime_prompt_failed runtime_adapter_exited runtime_protocol_failed
+runtime_approval_review_failed runtime_process_creation_failed runtime_process_limit""".split())
+REASON_CODES = frozenset("""operator_action_required first_subscription_login_required explicit_login
+external_graceful_stop external_stop_incomplete native_clean_exit native_process_failed supervisor_fault
+clock_moved_backwards turn_window_limit daily_start_limit quota_storage_failed worker_lifetime_check_failed
+turn_deadline adapter_or_guard_fault unexpected_container_restart""".split())
+
+
+def structured_diagnostic(message):
+    """Inspect only bounded tool-result text, never serialize/log the raw frame."""
+    if not isinstance(message, dict) or message.get('method') != 'session/update':
+        return None
+    params = message.get('params')
+    update = params.get('update') if isinstance(params, dict) else None
+    if not isinstance(update, dict) or update.get('sessionUpdate') not in ('tool_call', 'tool_call_update'):
+        return None
+    content = update.get('content')
+    if not isinstance(content, list):
+        return None
+    for item in content[:16]:
+        nested = item.get('content') if isinstance(item, dict) else None
+        if isinstance(nested, dict) and nested.get('type') == 'text':
+            text = nested.get('text')
+            if isinstance(text, str) and 'automatic approval review failed:' in text[:8192].lower():
+                return 'runtime_approval_review_failed'
+    return None

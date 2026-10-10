@@ -98,6 +98,30 @@ def service_name(pubkey):
     return "bot-" + pubkey[:20]
 
 
+def process_limit(config):
+    """Finite headroom for eager ACP workers, review agents and child commands.
+
+    128 shared + 64 per worker is a conservative initial policy, not a measured
+    guarantee for arbitrary workloads. Legacy registry entries keep their 256
+    until explicitly redeployed with normalized worker settings.
+    """
+    workers = config.get("parallelism")
+    if "env" in config:
+        workers = config["env"].get("BUZZ_ACP_AGENTS", "1")
+    if workers is None:
+        return 256
+    if isinstance(workers, str) and workers.isascii() and workers.isdigit():
+        workers = int(workers)
+    if type(workers) is not int or not 1 <= workers <= 32:
+        raise ToolError("invalid_agent_parallelism")
+    return max(256, 128 + 64 * workers)
+
+
+def process_limit_matches(container, config):
+    actual = container.get("HostConfig", {}).get("PidsLimit")
+    return type(actual) is int and actual == process_limit(config)
+
+
 def service(config, settings):
     root = Path(settings["state_dir"])
     folder = root / "bots" / config["pubkey"]
@@ -112,7 +136,7 @@ def service(config, settings):
         "cap_drop": ["ALL"], "cap_add": ["SETUID", "SETGID", "KILL", "CHOWN", "DAC_OVERRIDE"],
         "security_opt": ["no-new-privileges:true"], "stop_grace_period": "75s",
         "cpus": config["cpus"], "mem_limit": f"{config['memory_mb']}m",
-        "memswap_limit": f"{config['memory_mb']}m", "pids_limit": 256,
+        "memswap_limit": f"{config['memory_mb']}m", "pids_limit": process_limit(config),
         "tmpfs": ["/tmp:size=128m,mode=1777,nosuid,nodev"],
         "environment": {"PYTHONPATH": "/app", "PYTHONDONTWRITEBYTECODE": "1"},
         "volumes": [bind(folder / "config", "/native-config", True),
@@ -136,7 +160,9 @@ def check_ownership(container, config):
 
 
 def public_record(config):
-    return {k: config[k] for k in ("schema", "name", "pubkey", "provider", "workspace", "memory_mb", "cpus", "policy", "fingerprint")}
+    record = {k: config[k] for k in ("schema", "name", "pubkey", "provider", "workspace", "memory_mb", "cpus", "policy", "fingerprint")}
+    record["parallelism"] = int(config["env"].get("BUZZ_ACP_AGENTS", "1"))
+    return record
 
 
 class Deployer:
@@ -210,6 +236,8 @@ class Deployer:
             if running and state.get("status") not in ("stopped", "held", "needs_login"):
                 if actual.get("Image") != self.settings["image_id"]:
                     raise ToolError("stop_native_bot_before_image_upgrade")
+                if not process_limit_matches(actual, config):
+                    raise ToolError("stop_native_bot_before_resource_upgrade")
                 if pubkey in registry and registry[pubkey]["fingerprint"] == config["fingerprint"]:
                     return {"ok": True, "agent_id": name, "action": "already_deployed"}
                 raise ToolError("stop_native_bot_before_changing_settings")
@@ -235,6 +263,8 @@ class Deployer:
         if actual is None or not actual.get("State", {}).get("Running"):
             raise ToolError("deployment_not_running_inspect_host")
         check_ownership(actual, config)
+        if not process_limit_matches(actual, config):
+            raise ToolError("deployment_resource_limit_mismatch")
         return {"ok": True, "agent_id": name, "action": "deployed",
                 "note": "Deployment is not proof of subscription authentication or model health."}
 

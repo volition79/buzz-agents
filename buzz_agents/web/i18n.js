@@ -2,6 +2,13 @@
 // Korean source copy is the message key. Add another catalog to support another locale.
 (() => {
   const catalogs = {en: {
+"프로세스·스레드 한도에 도달했습니다. 봇을 중지한 뒤 최신 버전으로 재배포하세요. 반복되면 동시 실행 수를 줄여 주세요.": "The process/thread limit was reached. Stop the bot and redeploy with the latest version. If it recurs, reduce parallelism.",
+"새 프로세스를 만들지 못했습니다. 자원 사용량과 로그를 확인하세요.": "A new process could not be created. Check resource usage and logs.",
+"자동 승인 검토가 실패했습니다. 자원 상태와 Harness Log를 확인하세요.": "Automatic approval review failed. Check resources and the Harness Log.",
+"프로세스·스레드 사용량이 한도에 가깝습니다. 동시 실행 수를 확인하세요.": "Process/thread usage is near the limit. Check parallelism.",
+"실행 오류가 기록되었습니다. Harness Log를 확인하세요.": "A runtime error was recorded. Check the Harness Log.",
+"최근 프로세스·스레드 사용량": "Last sampled process/thread usage",
+
   "한 단계씩 따라가세요. 번호를 누르면 필요한 단계로 바로 이동합니다.": "Follow one step at a time. Select a number to jump to any step.",
   "먼저 위에서 내 Relay를 연결하세요. 연결 파일을 내려받아 압축을 모두 풀고 Buzz-VPS-Connect.exe를 실행합니다. 저장 완료를 확인한 뒤 Buzz를 다시 여세요.": "Connect your Relay above first. Download and extract all files, then run Buzz-VPS-Connect.exe. Reopen Buzz after the program confirms the connection was saved.",
   "연결 프로그램에서 어떤 키를 누르나요?": "Which key should I press?",

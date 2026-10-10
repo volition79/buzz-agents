@@ -8,7 +8,7 @@ import socket
 import subprocess
 import sys
 import time
-from .diagnostics import RuntimeDiagnostics
+from .diagnostics import RuntimeDiagnostics, structured_diagnostic
 
 MAX_LINE = 4 * 1024 * 1024
 
@@ -71,6 +71,9 @@ class Proxy:
         self.to_agent(message)
 
     def from_agent(self, message):
+        code = structured_diagnostic(message)
+        if code:
+            print("buzz-agents-diagnostic:" + code, file=sys.stderr, flush=True)
         # Notifications or tool permission requests must not consume reply tickets.
         if "method" not in message and "id" in message and ("result" in message or "error" in message):
             ticket = self.active.pop(request_id(message), None)

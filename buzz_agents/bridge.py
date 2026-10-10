@@ -9,6 +9,8 @@ import sys
 from .common import ToolError
 from .host import load_settings, inspect_container, check_ownership, container_name, main as deploy
 from .policy import read_json
+from .runtime_health import public_resources
+from .diagnostics import DIAGNOSTIC_CODES, REASON_CODES
 
 
 def parse_command(command):
@@ -37,6 +39,9 @@ def bot_records(settings):
             check_ownership(actual, item)
         records.append({"pubkey": pubkey, "name": item["name"], "provider": item["provider"],
                         "status": state.get("status", "unknown"),
+                        "diagnostic": state.get("diagnostic") if isinstance(state.get("diagnostic"), str) and state["diagnostic"] in DIAGNOSTIC_CODES else "",
+                        "reason": state.get("reason") if isinstance(state.get("reason"), str) and state["reason"] in REASON_CODES else "",
+                        "resources": public_resources(state.get("resources")),
                         "container_running": bool(actual and actual.get("State", {}).get("Running"))})
     return records
 

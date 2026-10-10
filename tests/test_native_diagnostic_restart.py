@@ -25,6 +25,12 @@ class DiagnosticRestartTests(unittest.TestCase):
                 self.assertTrue(saved['startup_consumed'])
 
     def test_actual_new_launch_clears_old_diagnosis(self):
+        self._new_launch(False)
+
+    def test_new_cgroup_event_is_persisted_even_on_fast_exit(self):
+        self._new_launch(True)
+
+    def _new_launch(self, exhausted):
         from unittest.mock import MagicMock
         with tempfile.TemporaryDirectory() as d:
             root=Path(d);(root/'slots').mkdir(mode=0o700)
@@ -40,6 +46,14 @@ class DiagnosticRestartTests(unittest.TestCase):
                 r,w=os.pipe();os.close(w);f=os.fdopen(r,'rb');pipes.append(f)
                 setattr(process,field,f)
             launch_records=[]
+            class Sampler:
+                diagnostic=""
+                calls=0
+                def sample(self):
+                    self.calls+=1
+                    if exhausted and self.calls>1:
+                        self.diagnostic="runtime_process_limit"
+                    return {"pids_current":251,"pids_max":256,"pids_events_delta":int(bool(self.diagnostic))}
             def launch(*args,**kwargs):
                 launch_records.append(json.loads(state.read_text()))
                 return process
@@ -53,11 +67,15 @@ class DiagnosticRestartTests(unittest.TestCase):
                      patch.object(native.os,'chown'), \
                      patch.object(native.os,'chmod'), \
                      patch.object(native,'Broker'), \
+                     patch.object(native,'ResourceSampler',return_value=Sampler()), \
                      patch.object(native,'stop_group'), \
                      patch.object(native.subprocess,'Popen',side_effect=launch):
                     self.assertEqual(native.main(),0)
                 self.assertEqual(launch_records[0]['status'],'running')
                 self.assertEqual(launch_records[0]['diagnostic'],'')
-                self.assertEqual(json.loads(state.read_text())['diagnostic'],'')
+                final=json.loads(state.read_text())
+                self.assertEqual(final['diagnostic'],'runtime_process_limit' if exhausted else '')
+                self.assertEqual(final['status'],'stopped')
+                self.assertEqual(final['resources']['pids_events_delta'],int(exhausted))
             finally:
                 for f in pipes:f.close()

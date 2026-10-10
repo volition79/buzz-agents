@@ -36,21 +36,23 @@ var idPattern = regexp.MustCompile(`^buzz-native-[a-f0-9]{20}$`)
 
 // Never echo an arbitrary server string even if it resembles a machine code.
 var publicErrors = map[string]bool{
-	"host_memory_reserve_exhausted":    true,
-	"invalid_host_settings":            true,
-	"invalid_relay":                    true,
-	"invalid_owner_attestation":        true,
-	"invalid_replay_floor":             true,
-	"relay_mesh_not_supported":         true,
-	"unsupported_environment":          true,
-	"host_command_failed":              true,
-	"host_command_failed_or_timed_out": true,
-	"host_response_too_large":          true,
-	"nostr_helper_failed":              true,
-	"nostr_helper_invalid":             true,
-	"host_capacity_unavailable":        true,
-	"requested_cpu_exceeds_host":       true,
-	"requested_memory_exceeds_host":    true,
+	"stop_native_bot_before_resource_upgrade": true,
+	"deployment_resource_limit_mismatch":      true,
+	"host_memory_reserve_exhausted":           true,
+	"invalid_host_settings":                   true,
+	"invalid_relay":                           true,
+	"invalid_owner_attestation":               true,
+	"invalid_replay_floor":                    true,
+	"relay_mesh_not_supported":                true,
+	"unsupported_environment":                 true,
+	"host_command_failed":                     true,
+	"host_command_failed_or_timed_out":        true,
+	"host_response_too_large":                 true,
+	"nostr_helper_failed":                     true,
+	"nostr_helper_invalid":                    true,
+	"host_capacity_unavailable":               true,
+	"requested_cpu_exceeds_host":              true,
+	"requested_memory_exceeds_host":           true,
 
 	"connection_revoked_or_invalid":                         true,
 	"configure_relay_first":                                 true,
@@ -223,6 +225,10 @@ func safeErrorCode(err error) string {
 		return code
 	}
 	switch code {
+	case "stop_native_bot_before_resource_upgrade", "stop_native_bot_before_image_upgrade":
+		return "Stop this bot in VPS setup, then redeploy it from Buzz. Existing login and workspace data are retained."
+	case "deployment_resource_limit_mismatch":
+		return "The deployed process limit was not confirmed. Check VPS setup and host logs before retrying."
 	case "home_directory_unavailable", "run_windows_connection_program_first", "invalid_connection_file",
 		"https_endpoint_required", "invalid_connection_token", "invalid_request",
 		"https_deploy_unconfirmed_check_setup_do_not_blindly_retry", "invalid_server_response",

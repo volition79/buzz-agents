@@ -14,6 +14,7 @@ import time
 from .common import ToolError, clean_env
 from .policy import Policy, Broker, atomic_json, read_json
 from .diagnostics import RuntimeDiagnostics
+from .runtime_health import ResourceSampler, public_resources
 
 UID = 10001
 
@@ -95,10 +96,16 @@ def main():
     status, reason = state_on_start(previous)
     startup_consumed = bool((previous or {}).get("startup_consumed", False))
     latest_diagnostic = (previous or {}).get("diagnostic", "")
+    resources = public_resources((previous or {}).get("resources"))
+    sampler = ResourceSampler()
+    next_sample = 0.0
+    saved_status, saved_reason = status, reason
     def save(status, reason=""):
+        nonlocal saved_status, saved_reason
+        saved_status, saved_reason = status, reason
         atomic_json(state_dir / "runtime.json", {"status": status, "reason": reason,
                     "pubkey": config["pubkey"], "updated_at": time.time(),
-                    "startup_consumed": startup_consumed, "diagnostic": latest_diagnostic})
+                    "startup_consumed": startup_consumed, "diagnostic": latest_diagnostic, "resources": resources})
     if status == "ready" and not (state_dir / ("auth-" + config["provider"] + ".json")).is_file():
         status, reason = "needs_login", "first_subscription_login_required"
     save(status, reason)
@@ -126,19 +133,29 @@ def main():
     selector = selectors.DefaultSelector()
     diagnostic_streams = {}
     def drain():
-        nonlocal latest_diagnostic
+        nonlocal latest_diagnostic, resources, next_sample
         for event, _ in selector.select(0.05):
             chunk = os.read(event.fd, 65536)
             if not chunk:
                 selector.unregister(event.fileobj)
                 continue
             for code in diagnostic_streams[event.fd].feed(chunk):
-                latest_diagnostic = code
+                if latest_diagnostic != "runtime_process_limit":
+                    latest_diagnostic = code
                 logging.warning("native_diagnostic:%s", code)
+        if time.monotonic() >= next_sample:
+            resources = sampler.sample()
+            if sampler.diagnostic and latest_diagnostic != sampler.diagnostic:
+                latest_diagnostic = sampler.diagnostic
+                logging.warning("native_diagnostic:%s", latest_diagnostic)
+            next_sample = time.monotonic() + 5
+            save(saved_status, saved_reason)
     try:
         launch_env = runtime_env(config, socket_path, startup_consumed)
         startup_consumed = True
         latest_diagnostic = ""  # A new launch owns a new diagnostic generation.
+        resources = sampler.sample()  # Establish lifetime-counter baseline before spawning.
+        next_sample = time.monotonic() + 5
         save("running")  # Never resurrect if the supervisor dies before it can record a safe stop.
         process = subprocess.Popen(["buzz-acp", "--agent-args", ""], cwd="/workspace",
                     env=launch_env, stdin=subprocess.DEVNULL,
@@ -151,6 +168,9 @@ def main():
         logging.info("native_started:%s:%s", config["pubkey"], config["provider"])
         while process.poll() is None and not stopping.is_set() and not policy.check():
             drain()
+        # Capture short-lived failures even before the periodic five-second tick.
+        next_sample = 0.0
+        drain()  # Sample even if both output streams already reached EOF.
         # Collect final initialization/error bytes after fast native exit.
         for _ in range(5):
             if not selector.get_map():

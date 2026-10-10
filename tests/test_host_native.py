@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from copy import deepcopy
 from buzz_agents.common import ToolError
-from buzz_agents.host import Deployer, compose_document, labels, container_name, service_name
+from buzz_agents.host import Deployer, compose_document, labels, container_name, service_name, process_limit, public_record
 from buzz_agents.native import state_on_start, runtime_env, runtime_parallelism
 from buzz_agents.policy import atomic_json, read_json
 from helpers import config,settings, PUBKEY
@@ -20,10 +20,64 @@ class HostTests(unittest.TestCase):
             if argv[:3]==['docker','image','inspect']:return json.dumps([{'Id':self.settings['image_id']}]).encode()
             if argv[:2]==['docker','info']:return json.dumps({'NCPU':16,'MemTotal':64*1024**3}).encode()
             if 'up' in argv:
-                self.actual={'State':{'Running':True},'Image':self.settings['image_id'],'Config':{'Labels':labels(self.config)}}
+                self.actual={'HostConfig':{'PidsLimit':process_limit(self.config)},'State':{'Running':True},'Image':self.settings['image_id'],'Config':{'Labels':labels(self.config)}}
             return b''
         self.deploy=Deployer(self.settings,runner,lambda n:self.actual,lambda request:self.config)
     def tearDown(self):self.tmp.cleanup()
+    def test_worker_budget_and_registry_roundtrip(self):
+        for workers in (1, 10, 32):
+            self.config['env']['BUZZ_ACP_AGENTS']=str(workers)
+            self.assertEqual(process_limit(self.config), max(256, 128+64*workers))
+            self.assertEqual(process_limit(public_record(self.config)), process_limit(self.config))
+        legacy=public_record(self.config);legacy.pop('parallelism')
+        self.assertEqual(process_limit(legacy),256)
+    def test_live_old_limit_requires_explicit_stop(self):
+        self.config['env']['BUZZ_ACP_AGENTS']='10'
+        self.deploy.deploy({})
+        self.actual['HostConfig']['PidsLimit']=256
+        atomic_json(self.root/'bots'/PUBKEY/'state/runtime.json',{'status':'running'})
+        self.commands.clear()
+        with self.assertRaisesRegex(ToolError,'stop_native_bot_before_resource_upgrade'):
+            self.deploy.deploy({})
+        self.assertFalse(any('up' in c or 'stop' in c for c in self.commands))
+        atomic_json(self.root/'bots'/PUBKEY/'state/runtime.json',{'status':'stopped'})
+        self.deploy.deploy({})
+        self.assertEqual(self.actual['HostConfig']['PidsLimit'],768)
+    def test_deploy_readback_rejects_missing_limits(self):
+        original=self.deploy.run
+        def runner(*args,**kwargs):
+            result=original(*args,**kwargs)
+            if self.actual:self.actual.pop('HostConfig',None)
+            return result
+        self.deploy.run=runner
+        with self.assertRaisesRegex(ToolError,'deployment_resource_limit_mismatch'):
+            self.deploy.deploy({})
+    def test_invalid_worker_budget_fails_closed(self):
+        for value in (True, 0, 33, 'NaN', '-1', '1.5'):
+            self.config['env']['BUZZ_ACP_AGENTS']=value
+            with self.assertRaises(ToolError):process_limit(self.config)
+    def test_resource_upgrade_preserves_data_and_other_registration(self):
+        self.deploy.deploy({})
+        root=self.root/'bots'/PUBKEY
+        kept=[root/'home/codex/auth.json',root/'state/quota.json',self.root/'workspaces'/self.config['workspace']/'work.txt']
+        for p in kept:p.write_text('preserve')
+        registry=read_json(self.root/'registry.json')
+        other=public_record(config(pub='e'*64));other.pop('parallelism')
+        registry['e'*64]=other;atomic_json(self.root/'registry.json',registry)
+        self.config['env']['BUZZ_ACP_AGENTS']='10'
+        atomic_json(root/'state/runtime.json',{'status':'stopped'})
+        self.deploy.deploy({})
+        for p in kept:self.assertEqual(p.read_text(),'preserve')
+        self.assertEqual(read_json(self.root/'registry.json')['e'*64],other)
+        self.assertEqual(read_json(self.root/'compose.yaml')['services'][service_name('e'*64)]['pids_limit'],256)
+    def test_wrong_numeric_readback_is_rejected(self):
+        original=self.deploy.run
+        def runner(*args,**kwargs):
+            result=original(*args,**kwargs)
+            if self.actual:self.actual['HostConfig']['PidsLimit']=1
+            return result
+        self.deploy.run=runner
+        with self.assertRaisesRegex(ToolError,'deployment_resource_limit_mismatch'):self.deploy.deploy({})
     def test_new_bot_creates_only_v2_project(self):
         result=self.deploy.deploy({})
         self.assertTrue(result['ok'])

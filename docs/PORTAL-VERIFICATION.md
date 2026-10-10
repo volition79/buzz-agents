@@ -1,3 +1,11 @@
+# PID/thread capacity candidate — 2026-10-10
+
+This candidate replaces the fixed per-bot256 PID ceiling with a finite worker-scaled budget (10 workers:768). Existing running bots require explicit stop/redeploy when their limit differs. Login, workspace, identity and quota data are retained. Cgroup-v2 snapshots and safe diagnostic categories distinguish observed limit events from generic process-creation failures; ko/en setup shows last sampled usage.
+
+Local Python201-test suite plus final host31, native3, resource6 tests passed; Go provider tests and real Chrome language/health checks passed. Candidate CI below must pass before canonical Compose promotion. This is not proof of leak-free runtime, real Codex/Claude10-worker success or Windows-off scheduled completion. See [incident boundaries](process-limit-investigation.md).
+
+Previous release evidence follows.
+
 # Runtime and setup recovery candidate — 2026-10-10
 
 Published source70dee396ee1f343b81929f69a0c9d7e1f65f5a53 passed candidate CI38015081911. Release portal-candidate-70dee396ee1f-26-1: all7 manifest assets downloaded anonymously and verified. Windows executables reproduced with Go1.26.5; native Windows connector tests and provider info smoke passed. Immutable install ee741f5e9be0f4cee88e476e4446337136287b1b passed exact public URL Docker CI38015539605. Compose SHA256 da2f545d95f2b31a184e9e41cc21d8c7aa2d7e271080ceddd103d16ef93d8ee7. VPS untouched; user performs real-account and Windows-off tests.

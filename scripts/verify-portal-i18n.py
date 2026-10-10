@@ -61,6 +61,11 @@ def main():
                     assert 'portal_recover' not in cdp.js("document.querySelector('#accessHelp').textContent")
                 else:
                     assert '최초 설정 코드' in cdp.js("document.querySelector('#setupCodeField').textContent")
+                health = cdp.js("botHealth({diagnostic:'runtime_process_limit',resources:{pids_current:251,pids_max:256}})")
+                assert '251 / 256' in health
+                assert ('한도' in health) if expected == 'ko' else ('limit' in health and not re.search('[가-힣]', health))
+                assert 'SECRET' not in cdp.js("botHealth({diagnostic:'SECRET'})")
+                assert cdp.js("botHealth({resources:{health_warning:'runtime_process_limit_near_capacity'}})")
                 # Real invalid/expired setup-code response must be localized too.
                 cdp.js("document.querySelector('#setupCode').value='invalid';document.querySelector('#password').value='test-password-123';document.querySelector('#loginForm button').click()")
                 word = '만료' if expected == 'ko' else 'expired'

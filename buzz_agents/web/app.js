@@ -114,6 +114,21 @@ async function discover() {
 }
 function fillRelay(record){$('relay').value=record.relay;$('owner').value=record.owner;if(!record.membership_required)message(t('이 Relay의 멤버십 제한을 자동 확인하지 못했습니다. 기존 Buzz 설치 설정을 확인해 주세요.'),true);}
 function statusName(status){return ({needs_login:t('계정 로그인 필요'),ready:t('시작 준비'),running:t('실행 중'),stopped:t('중지됨'),held:t('보호 정책으로 대기'),unknown:t('상태 확인 필요')})[status]||status;}
+function botHealth(bot){
+  const messages={
+    runtime_process_limit:t('프로세스·스레드 한도에 도달했습니다. 봇을 중지한 뒤 최신 버전으로 재배포하세요. 반복되면 동시 실행 수를 줄여 주세요.'),
+    runtime_process_creation_failed:t('새 프로세스를 만들지 못했습니다. 자원 사용량과 로그를 확인하세요.'),
+    runtime_approval_review_failed:t('자동 승인 검토가 실패했습니다. 자원 상태와 Harness Log를 확인하세요.'),
+    runtime_process_limit_near_capacity:t('프로세스·스레드 사용량이 한도에 가깝습니다. 동시 실행 수를 확인하세요.')
+  };
+  const resources=bot.resources||{};
+  const code=bot.diagnostic||resources.health_warning;
+  const parts=[];
+  if(messages[code])parts.push(messages[code]);
+  else if(bot.diagnostic)parts.push(t('실행 오류가 기록되었습니다. Harness Log를 확인하세요.'));
+  if(Number.isSafeInteger(resources.pids_current)&&Number.isSafeInteger(resources.pids_max))parts.push(t('최근 프로세스·스레드 사용량')+': '+resources.pids_current+' / '+resources.pids_max);
+  return parts.join(' ');
+}
 async function refresh(){
   const data=await api('status');configured=data.configured;
   $('download').disabled=!configured;$('relayBadge').textContent=configured?t('연결됨'):t('연결 대기');$('step1').classList.toggle('done',configured);
@@ -124,7 +139,7 @@ async function refresh(){
   $('saveRelay').hidden=configured;$('discover').hidden=configured;
   $('bots').replaceChildren();const selected=$('scheduleBot').value;$('scheduleBot').replaceChildren();
   if(!data.bots.length){const p=document.createElement('p');p.className='empty';p.textContent=t('Windows Buzz에서 봇을 만들고 배포하면 여기에 표시됩니다.');$('bots').append(p);}
-  for(const bot of data.bots){const card=document.createElement('div');card.className='bot';const details=document.createElement('div');const name=document.createElement('strong');name.textContent=bot.name;const sub=document.createElement('small');sub.textContent=(bot.provider==='codex'?'Codex':'Claude Code')+' · '+bot.pubkey.slice(0,12)+'…';details.append(name,sub);const state=document.createElement('span');state.className='state';state.textContent=statusName(bot.status);const button=document.createElement('button');button.className='secondary';button.textContent=t('계정 로그인');button.disabled=bot.status==='running'||!bot.container_running||Boolean(authSession);button.onclick=async()=>{button.disabled=true;try{await startLogin(bot);}catch(e){message(e.message,true);button.disabled=false;}};card.append(details,state,button);$('bots').append(card);const option=document.createElement('option');option.value=bot.pubkey;option.textContent=bot.name;$('scheduleBot').append(option);}
+  for(const bot of data.bots){const card=document.createElement('div');card.className='bot';const details=document.createElement('div');const name=document.createElement('strong');name.textContent=bot.name;const sub=document.createElement('small');sub.textContent=(bot.provider==='codex'?'Codex':'Claude Code')+' · '+bot.pubkey.slice(0,12)+'…';details.append(name,sub);const health=botHealth(bot);if(health){const info=document.createElement('small');info.textContent=health;details.append(info);}const state=document.createElement('span');state.className='state';state.textContent=statusName(bot.status);const button=document.createElement('button');button.className='secondary';button.textContent=t('계정 로그인');button.disabled=bot.status==='running'||!bot.container_running||Boolean(authSession);button.onclick=async()=>{button.disabled=true;try{await startLogin(bot);}catch(e){message(e.message,true);button.disabled=false;}};card.append(details,state,button);$('bots').append(card);const option=document.createElement('option');option.value=bot.pubkey;option.textContent=bot.name;$('scheduleBot').append(option);}
   if(selected)$('scheduleBot').value=selected;
   const devices=await api('devices');$('devices').replaceChildren();$('step2').classList.toggle('done',devices.devices.length>0);
   knownDevices=new Set(devices.devices.map(d=>d.id));
