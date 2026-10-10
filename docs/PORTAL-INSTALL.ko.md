@@ -17,7 +17,7 @@ v0.4 공개 개발 후보입니다. GitHub에서 이미지 빌드·임시 Compos
 캡처 기반 한국어·영어 안내, 실제 Relay 주소 복사와 Windows 연결 상태별 선택을 포함한 Docker Manager **컴포즈 → URL에서 Compose** 주소:
 
 ```text
-https://raw.githubusercontent.com/volition79/buzz-agents/main/docker-compose.yml
+https://raw.githubusercontent.com/volition79/buzz-agents/ebf871a23f6922cfdd8a45fc8ad4dc65436e5d08/docker-compose.yml
 ```
 
 최초 설정에서 HTTP400을 보았다면 이번 URL로 업데이트한 뒤 Docker Manager의 **열기**로 다시 접속하세요. 주소 끝에 `?`가 남은 오류 페이지를 새로고침하지 마세요. portal 로그의 최신 최초 설정 코드를 사용합니다. 설정 버튼은 화면 준비가 끝나면 활성화됩니다.

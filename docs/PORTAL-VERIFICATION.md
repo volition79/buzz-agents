@@ -4,6 +4,8 @@ Fixes official previous-provider rejection during reconnect. The installer embed
 
 Release maintainers: run `python3 scripts/provider-history.py --write --download-dir /tmp/buzz-provider-history`, review and commit the catalog, then publish. CI uses `--check` before building and supplies verified binaries to real upgrade tests. No credential or installed-user configuration is changed by these tests. Live VPS/AI acceptance remains separate.
 
+Published source `3126a43128b085f7d288e69934bd24f4b8d6d404`: [candidate CI38023046793](https://github.com/volition79/buzz-agents/actions/runs/38023046793) passed207 Python tests, Go race/vet and actual released-provider fixtures, browser route and Docker startup/upgrade checks. Local native Windows9 official providers ×2 upgrade paths passed. Anonymous7 assets,38 runtime/web files, embedded history and both Windows binaries matched reviewed bytes. Immutable install `ebf871a23f6922cfdd8a45fc8ad4dc65436e5d08` passed [exact URL CI38023462552](https://github.com/volition79/buzz-agents/actions/runs/38023462552); Compose SHA256 `4a7b03cd69522728ef008ac35779659c38b929591c869cc83d4673f6246c557c`. No live user configuration changed.
+
 Previous evidence follows.
 
 # PID/thread capacity candidate — 2026-10-10
