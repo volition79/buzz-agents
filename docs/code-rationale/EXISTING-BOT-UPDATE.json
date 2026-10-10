@@ -113,9 +113,12 @@
           "provider": "Claude and Codex ACP",
           "execution_environment": "Ubuntu Docker VPS"
         },
-        "status": "planned",
+        "status": "passed",
         "evidence_kind": "native_execution",
-        "evidence": []
+        "evidence": [
+          "https://github.com/volition79/buzz-agents/actions/runs/38056923464",
+          "scripts/verify-bot-update-docker.py"
+        ]
       }
     ]
   },

@@ -1,3 +1,6 @@
+Published `portal-candidate-4581d501a9e3-36-1` from source `4581d501a9e385206e9b8ee152e6c6be61bed334`.
+[CI38056923464](https://github.com/volition79/buzz-agents/actions/runs/38056923464) passed259 Python tests, Go race/vet, browser checks, four Docker startup/upgrade fixtures and real Docker existing-bot replacement for both providers. Anonymous readback verified7 manifest assets,40 runtime/build source files,125 public source files and both Windows binaries against local Go1.26.5 builds. Canonical Compose adopts only the reviewed immutable image references. Exact public Raw startup is checked separately before handoff. Live VPS/account and Windows-off acceptance remain pending.
+
 # Existing bot update candidate — 2026-10-10
 
 Adds an administrator-only **Update / restart** action for existing Claude/Codex

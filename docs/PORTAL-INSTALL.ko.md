@@ -17,10 +17,10 @@ v0.4 공개 개발 후보입니다. GitHub에서 이미지 빌드·임시 Compos
 캡처 기반 한국어·영어 안내, 실제 Relay 주소 복사와 Windows 연결 상태별 선택을 포함한 Docker Manager **컴포즈 → URL에서 Compose** 주소:
 
 ```text
-https://raw.githubusercontent.com/volition79/buzz-agents/ebf871a23f6922cfdd8a45fc8ad4dc65436e5d08/docker-compose.yml
+https://raw.githubusercontent.com/volition79/buzz-agents/main/docker-compose.yml
 ```
 
-최초 설정에서 HTTP400을 보았다면 이번 URL로 업데이트한 뒤 Docker Manager의 **열기**로 다시 접속하세요. 주소 끝에 `?`가 남은 오류 페이지를 새로고침하지 마세요. portal 로그의 최신 최초 설정 코드를 사용합니다. 설정 버튼은 화면 준비가 끝나면 활성화됩니다.
+위 URL은 신규 설치용입니다. 기존 설치는 프로젝트를 유지하고 위의 기존 봇 업데이트 안내에 있는 이미지 참조만 갱신한 뒤 **열기**로 다시 접속하세요. 주소 끝에 `?`가 남은 오류 페이지를 새로고침하지 마세요. portal 로그의 최신 최초 설정 코드를 사용합니다. 설정 버튼은 화면 준비가 끝나면 활성화됩니다.
 
 로그인 직후 조회가 계속 실패하면 **서버 연결 다시 확인**을 누르세요. 커뮤니티 주소는 기다리기만 해서는 표시되지 않습니다. **01 / 내 Relay 연결 → 이 Relay로 연결**로 저장하면 Windows Buzz용 주소가 자동으로 표시됩니다. 안내 이미지는 초기 조회 후 순서대로 불러옵니다.
 

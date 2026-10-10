@@ -1,5 +1,29 @@
 # 기존 봇 업데이트 / Update existing bots
 
+## Verified release references / 검증된 릴리스 참조
+
+Release: `portal-candidate-4581d501a9e3-36-1` · [CI verification](https://github.com/volition79/buzz-agents/actions/runs/38056923464).
+
+In the **existing** project, replace only these values. 기존 프로젝트에서 아래 값만 변경하세요.
+
+`broker.image`
+
+```text
+ghcr.io/volition79/buzz-agents-broker@sha256:471451bf9546d93711b5e82535779684c06568190104d39c65624484010d33ee
+```
+
+`broker.environment.BUZZ_RUNTIME_IMAGE and runtime-image.image`
+
+```text
+ghcr.io/volition79/buzz-agents-runtime@sha256:a98466829a95c47b2c84ed4620e8f80df64b891fbaa74636bee1cd647ebfd801
+```
+
+`portal.image`
+
+```text
+ghcr.io/volition79/buzz-agents-portal@sha256:0a9483daf9e8b5b8354fe1fbab7b528ce62adde8d2054b51cbb963c7f5520b47
+```
+
 ## 한국어
 
 Docker Manager에서 관리 서비스만 업데이트해도 이미 실행 중인 봇의 이미지는 바뀌지 않습니다. 또한 Windows Buzz의 `Deployed`는 배포 등록 상태이므로 Shutdown 후에도 남을 수 있습니다. 그 상태에서 봇을 삭제하거나 새로 만들 필요는 없습니다.
