@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -143,5 +144,16 @@ func TestSuccessfulDeployRemainsMachineReadable(t *testing.T) {
 	var result map[string]any
 	if status != 0 || diagnostic.Len() != 0 || json.Unmarshal(out.Bytes(), &result) != nil || result["ok"] != true {
 		t.Fatal(status, out.String(), diagnostic.String())
+	}
+}
+
+func TestResourceUpgradeHintPreservesCode(t *testing.T) {
+	for _, code := range []string{"stop_native_bot_before_resource_upgrade", "stop_native_bot_before_image_upgrade"} {
+		if got := safeErrorCode(errors.New(code)); got != code {
+			t.Fatalf("code: %s", got)
+		}
+		if !strings.Contains(errorHint(code), "Windows Buzz") {
+			t.Fatal("missing concrete stop guidance")
+		}
 	}
 }

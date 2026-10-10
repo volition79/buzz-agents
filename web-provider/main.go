@@ -225,10 +225,6 @@ func safeErrorCode(err error) string {
 		return code
 	}
 	switch code {
-	case "stop_native_bot_before_resource_upgrade", "stop_native_bot_before_image_upgrade":
-		return "Stop this bot in VPS setup, then redeploy it from Buzz. Existing login and workspace data are retained."
-	case "deployment_resource_limit_mismatch":
-		return "The deployed process limit was not confirmed. Check VPS setup and host logs before retrying."
 	case "home_directory_unavailable", "run_windows_connection_program_first", "invalid_connection_file",
 		"https_endpoint_required", "invalid_connection_token", "invalid_request",
 		"https_deploy_unconfirmed_check_setup_do_not_blindly_retry", "invalid_server_response",
@@ -240,6 +236,10 @@ func safeErrorCode(err error) string {
 }
 func errorHint(code string) string {
 	switch code {
+	case "stop_native_bot_before_resource_upgrade", "stop_native_bot_before_image_upgrade":
+		return "Stop this bot in Windows Buzz, then redeploy it from Buzz. Existing login and workspace data are retained."
+	case "deployment_resource_limit_mismatch":
+		return "The deployed process limit was not confirmed. Check VPS setup and host logs before retrying."
 	case "run_windows_connection_program_first", "invalid_connection_file", "invalid_connection_token", "connection_revoked_or_invalid":
 		return "Download a new Windows connection bundle from VPS setup and reconnect."
 	case "set_bot_parallelism_to_one":

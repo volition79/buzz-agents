@@ -12,7 +12,7 @@ This is finite initial headroom, not a workload guarantee. CPU/RAM limits remain
 raising a PID ceiling does not reserve CPU/RAM or make10 workers fit every VPS.
 Parallelism remains user-controlled1..32, default10. Guardian remains enabled.
 Old registry entries retain256 until explicitly redeployed. A running container
-with mismatched limits is rejected before mutation. Stop the bot in setup and
+with mismatched limits is rejected before mutation. Stop the bot in Windows Buzz and
 redeploy from Buzz; provider login, workspace, identity and quota are retained.
 A management-project restart alone does not recreate existing bot containers.
 
