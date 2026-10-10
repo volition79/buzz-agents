@@ -1,3 +1,23 @@
+# Runtime recovery and mobile pairing candidate — 2026-10-10
+
+New deployments use optional prompt budgets (0 = disabled), official 25-minute
+idle / two-hour turn defaults, and per-worker deadline recovery. Enabled budgets
+expire without permanently holding the bot. Existing stored settings are preserved;
+stop and redeploy each bot with reviewed settings to adopt the runtime correction.
+Cleanup/storage integrity faults still hold safely. Legacy expired budget holds
+may recover; operator stops and login requirements do not auto-clear.
+
+ACP framing matches the pinned official 10MB line limit; specific safe diagnostic
+codes replace ambiguous protocol errors. Earlier runtime_protocol_failed cannot
+be retrospectively attributed to one cause from the old logs.
+
+Includes previously approved mobile pairing setup and Korean/English guidance.
+Local Python regression, both provider schema tests and bilingual browser checks
+passed. See docs/GUARD-RECOVERY.md and docs/MOBILE-PAIRING.md for evidence and limits.
+CI must pass real Docker startup/upgrade tests and anonymous artifact access before
+install handoff. Actual VPS installation, account login and Windows-off execution
+remain user acceptance steps. No live VPS changes are performed by this release.
+
 # Windows provider upgrade history — 2026-10-10
 
 Fixes official previous-provider rejection during reconnect. The installer embeds a reviewed offline catalog of public provider hashes. The release workflow verifies completeness against all public candidate manifests and checks actual EXE bytes (including embedded backends in early installers); missing or changed releases block publication. Unknown or modified executables remain protected.

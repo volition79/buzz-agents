@@ -170,10 +170,10 @@ Buzz의 기본 봇 생성/편집 UI에서 이름·역할·모델을 설정합니
 | `workspace` | `private` | 개별 작업 공간. 같은 문자열의 그룹을 쓰면 파일 공유 |
 | `memory_mb` | 1536 | 봇 컨테이너 메모리 제한 |
 | `cpus` | 0.75 | CPU 사용 상한 |
-| `max_turn_seconds` | 1800 | AI 한 번의 처리 시간 상한 |
-| `turn_limit` | 20 | 지정된 시간 구간의 AI 턴 시작 상한 |
+| `max_turn_seconds` | 7200 | 공식 실행기가 적용하는 작업당 최대 시간 (초) |
+| `turn_limit` | 0 | 지정 시간 구간의 요청 시작 한도. 0은 제한 없음 |
 | `window_seconds` | 3600 | 호출 수를 셀 시간 구간 |
-| `daily_limit` | 100 | 최근 24시간의 AI 턴 시작 상한 |
+| `daily_limit` | 0 | 최근 24시간 요청 시작 한도. 0은 제한 없음 |
 
 Buzz의 봇별 동시 실행 설정(1~32, 기본값 10)을 VPS에서도 그대로 사용합니다. 사용자가 VPS의 CPU·메모리와 봇 수에 맞게 직접 조절하세요. 10은 동시 실행 상한이며 항상 10개 작업을 실행한다는 뜻은 아닙니다. 봇의 CPU·메모리 제한은 전체 작업이 공유하며, 작업 시작 횟수 제한도 봇 단위로 합산합니다.
 
@@ -301,3 +301,47 @@ Supported boundary: Codex ACP / Claude Agent ACP, owner-attested private Relay, 
 Release pipeline: build-portal.py creates the artifact manifest; render-portal-release.py adds the final digest-pinned Compose and SHA256SUMS. Immediately before publication, run its --verify mode. Existing artifact hash mismatches fail the release.
 
 로그인 만료 정리가 실패하면 `login_cleanup_pending`만 기록하고 다른 봇의 로그인은 계속 허용합니다. 실패한 실행의 종료를 확인하기 전에는 해당 봇의 중복 로그인을 막고 실행 한도도 유지합니다. 이후 요청에서 30초 간격으로 정리를 재시도합니다. 배포 파일 목록은 `render-portal-release.py --list-assets --output ...`의 검증 결과를 사용합니다.
+
+
+## 정상 작업과 오류 복구 / Healthy work and failure recovery
+
+새 배포의 기본값은 횟수 제한 없음(0), 활동이 없는 대기 시간 25분,
+작업당 최대 2시간입니다. 공식 buzz-acp가 실패 유형별 재시도와 취소를
+처리하며, 이 패키지는 자체 자동 재시도 루프를 추가하지 않습니다.
+별도 안전 시간은 최대 시간 이후 120초이며 해당 작업 실행기만 종료합니다.
+한 작업 실패로 다른 작업을 중단하지 않습니다. 다만 정리 실패·저장 오류 등
+안전성을 확인할 수 없는 상태는 여전히 봇을 보류합니다.
+
+기존 봇의 20/100회·30분·5분 설정은 자동 변경하지 않습니다. 최신 연결기와
+런타임을 설치한 후 Buzz에서 봇을 중지하고, 제공자 설정의 `turn_limit`과
+`daily_limit`을 0, `max_turn_seconds`를 7200으로 설정해 다시 배포하세요.
+별도로 지정한 `BUZZ_ACP_IDLE_TIMEOUT`/`BUZZ_ACP_MAX_TURN_DURATION`도 확인하세요.
+봇 삭제, 작업 파일 삭제, 재로그인은 필요하지 않습니다. 설정 화면이 아직
+옛 기본값을 보여주면 최신 Windows 연결기를 설치하고 Buzz를 다시 여세요.
+
+선택한 횟수 한도는 재시도 요청을 포함해 허용된 `session/prompt` 시작을 셉니다.
+토큰 비용 제한이 아닙니다. 한도에 걸리면 해당 요청에 이유와 재시도까지의
+초를 반환하고 봇은 유지합니다. 한도 종료 후 새 요청을 받을 수 있지만,
+공식 실행기가 이미 포기한 요청을 자동으로 되살리지는 않습니다.
+예전 버전의 횟수 제한 보류만 실제 사용 기록상 한도가 풀렸을 때 해제합니다.
+로그인 필요, 사용자 중지, 비정상 종료, 정리 실패는 자동 해제하지 않습니다.
+
+New deployments default to no prompt-count budget (0), 25 minutes of inactivity,
+and a two-hour turn cap. Official buzz-acp owns retries and cancellation. A local
+worker fallback allows a further 120 seconds for cleanup, then stops only that
+worker. Storage/integrity/cleanup failures still hold the bot.
+Existing values are preserved: stop the bot, set turn_limit/daily_limit to 0 and
+max_turn_seconds to 7200, check explicit timeout environment settings, and redeploy
+with the updated runtime/provider. Do not delete bots, files or credentials.
+Optional budgets count admitted prompts, including retries, not tokens. Expiry
+allows new requests; it does not replay requests already abandoned by upstream.
+Only expired legacy quota holds self-rearm; other stop/auth/fault states remain.
+
+작업 실행기의 안전 종료 뒤에도 30초 동안 티켓이 남으면
+`worker_cleanup_timeout`으로 봇을 보류합니다. 정상 작업 횟수가 아니라
+종료 확인 실패에 대한 최종 안전장치입니다. 의미 없는 대화가 성공 응답으로
+반복되는지까지 자동 판별하는 기능은 아니므로, 필요하면 선택 한도를 설정하세요.
+If a ticket remains for another 30 seconds after the worker watchdog, the supervisor
+holds the bot with worker_cleanup_timeout. This is a cleanup-integrity fallback,
+not a normal-work quota. Successful but unproductive conversations are not detected
+semantically; optional budgets remain available.

@@ -73,9 +73,17 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(c['policy']['max_turn_seconds'],120)
         self.assertLess(int(c['env']['BUZZ_ACP_IDLE_TIMEOUT']),120)
 
+    def test_explicit_native_duration_can_exceed_default_within_official_cap(self):
+        a=agent();a['launch']['policy_env']['BUZZ_ACP_MAX_TURN_DURATION']='10800'
+        c=normalize(a,{},OWNER,RELAY,derive=lambda _:PUBKEY)
+        self.assertEqual(c['policy']['max_turn_seconds'],10800)
+        self.assertEqual(normalize(a,{'max_turn_seconds':900},OWNER,RELAY,derive=lambda _:PUBKEY)['policy']['max_turn_seconds'],900)
+        a['launch']['policy_env']['BUZZ_ACP_MAX_TURN_DURATION']='604801'
+        with self.assertRaises(ToolError):normalize(a,{},OWNER,RELAY,derive=lambda _:PUBKEY)
+
     def test_unsafe_options_refused(self):
         for options in ({'memory_mb':16777217},{'cpus':float('nan')},{'workspace':'../../root'},
-                        {'turn_limit':0},{'max_turn_seconds':True},{'daily_limit':0}):
+                        {'turn_limit':-1},{'max_turn_seconds':True},{'daily_limit':-1}):
             with self.subTest(options=options), self.assertRaises(ToolError): config(options=options)
 
     def test_shared_workspace_requires_explicit_group(self):

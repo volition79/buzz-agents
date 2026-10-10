@@ -135,7 +135,7 @@ def _reconcile(path, data, image_ref=None, portal_ref=None):
         raise ToolError('bootstrap_portal_compose_image_changed')
     raw = json.loads(execute(cmd + ['config', '--format', 'json', '--no-interpolate',
                                     '--no-env-resolution', '--no-path-resolution', '--no-normalize']))
-    if set(raw.get('services', {})) - {'broker', 'portal', 'runtime-image', 'setup-route'}:
+    if set(raw.get('services', {})) - {'broker', 'portal', 'runtime-image', 'setup-route', 'mobile-pairing'}:
         raise ToolError('bootstrap_unexpected_compose_services')
     expected_service = service(data, image_ref)
     current = raw.get('services', {}).get('setup-route')

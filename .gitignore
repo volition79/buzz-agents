@@ -12,3 +12,4 @@ web-provider/buzz-vps-web-provider
 connect/buzz-vps-connect
 dist/
 .sonol-test/runtime/
+codemap-go-v2/

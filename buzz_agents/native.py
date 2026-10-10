@@ -12,7 +12,7 @@ import subprocess
 import threading
 import time
 from .common import ToolError, clean_env
-from .policy import Policy, Broker, atomic_json, read_json
+from .policy import Policy, Broker, atomic_json, read_json, budget_wait
 from .diagnostics import RuntimeDiagnostics
 from .runtime_health import ResourceSampler, public_resources
 
@@ -73,11 +73,16 @@ def stop_group(process, grace=60, drain=None):
     process.wait(timeout=5)
 
 
-def state_on_start(previous):
+def state_on_start(previous, limits=None, quota=None, now=None):
     if previous is None or previous.get("status") == "ready":
         return "ready", ""
     if previous.get("status") == "running":
         return "held", "unexpected_container_restart"
+    if (previous.get("status") == "held" and limits is not None and quota is not None
+            and previous.get("reason") in ("turn_window_limit", "daily_start_limit")
+            and (time.time() if now is None else now) + 2 >= quota.get("last", 0)
+            and budget_wait(limits, quota, time.time() if now is None else now) is None):
+        return "ready", "expired_budget_hold"
     return previous.get("status", "held"), previous.get("reason", "operator_action_required")
 
 
@@ -93,7 +98,9 @@ def main():
     for sig in (signal.SIGTERM, signal.SIGINT):
         signal.signal(sig, lambda *_: stopping.set())
     previous = read_json(state_dir / "runtime.json")
-    status, reason = state_on_start(previous)
+    def startup_state(record):
+        return state_on_start(record, config.get("policy"), read_json(state_dir / "quota.json"))
+    status, reason = startup_state(previous)
     startup_consumed = bool((previous or {}).get("startup_consumed", False))
     latest_diagnostic = (previous or {}).get("diagnostic", "")
     resources = public_resources((previous or {}).get("resources"))
@@ -111,10 +118,19 @@ def main():
     save(status, reason)
     if status != "ready":
         logging.info("native_not_started:%s", reason or status)
-        while not stopping.wait(2):
-            # Only the root-owned auth helper/operator may rearm the service.
-            if read_json(state_dir / "runtime.json", {}).get("status") == "ready":
-                return 0
+        try:
+            while not stopping.wait(2):
+                # Only expired rate holds can self-rearm. Auth/operator/fault holds stay put.
+                current = read_json(state_dir / "runtime.json", {})
+                if current.get("status") == "ready":
+                    return 0
+                next_status, next_reason = startup_state(current)
+                if next_status == "ready":
+                    save("ready", next_reason)
+                    logging.info("native_budget_hold_released")
+                    return 0  # Docker starts a fresh supervisor; normal auth checks still apply.
+        finally:
+            os.close(lock)
         return 0
     # These directories were created on the host with known ownership.
     for path in (state_dir, state_dir / "slots"):

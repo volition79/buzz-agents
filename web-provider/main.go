@@ -171,10 +171,10 @@ func info() map[string]any {
 			"workspace":        map[string]any{"type": "string", "title": "공유 작업 폴더", "default": "team"},
 			"memory_mb":        map[string]any{"type": "integer", "title": "RAM 한도 (MiB)", "minimum": 512, "default": 1536},
 			"cpus":             map[string]any{"type": "number", "title": "CPU 한도", "minimum": 0.1, "default": 0.75},
-			"max_turn_seconds": map[string]any{"type": "integer", "title": "작업당 최대 시간 (초)", "minimum": 60, "maximum": 7200, "default": 1800},
-			"turn_limit":       map[string]any{"type": "integer", "title": "시간 구간당 작업 시작 한도", "minimum": 1, "maximum": 500, "default": 20},
+			"max_turn_seconds": map[string]any{"type": "integer", "title": "작업당 최대 시간 (초)", "minimum": 60, "maximum": 604800, "default": 7200},
+			"turn_limit":       map[string]any{"type": "integer", "title": "시간 구간당 작업 시작 한도 (0 = 제한 없음)", "minimum": 0, "maximum": 500, "default": 0},
 			"window_seconds":   map[string]any{"type": "integer", "title": "집계 구간 (초)", "minimum": 60, "maximum": 86400, "default": 3600},
-			"daily_limit":      map[string]any{"type": "integer", "title": "24시간 작업 시작 한도", "minimum": 1, "maximum": 2000, "default": 100},
+			"daily_limit":      map[string]any{"type": "integer", "title": "24시간 작업 시작 한도 (0 = 제한 없음)", "minimum": 0, "maximum": 2000, "default": 0},
 		}}}
 }
 

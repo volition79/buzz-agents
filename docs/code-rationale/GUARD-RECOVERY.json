@@ -1,0 +1,159 @@
+{
+  "id": "GUARD-RECOVERY",
+  "reason": "Healthy prompt volume must not latch a bot; upstream owns retries and turn deadlines, while optional durable budgets expire and cleanup integrity remains bounded.",
+  "invariants": [
+    "Keep operator/auth/fault holds and cleanup-before-slot-release",
+    "Never expose raw protocol content or credentials in diagnostics"
+  ],
+  "evidence_level": "documented",
+  "evidence": [
+    "docs/GUARD-RECOVERY.md",
+    "CONTRACT.md"
+  ],
+  "status": "active",
+  "importance_score": 700,
+  "anchors": [
+    {
+      "path": "buzz_agents/policy.py",
+      "function": "budget_wait",
+      "role": "runtime helper",
+      "start_line": 51,
+      "end_line": 65,
+      "code": "def budget_wait(limits, data, now):\n    \"\"\"Optional rolling admission budgets, separate from upstream failure retries.\"\"\"\n    blocked = []\n    for key, window, reason in ((\"turn_limit\", limits.get(\"window_seconds\", 3600), \"turn_window_limit\"),\n                                (\"daily_limit\", 86400, \"daily_start_limit\")):\n        limit = limits.get(key, 0)\n        if not limit:\n            continue\n        starts = sorted(v for v in data.get(\"starts\", []) if v > now - window)\n        if len(starts) >= limit:\n            blocked.append((starts[-limit] + window, reason))\n    if not blocked:\n        return None\n    retry_at, reason = max(blocked)\n    return {\"ok\": False, \"error\": reason, \"retry_after_seconds\": max(1, math.ceil(retry_at - now))}\n",
+      "code_sha256": "f3c1eeb52e3c7442e980ca3a6c51ec746d5461963618d91cad6ae579faf36d17",
+      "file_sha256": "214447a49acb0998ddc0353d8eb0312f63edc2db2e83778260a03d942c73ee2c"
+    },
+    {
+      "path": "buzz_agents/policy.py",
+      "function": "Policy.check",
+      "role": "runtime helper",
+      "start_line": 174,
+      "end_line": 184,
+      "code": "    def check(self):\n        with self.lock:\n            try:\n                self.reap_dead_owners()\n            except (OSError, ValueError, IndexError):\n                self.trip(\"worker_lifetime_check_failed\")\n            # buzz-acp owns turn deadlines. A guard-local fallback bounds only\n            # that worker after upstream cancellation/cleanup has had time to run.\n            if any(self.monotonic() >= deadline for _, deadline in self.active.values()):\n                self.trip(\"worker_cleanup_timeout\")\n            return self.tripped\n",
+      "code_sha256": "54c228510ab323d072b61722f1656b88d3ff5447e94fbd83cdac890608534e9f",
+      "file_sha256": "214447a49acb0998ddc0353d8eb0312f63edc2db2e83778260a03d942c73ee2c"
+    },
+    {
+      "path": "buzz_agents/native.py",
+      "function": "state_on_start",
+      "role": "runtime helper",
+      "start_line": 76,
+      "end_line": 86,
+      "code": "def state_on_start(previous, limits=None, quota=None, now=None):\n    if previous is None or previous.get(\"status\") == \"ready\":\n        return \"ready\", \"\"\n    if previous.get(\"status\") == \"running\":\n        return \"held\", \"unexpected_container_restart\"\n    if (previous.get(\"status\") == \"held\" and limits is not None and quota is not None\n            and previous.get(\"reason\") in (\"turn_window_limit\", \"daily_start_limit\")\n            and (time.time() if now is None else now) + 2 >= quota.get(\"last\", 0)\n            and budget_wait(limits, quota, time.time() if now is None else now) is None):\n        return \"ready\", \"expired_budget_hold\"\n    return previous.get(\"status\", \"held\"), previous.get(\"reason\", \"operator_action_required\")\n",
+      "code_sha256": "c46f0182ad690b504dd4a7fde1e2c451c737958891fb0d18969071365a5fa336",
+      "file_sha256": "fc94dc2c88e9b4e9a42d0c98be6d423de16527c42800075754707823273f6206"
+    },
+    {
+      "path": "buzz_agents/config.py",
+      "function": "normalize",
+      "role": "runtime helper",
+      "start_line": 85,
+      "end_line": 112,
+      "code": "def normalize(agent, options, owner, relay, *, derive=public_key):\n    if not isinstance(agent, dict) or not isinstance(options, dict) or not HEX.fullmatch(owner):\n        raise ToolError(\"invalid_payload\")\n    if str(agent.get(\"provider\", \"\")).strip() == \"relay-mesh\":\n        raise ToolError(\"relay_mesh_not_supported\")\n    allowed_options = {\"ssh_alias\", \"workspace\", \"memory_mb\", \"cpus\", \"max_turn_seconds\", \"turn_limit\", \"window_seconds\", \"daily_limit\"}\n    if set(options) - allowed_options:\n        raise ToolError(\"unsupported_provider_configuration\")\n    if relay_url(agent.get(\"relay_url\")) != relay_url(relay):\n        raise ToolError(\"relay_mismatch\")\n    launch = agent.get(\"launch\")\n    if not isinstance(launch, dict) or launch.get(\"owner_pubkey\") != owner:\n        # Fail closed on old desktop payloads; no fallback to raw persona records.\n        raise ToolError(\"desktop_launch_contract_required\")\n    command = launch.get(\"command\")\n    if command not in COMMANDS:\n        raise ToolError(\"unsupported_harness_use_codex_acp_or_claude_agent_acp\")\n    if launch.get(\"args\") not in ([], None):\n        raise ToolError(\"custom_harness_arguments_not_supported\")\n    key = decode_nsec(agent.get(\"private_key_nsec\"))\n    pubkey = derive(key)\n    if not HEX.fullmatch(pubkey) or pubkey == owner:\n        raise ToolError(\"human_key_must_not_be_deployed\")\n    auth = agent.get(\"auth_tag\")\n    if isinstance(auth, str):\n        try:\n            auth = json.loads(auth)\n        except ValueError:\n",
+      "code_sha256": "7d3e152e4d2aa95892c289e5a27c14eb33fa39f67a5dd0a05c8050328308fb6f",
+      "file_sha256": "b4887065bbb7bfa31bc479c3e74deb5907489c7d33fdb67eec975983bb4f6381"
+    },
+    {
+      "path": "buzz_agents/guard.py",
+      "function": "Proxy.tick",
+      "role": "runtime helper",
+      "start_line": 86,
+      "end_line": 113,
+      "code": "    def tick(self):\n        if self.stopped:\n            return\n        if self.active and self.deadline is not None and self.monotonic() >= self.deadline:\n            self.fail(self.active_message, text=\"Worker exceeded upstream deadline and cleanup grace; this request stopped\")\n            print(\"buzz-agents-diagnostic:runtime_worker_deadline\", file=sys.stderr, flush=True)\n            self.stopped = True\n            return  # Keep the slot until stop_adapter verifies cleanup.\n        if self.active or not self.waiting:\n            return\n        answer = self.call({\"op\": \"acquire\"})\n        if answer.get(\"error\") == \"busy\":\n            return\n        message = self.waiting.pop(0)\n        if not answer.get(\"ok\"):\n            reason = answer.get(\"error\")\n            if reason in (\"turn_window_limit\", \"daily_start_limit\"):\n                delay = answer[\"retry_after_seconds\"]\n                self.fail(message, text=f\"Configured prompt budget reached ({reason}); retry after {delay} seconds\")\n                print(\"buzz-agents-diagnostic:runtime_budget_wait\", file=sys.stderr, flush=True)\n            else:\n                self.fail(message)\n                self.stopped = True\n            return\n        self.active[request_id(message)] = answer[\"ticket\"]\n        self.active_message = message\n        self.deadline = self.monotonic() + answer.get(\"watchdog_seconds\", 7320)\n        self.to_agent(message)\n",
+      "code_sha256": "fe2f38e5bacdb034bb5de37268449d40f88f23db1b81622405129f9217128ac5",
+      "file_sha256": "c49a487b2c54e9da91a2e0ee0a515cd5f0d782ea94534a1b948658f7f0beeffd"
+    }
+  ],
+  "decision_context": {
+    "schema": "sonol.code-rationale-context.v1",
+    "authoring_environment": {
+      "os": "Linux WSL",
+      "provider": "Codex",
+      "execution_environment": "local repository"
+    },
+    "targets": [
+      {
+        "os": "linux",
+        "provider": "Claude and Codex ACP",
+        "execution_environment": "Ubuntu Docker VPS",
+        "applicability": "affected",
+        "reason": "Shared worker runtime for both providers; live acceptance pending"
+      },
+      {
+        "os": "Windows",
+        "provider": "SSH and HTTPS Buzz backends",
+        "execution_environment": "desktop Buzz",
+        "applicability": "affected",
+        "reason": "Provider option schema defaults only; no credential-format changes"
+      }
+    ],
+    "conditions": [
+      {
+        "condition": "New and existing normalized configuration",
+        "relevance": "applies",
+        "reason": "New defaults opt out of budgets; historical explicit values remain unchanged"
+      },
+      {
+        "condition": "Root-owned state and worker process groups",
+        "relevance": "applies",
+        "reason": "Only expired budget holds recover; login and cleanup protections remain"
+      }
+    ],
+    "boundaries": [
+      {
+        "path": "buzz_agents/policy.py",
+        "logical_owner": "budget_wait",
+        "role": "helper",
+        "review": "Source and deterministic regression reviewed; pinned official engine owns retry semantics"
+      },
+      {
+        "path": "buzz_agents/policy.py",
+        "logical_owner": "Policy.check",
+        "role": "helper",
+        "review": "Source and deterministic regression reviewed; pinned official engine owns retry semantics"
+      },
+      {
+        "path": "buzz_agents/native.py",
+        "logical_owner": "state_on_start",
+        "role": "helper",
+        "review": "Source and deterministic regression reviewed; pinned official engine owns retry semantics"
+      },
+      {
+        "path": "buzz_agents/config.py",
+        "logical_owner": "normalize",
+        "role": "helper",
+        "review": "Source and deterministic regression reviewed; pinned official engine owns retry semantics"
+      },
+      {
+        "path": "buzz_agents/guard.py",
+        "logical_owner": "Proxy.tick",
+        "role": "helper",
+        "review": "Source and deterministic regression reviewed; pinned official engine owns retry semantics"
+      }
+    ],
+    "verification": [
+      {
+        "assertion_id": "RecoveryTests",
+        "test_reference": "tests/test_guard_recovery.py::RecoveryTests",
+        "environment": {
+          "os": "linux",
+          "provider": "Claude and Codex ACP",
+          "execution_environment": "Ubuntu Docker VPS"
+        },
+        "status": "passed",
+        "evidence_kind": "fixture",
+        "evidence": [
+          "docs/GUARD-RECOVERY.md"
+        ]
+      }
+    ]
+  },
+  "related_decision_ids": [],
+  "importance_reason": "Shared execution boundary affects both provider types and existing held state",
+  "schema": "sonol.code-rationale.v1",
+  "source": {
+    "commit": "d1a887eb422ed0dcc24e37b700863670d0917866",
+    "dirty": true
+  },
+  "assessment_status": "assessed"
+}

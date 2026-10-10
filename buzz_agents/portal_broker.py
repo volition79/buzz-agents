@@ -20,7 +20,7 @@ from .config import HEX, relay_url
 from .host import Deployer, execute, inspect_container, check_ownership, container_name
 from .bridge import bot_records
 from .policy import atomic_json, read_json
-from . import easy_schedule, portal_bootstrap, portal_compose
+from . import easy_schedule, portal_bootstrap, portal_compose, mobile_pairing
 
 LIMIT = 512 * 1024
 STATE = Path('/var/lib/buzz-agents-v2')
@@ -191,6 +191,28 @@ class Broker:
         self.lock = threading.RLock()
         self.logins = LoginSessions()
 
+    def reconcile_mobile_pairing(self, containers=None):
+        settings = read_json(self.control / 'settings.json', {})
+        bootstrap = read_json(self.control / 'bootstrap.json', {})
+        if not settings or not bootstrap:
+            return
+        try:
+            if containers is None:
+                ids = execute(['docker', 'container', 'ls', '-a', '--format', '{{.ID}}']).decode().split()
+                if len(ids) > 100:
+                    raise ToolError('mobile_discovery_limit')
+                containers = json.loads(execute(['docker', 'inspect', *ids])) if ids else []
+            result = mobile_pairing.reconcile(containers, os.environ.get('HOSTNAME', ''), settings, bootstrap)
+        except Exception as exc:
+            code = str(exc) if isinstance(exc, ToolError) else ''
+            result = {'state': 'pending', 'reason': code if re.fullmatch(r'mobile_[a-z_]{1,100}', code) else 'mobile_setup_pending'}
+        try:
+            atomic_json(self.control / 'mobile-pairing.json', {**result, 'checked_at': int(time.time())})
+        except OSError:
+            print('Mobile pairing: pending (mobile_status_write_failed)', flush=True)
+            return
+        print('Mobile pairing: ' + result['state'] + (' (' + result['reason'] + ')' if 'reason' in result else ''), flush=True)
+
     def reconcile_saved_route(self):
         # Broker-only upgrades need no portal restart. Previous activation already
         # passed DNS in portal; fresh discovery must still match that saved plan.
@@ -251,6 +273,7 @@ class Broker:
                     execute(['docker', 'network', 'connect', data['network'], portal['Id']])
                 portal_compose.reconcile(containers, os.environ.get('HOSTNAME', ''), data)
                 atomic_json(self.control / 'bootstrap.json', data)
+                self.reconcile_mobile_pairing(containers)
                 return {'ok': True, 'url': data['url']}
         if op == 'discover':
             ids = execute(['docker', 'container', 'ls', '--format', '{{.ID}}']).decode().split()
@@ -294,11 +317,13 @@ class Broker:
                 # Updating the selected verified image does not replace any bot.
                 # Deployer still refuses upgrading a live native instance.
                 atomic_json(self.control / 'settings.json', settings)
+                self.reconcile_mobile_pairing()
                 return {'ok': True}
             if op == 'status':
                 settings = read_json(self.control / 'settings.json', {})
                 return {'ok': True, 'configured': bool(settings),
                         'relay': settings.get('relay'), 'owner': settings.get('owner'),
+                        'mobile_pairing': read_json(self.control / 'mobile-pairing.json', {'state': 'not_configured'}),
                         'bots': bot_records(settings) if settings else []}
             settings = self.settings()
             if op == 'deploy':

@@ -116,13 +116,21 @@ function fillRelay(record){$('relay').value=record.relay;$('owner').value=record
 function statusName(status){return ({needs_login:t('계정 로그인 필요'),ready:t('시작 준비'),running:t('실행 중'),stopped:t('중지됨'),held:t('보호 정책으로 대기'),unknown:t('상태 확인 필요')})[status]||status;}
 function botHealth(bot){
   const messages={
+    runtime_budget_wait:t('설정한 작업 시작 한도에 도달했습니다. 시간이 지나면 새 요청을 받을 수 있습니다. 계속 작업하려면 봇 설정의 횟수 한도를 0으로 변경한 뒤 재배포하세요.'),
+    runtime_worker_deadline:t('한 작업이 최대 시간과 정리 대기 시간을 초과했습니다. 해당 작업만 중단했습니다. Harness Log에서 재시도 결과를 확인하세요.'),
+    runtime_frame_too_large:t('메시지가 공식 실행기의 10MB 한도를 초과했습니다. 이미지나 첨부 내용을 나누어 다시 요청하세요.'),
+    runtime_frame_invalid_json:t('실행기에서 올바르지 않은 메시지를 받았습니다. Harness Log와 실행기 버전을 확인하세요.'),
+    runtime_frame_invalid_shape:t('실행기의 메시지 형식이 올바르지 않습니다. Harness Log를 확인하세요.'),
+    runtime_transport_failed:t('실행기와의 통신이 끊겼습니다. Harness Log에서 재시도 결과를 확인하세요.'),
+    runtime_output_backpressure:t('실행기가 메시지를 제때 받지 못해 연결을 중단했습니다. Harness Log를 확인하세요.'),
+    runtime_adapter_cleanup_failed:t('이전 작업의 종료를 확인하지 못해 봇을 보류했습니다. 로그를 확인한 뒤 봇을 중지하고 다시 배포하세요.'),
     runtime_process_limit:t('프로세스·스레드 한도에 도달했습니다. 봇을 중지한 뒤 최신 버전으로 재배포하세요. 반복되면 동시 실행 수를 줄여 주세요.'),
     runtime_process_creation_failed:t('새 프로세스를 만들지 못했습니다. 자원 사용량과 로그를 확인하세요.'),
     runtime_approval_review_failed:t('자동 승인 검토가 실패했습니다. 자원 상태와 Harness Log를 확인하세요.'),
     runtime_process_limit_near_capacity:t('프로세스·스레드 사용량이 한도에 가깝습니다. 동시 실행 수를 확인하세요.')
   };
   const resources=bot.resources||{};
-  const code=bot.diagnostic||resources.health_warning;
+  const code=bot.reason==='worker_cleanup_timeout'?'runtime_adapter_cleanup_failed':bot.diagnostic||resources.health_warning;
   const parts=[];
   if(messages[code])parts.push(messages[code]);
   else if(bot.diagnostic)parts.push(t('실행 오류가 기록되었습니다. Harness Log를 확인하세요.'));
@@ -134,6 +142,7 @@ async function refresh(){
   $('download').disabled=!configured;$('relayBadge').textContent=configured?t('연결됨'):t('연결 대기');$('step1').classList.toggle('done',configured);
   if(configured){$('relay').value=data.relay;$('owner').value=data.owner;}
   $('communityRelay').value=configured?data.relay:'';
+  $('mobilePairingStatus').textContent=t(data.mobile_pairing?.state==='available'?"페어링 연결 경로를 확인했습니다. 휴대폰 연결 완료는 직접 확인해 주세요.":configured?"페어링 자동 설정을 확인해야 합니다. 먼저 Try again을 누르고, 계속 실패하면 위의 다시 시작 안내를 따라 주세요. 반복되면 broker 로그의 Mobile pairing 항목을 확인하세요.":"내 Relay 설정을 저장하면 휴대폰 페어링을 자동으로 준비합니다.");
   $('copyCommunityRelay').disabled=!configured;
   for(const id of ['relay','owner'])$(id).readOnly=configured;
   $('saveRelay').hidden=configured;$('discover').hidden=configured;

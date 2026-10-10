@@ -1,3 +1,90 @@
+## 2026-10-10 Publication approved
+
+User requested publication of the completed guard recovery implementation.
+Retain CodeMap scoped navigation, focused Sonol Test with project manual fallback,
+and validator off (no pack). Build/publish runtime, broker, portal and Windows
+HTTPS connector through existing manual GitHub workflow. Refresh predecessor
+provider history from verified public release bytes. Include prior approved
+mobile pairing source; exclude unrelated untracked files and local evidence/cache.
+After candidate checks, review immutable image refs and publish canonical Compose;
+verify anonymous downloads and exact-commit URL installation. No direct VPS writes.
+
+## 2026-10-10 Runtime guard recovery (approved local implementation)
+
+Verification outcome: whole Python suite 240 PASS before the final integrity
+fallback; final focused suite 84 PASS/1 error exposed a retained file lock on
+same-process supervisor reentry. Fixed with finally-close on held-state exit;
+focused native/host rerun: 35 PASS. Both Go provider suites PASS.
+The browser i18n scenario passed Korean/English/fallback and both viewports;
+rerun after the last reason-to-message mapping. Added process fixtures exercise
+both adapters with 105 healthy prompts, >4MiB frames, budget expiry and cleanup.
+No registered Sonol Test lanes exist: manual command fallback and explicit
+assertion review, no managed verification receipt claimed. Canonical rationale
+GUARD-RECOVERY / ACP-FRAMING captured; README behavior unchanged. Provider/schema,
+UI explanation, tests, docs and .gitignore (generated CodeMap only) are within
+these decisions. Existing mobile source hashes preserved outside shared TASK/UI.
+Root cleanup fallback at hard cap+150s remains only for missing worker cleanup;
+ordinary worker timeout is handled at hard cap+120s and never latches the bot.
+
+
+Scope: default budgets, per-request failure isolation, bounded ACP framing and
+safe diagnostics, expired legacy quota holds, provider schemas, tests and docs.
+No publication, VPS changes, account access, or arbitrary restart recovery.
+Authoring: Linux/WSL Python/Go. Targets: Ubuntu Docker Claude/Codex ACP workers;
+Windows SSH/HTTPS provider configuration schema. Existing mobile/UI edits retained.
+CodeMap first full strict build passed; index daemon absent, direct verified impact
+queries used. LSP available but fast static profile chosen; source is authority.
+Rationale mode ON, no prior records mapped. New reason GUARD-RECOVERY: upstream
+buzz-acp owns retry/idle/hard deadlines; wrapper budgets are optional, never a
+bot-wide latch; worker fallback deadline must allow upstream cleanup first.
+Preserve secure slots, cleanup-before-release, credentials and operator stops.
+Legacy config intent is unknown: preserve explicit stored limits, only resume old
+quota holds once their actual allowance permits; require redeploy/settings to
+choose new defaults. No auto-replay of previous side effects by our supervisor.
+New reason ACP-FRAMING: official pinned codec accepts 10,000,000-byte lines;
+match limit, measure per frame, classify errors without logging raw content.
+Tests: config/schema defaults/explicit values; quota expiry across restart; >100
+healthy prompts; repeated failures; worker cleanup/concurrency; malformed/large
+frames; safe diagnostics; state persistence. Old latch/deadline tests require
+updates under approved behavior change; ownership/auth tests remain unchanged.
+Evidence: deterministic local fixtures, not live accounts or Windows-off proof.
+Policy validator OFF: no project policy pack. Existing manual test fallback retained.
+
+## 2026-10-10 Mobile pairing automatic installation
+
+Approved: local code and focused tests; CodeMap off, Sonol Test focused,
+Policy Validator off (no pack). No publication or live server change in this task.
+Authoring Linux/WSL; target Ubuntu Docker/Traefik with an existing private Buzz
+Relay and Python portal. Windows/Android pairing remains a manual acceptance.
+MOBILE-01 new broker-owned reconciliation: derive the selected relay, image,
+network and HTTPS labels from Docker; add only a managed mobile-pairing service
+in this installation's Compose. Preserve Relay/AI services, secrets and volumes.
+MOBILE-02 reuse an already reachable /pair endpoint; refuse competing routes,
+foreign service/container names, unsupported relay images and ambiguous discovery.
+Bound commands, immutable image IDs, resource caps, no host ports or mounts.
+MOBILE-03 bootstrap/configure trigger reconciliation; a mobile failure cannot
+fail ordinary AI setup. Persist a sanitized status and offer restart instructions.
+MOBILE-04 focused tests cover derivation, collision, restart/reinstall, preservation,
+failed deployment and broker status. UI guidance is bilingual; no new UI framework.
+Existing untracked files are outside this task; no global skill changes.
+
+Local result: 17 mobile regression tests and 58 existing portal tests passed.
+Actual Compose v2.40.3 (official checksum verified) config/round-trip checks passed
+for initial and repeated reconciliation. That check found omitted empty command /
+expanded network syntax; service_semantics now handles only those equivalent
+representations and rejects extra service fields. Regression retained.
+Real headless Chrome passed ko-KR/en-US/en-GB/fallback locale checks, 1440/390
+viewport checks, expanded mobile guidance and zero console exceptions. JS syntax
+and git diff whitespace checks passed. Negative-control test fails when the
+broker's first-configure mobile hook is removed. No existing assertion weakened.
+Dockerfile.portal copies the entire buzz_agents tree; both broker and portal
+must be rebuilt for release. No live Docker daemon available locally: actual
+sidecar creation/TLS routing by this installer, Android pairing, and Windows-off
+response remain release/manual acceptance gaps. Earlier manual VPS sidecar is
+separate evidence. No image/URL publication or VPS mutation in this task.
+Direct focused evidence follows this project's existing manual test fallback;
+no managed validator/CodeMap receipt claimed. Existing untracked files untouched.
+
 # Easy native Buzz installation (v0.3 candidate)
 
 ## Current task: Docker portal (v0.4 candidate)

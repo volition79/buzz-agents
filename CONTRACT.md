@@ -9,12 +9,12 @@
 - Each bot gets an independent container, protected root config/state and a UID10001 auth home.
 - Initially needs_login. Official login as UID10001 returns; root records authorization to start.
 - Agent credentials remain with official CLI; no credential copying among bots or custom OAuth refresh implementation.
-- First boot starts native service after auth. Intentional native exit remains stopped. Faults and guard trips remain held.
+- First boot starts native service after auth. Intentional native exit remains stopped. Integrity/cleanup faults remain held; expired legacy quota holds may self-rearm.
 - An idle stopped/held supervisor is not equivalent to an online model. Native presence and explicit status must be distinguished.
 - Same-key/same-live-config deploy is no-op. Live different config/image requires prior stop. Full pubkey ownership label fences collisions.
 - Use generated project buzz-agents-v2. Do not rewrite buzz-rpka or old project/volumes. Do not use --remove-orphans.
-- Each native prompt obtains one root-owned ticket, which persists rolling time-window and rolling 24h starts before forwarding.
-- A prompt response releases its ticket. An application error releases only that worker; a failed adapter releases tickets after it dies. Quota, storage and deadline violations still hold the bot. Deadline uses monotonic elapsed time.
+- Each native prompt obtains one root-owned ticket, which persists enabled rolling time-window/24h budgets before forwarding; disabled budgets do not accumulate starts.
+- A prompt response releases its ticket. An application error releases only that worker; a failed adapter releases tickets after it dies. Budget rejection affects only that request and expires automatically. Storage/cleanup integrity violations still hold the bot. Official turn deadlines run first; a monotonic guard-local watchdog allows an additional 120 seconds before stopping only that worker.
 - Per-bot ticket lock only. No global prompt lock that would deadlock agent-to-agent delegation.
 - Guard copies ACP messages without changing their content or choosing a target coworker.
 - Counters do not claim hard cost/token caps or cover every CLI internal retry/sub-agent/background command.
@@ -59,7 +59,7 @@
 - For ordinary adapter failure, Linux /proc group inspection and pidfd signaling clean only that guard's remaining peers before ticket release. Cleanup failure holds the bot; arbitrary processes that deliberately escape the group still require container cleanup. Image preflight checks pidfd capability.
 - Preserve the last categorical diagnosis on held/stopped/needs-login restarts. Clear it only at a new native launch, so old errors do not falsely describe a new attempt.
 
-- Broker binds worker tickets to Unix peer credentials and pidfds. After abrupt worker death, reclaim only once its process group has no live members; charged starts remain durable. Live descendants retain the slot and deadline.
+- Broker binds worker tickets to Unix peer credentials and pidfds. After abrupt worker death, reclaim only once its process group has no live members; charged starts remain durable. Live descendants retain the slot until verified cleanup.
 - Login capacity counts only running sessions (maximum eight); completed output history is bounded and evicted PTY readers are stopped. Both supported providers share this behavior.
 - Release rendering verifies existing artifacts, adds final compose.install.yaml to manifest and SHA256SUMS, and verifies all listed files again before publication.
 
@@ -67,3 +67,20 @@
 - Candidate publication derives every asset argument from the verified manifest and includes manifest/SHA256SUMS themselves; no separately maintained upload list.
 
 - Browser login expiry resets only the matching session on an explicit server expiry response. Transient errors preserve the session, old responses cannot clear a newer session, and cancellation of an absent session is idempotent.
+
+
+## Runtime recovery revision (2026-10-10)
+
+Default prompt budgets are opt-in (0 disables), idle timeout is 1500s and hard
+turn duration is 7200s. Stored legacy configuration is preserved, not guessed.
+Only held turn_window_limit/daily_start_limit states may self-rearm when their
+stored allowance permits and the clock has not rolled back; auth checks still run.
+Never replay a discarded upstream request or auto-reset other stop/fault states.
+ACP frame size matches pinned buzz-acp: 10,000,000 bytes per newline-delimited
+frame. Combined reads do not count as one frame. Bounded output and classified
+JSON/shape/size/transport/cleanup failures keep raw content out of logs.
+
+A ticket remaining 30s after the guard-local watchdog deadline is a cleanup
+integrity failure (worker_cleanup_timeout), which retains the whole-container
+safety hold. It is not charged as normal-work exhaustion. Clock rollback and
+storage faults remain explicit; successful semantic loops are not inferred.

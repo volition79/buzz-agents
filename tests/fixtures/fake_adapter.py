@@ -4,6 +4,9 @@ import json
 import sys
 for line in sys.stdin:
     request=json.loads(line)
+    if request.get('method')=='test/large-frame':
+        print(json.dumps({'id':request['id'],'result':{'data':'x'*(5*1024*1024)}}),flush=True)
+        continue
     if request.get('method')=='test/descendant':
         import subprocess
         child=subprocess.Popen([sys.executable,'-c','import time; time.sleep(60)'])

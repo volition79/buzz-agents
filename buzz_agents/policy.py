@@ -1,6 +1,7 @@
 """Root-owned loop/time guards. No content decisions and no provider token quota claim."""
 import fcntl
 import json
+import math
 import os
 from pathlib import Path
 import secrets
@@ -47,8 +48,25 @@ def atomic_json(path, value, mode=0o600):
             pass
 
 
+def budget_wait(limits, data, now):
+    """Optional rolling admission budgets, separate from upstream failure retries."""
+    blocked = []
+    for key, window, reason in (("turn_limit", limits.get("window_seconds", 3600), "turn_window_limit"),
+                                ("daily_limit", 86400, "daily_start_limit")):
+        limit = limits.get(key, 0)
+        if not limit:
+            continue
+        starts = sorted(v for v in data.get("starts", []) if v > now - window)
+        if len(starts) >= limit:
+            blocked.append((starts[-limit] + window, reason))
+    if not blocked:
+        return None
+    retry_at, reason = max(blocked)
+    return {"ok": False, "error": reason, "retry_after_seconds": max(1, math.ceil(retry_at - now))}
+
+
 class Policy:
-    """Each native prompt consumes a durable ticket; faults never auto-reset it."""
+    """Durable optional budgets and secure worker slots; only integrity faults latch."""
     def __init__(self, directory, slots, limits, concurrency=1, clock=time.time, monotonic=time.monotonic):
         if type(concurrency) is not int or not 1 <= concurrency <= 32:
             raise ToolError("invalid_parallelism")
@@ -105,12 +123,13 @@ class Policy:
             now = self.clock()
             if now + 2 < self.data["last"]:
                 return self.trip("clock_moved_backwards")
-            starts = [v for v in self.data["starts"] if v >= now - 86400]
-            if sum(v >= now - self.limits["window_seconds"] for v in starts) >= self.limits["turn_limit"]:
-                return self.trip("turn_window_limit")
-            # A rolling 24-hour allowance, not midnight reset bursts.
-            if len(starts) >= self.limits["daily_limit"]:
-                return self.trip("daily_start_limit")
+            denied = budget_wait(self.limits, self.data, now)
+            if denied:
+                return denied
+            # With budgets disabled there is no unbounded history of healthy turns.
+            retention = (86400 if self.limits.get("daily_limit") else
+                         self.limits.get("window_seconds", 3600) if self.limits.get("turn_limit") else 0)
+            starts = [v for v in self.data["starts"] if v > now - retention] if retention else []
             slot = None
             for number in range(self.concurrency):
                 fd = os.open(self.slots / f"slot-{number}", os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
@@ -124,10 +143,14 @@ class Policy:
                 return {"ok": False, "error": "busy"}
             token = secrets.token_hex(24)
             try:
-                self.data = {"starts": starts + [now], "last": now}
+                self.data = {"starts": starts + [now] if retention else [], "last": now}
                 atomic_json(self.directory / "quota.json", self.data)
-                self.active[token] = (slot, self.monotonic() + self.limits["max_turn_seconds"])
-                return {"ok": True, "ticket": token}
+                # Guard watchdog runs at +120s and gets 30s to verify cleanup.
+                # A remaining ticket after that is an integrity/cleanup failure,
+                # not a normal turn timeout. Never leave orphan workers unbounded.
+                self.active[token] = (slot, self.monotonic() + self.limits["max_turn_seconds"] + 150)
+                return {"ok": True, "ticket": token,
+                        "watchdog_seconds": self.limits["max_turn_seconds"] + 120}
             except Exception:
                 os.close(slot)
                 return self.trip("quota_storage_failed")
@@ -154,8 +177,10 @@ class Policy:
                 self.reap_dead_owners()
             except (OSError, ValueError, IndexError):
                 self.trip("worker_lifetime_check_failed")
+            # buzz-acp owns turn deadlines. A guard-local fallback bounds only
+            # that worker after upstream cancellation/cleanup has had time to run.
             if any(self.monotonic() >= deadline for _, deadline in self.active.values()):
-                self.trip("turn_deadline")
+                self.trip("worker_cleanup_timeout")
             return self.tripped
 
     def close(self):

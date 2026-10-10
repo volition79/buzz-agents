@@ -156,17 +156,17 @@ def normalize(agent, options, owner, relay, *, derive=public_key):
                BUZZ_ACP_RESPOND_TO_ALLOWLIST=",".join(allow), BUZZ_ACP_NO_PRESENCE="false",
                BUZZ_ACP_NO_IGNORE_SELF="false", BUZZ_ACP_HEARTBEAT_INTERVAL="0")
     # Policy bounds, not a prescribed collaboration order.
-    max_seconds = integer(options.get("max_turn_seconds", 1800), 60, 7200, "invalid_turn_seconds")
+    max_seconds = integer(options.get("max_turn_seconds", 7200), 60, 604800, "invalid_turn_seconds")
     try:
         native_max = int(env.get("BUZZ_ACP_MAX_TURN_DURATION", str(max_seconds)))
     except (TypeError, ValueError):
         raise ToolError("invalid_native_turn_timeout") from None
-    if native_max <= 0:
+    if not 1 <= native_max <= 604800:
         raise ToolError("invalid_native_turn_timeout")
-    max_seconds = min(max_seconds, native_max)
+    max_seconds = min(max_seconds, native_max) if "max_turn_seconds" in options else native_max
     env["BUZZ_ACP_MAX_TURN_DURATION"] = str(max_seconds)
     try:
-        idle = int(env.get("BUZZ_ACP_IDLE_TIMEOUT", "300"))
+        idle = int(env.get("BUZZ_ACP_IDLE_TIMEOUT", "1500"))
     except ValueError:
         raise ToolError("invalid_idle_timeout") from None
     env["BUZZ_ACP_IDLE_TIMEOUT"] = str(max(1, min(idle, max_seconds - 1)))
@@ -180,9 +180,9 @@ def normalize(agent, options, owner, relay, *, derive=public_key):
     if type(cpus) not in (int, float) or not 0.1 <= cpus <= 1048576:
         raise ToolError("invalid_cpu")
     policy = {"max_turn_seconds": max_seconds,
-              "turn_limit": integer(options.get("turn_limit", 20), 1, 500, "invalid_turn_limit"),
+              "turn_limit": integer(options.get("turn_limit", 0), 0, 500, "invalid_turn_limit"),
               "window_seconds": integer(options.get("window_seconds", 3600), 60, 86400, "invalid_window"),
-              "daily_limit": integer(options.get("daily_limit", 100), 1, 2000, "invalid_daily_limit")}
+              "daily_limit": integer(options.get("daily_limit", 0), 0, 2000, "invalid_daily_limit")}
     result = {"schema": 2, "name": name, "pubkey": pubkey, "owner": owner,
               "provider": COMMANDS[command], "command": command, "env": env,
               "workspace": workspace, "memory_mb": memory, "cpus": cpus, "policy": policy}

@@ -30,12 +30,18 @@ class PolicyTests(unittest.TestCase):
             self.now[0]+=61; a=self.policy.acquire();self.policy.release(a['ticket'])
         self.now[0]+=61
         self.assertEqual(self.policy.acquire()['error'],'daily_start_limit')
-    def test_monotonic_deadline(self):
+    def test_native_turn_deadline_does_not_hold_whole_bot(self):
         self.policy.acquire();self.now[0]-=900;self.mono[0]+=11
-        self.assertEqual(self.policy.check(),'turn_deadline')
+        self.assertEqual(self.policy.check(),'')
     def test_wall_clock_rollback_refused(self):
         a=self.policy.acquire();self.policy.release(a['ticket']);self.now[0]-=5
         self.assertEqual(self.policy.acquire()['error'],'clock_moved_backwards')
+    def test_missing_worker_cleanup_remains_bounded(self):
+        self.policy.acquire()
+        self.mono[0]+=159
+        self.assertEqual(self.policy.check(),'')
+        self.mono[0]+=1
+        self.assertEqual(self.policy.check(),'worker_cleanup_timeout')
     def test_expired_window_not_entire_bot_lifetime(self):
         for _ in range(2):
             a=self.policy.acquire();self.policy.release(a['ticket'])
@@ -81,7 +87,7 @@ class PolicyTests(unittest.TestCase):
                 finally:
                     server.shutdown();server.server_close();thread.join();path.unlink()
 
-    def test_each_concurrent_ticket_has_its_own_deadline(self):
+    def test_active_workers_survive_native_deadline_until_cleanup_grace(self):
         self.policy.close()
         self.policy=Policy(self.root,self.root/'slots',self.limits,concurrency=2,
                            clock=lambda:self.now[0],monotonic=lambda:self.mono[0])
@@ -92,7 +98,7 @@ class PolicyTests(unittest.TestCase):
         self.mono[0]+=6
         self.assertEqual(self.policy.check(),'')
         self.mono[0]+=5
-        self.assertEqual(self.policy.check(),'turn_deadline')
+        self.assertEqual(self.policy.check(),'')
 
     def test_dead_owner_with_live_descendant_keeps_slot_until_group_dies(self):
         import subprocess,sys,signal,time
@@ -168,7 +174,7 @@ class ProxyTests(unittest.TestCase):
         self.assertEqual(self.to_host[-1]['result']['stopReason'],'cancelled')
         self.assertEqual(self.to_agent,[cancel])
     def test_guard_rejection_never_forwards_prompt(self):
-        self.proxy.call=lambda r:{'ok':False,'error':'daily_start_limit'}
+        self.proxy.call=lambda r:{'ok':False,'error':'quota_storage_failed'}
         self.proxy.from_host(self.prompt);self.proxy.tick()
         self.assertTrue(self.proxy.stopped);self.assertEqual(self.to_agent,[])
         self.assertIn('error',self.to_host[-1])

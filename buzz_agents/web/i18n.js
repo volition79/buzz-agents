@@ -2,6 +2,14 @@
 // Korean source copy is the message key. Add another catalog to support another locale.
 (() => {
   const catalogs = {en: {
+"휴대폰 Buzz 연결 (선택)": "Connect Buzz on your phone (optional)",
+"Windows Buzz에서 Settings → Mobile을 열고, 휴대폰 Buzz의 Scan QR code로 QR 코드를 스캔하세요. Windows에 표시된 6자리 코드를 휴대폰에 입력해 연결을 마치세요.": "In Windows Buzz, open Settings \u2192 Mobile. In Buzz on your phone, choose Scan QR code and scan the QR code. Enter the six-digit code shown on Windows to finish pairing.",
+"QR 코드 대신 오류가 보이면 Try again을 누르세요. 계속 실패하면 Docker Manager에서 이 설치 프로젝트의 다시 시작을 누른 뒤 다시 시도하세요. 기존 Relay나 봇을 삭제할 필요는 없습니다.": "If an error appears instead of a QR code, select Try again. If it persists, restart this installation project in Docker Manager and try again. You do not need to delete your Relay or bots.",
+"휴대폰에서 채널과 메시지가 보이는지 먼저 확인하세요. 이후 Windows를 끄고 새 메시지에 VPS 봇이 응답하는지 확인하세요.": "First check that channels and messages appear on your phone. Then turn off Windows and check whether your VPS bot responds to a new message.",
+"페어링 연결 경로를 확인했습니다. 휴대폰 연결 완료는 직접 확인해 주세요.": "The pairing endpoint was reachable at the last setup check. Complete and verify pairing on your phone.",
+"페어링 자동 설정을 확인해야 합니다. 먼저 Try again을 누르고, 계속 실패하면 위의 다시 시작 안내를 따라 주세요. 반복되면 broker 로그의 Mobile pairing 항목을 확인하세요.": "Mobile pairing setup needs checking. Try again first, then follow the restart instructions above if needed. If it still fails, check Mobile pairing in the broker logs.",
+"내 Relay 설정을 저장하면 휴대폰 페어링을 자동으로 준비합니다.": "Save your Relay settings to prepare mobile pairing automatically.",
+
 "프로세스·스레드 한도에 도달했습니다. 봇을 중지한 뒤 최신 버전으로 재배포하세요. 반복되면 동시 실행 수를 줄여 주세요.": "The process/thread limit was reached. Stop the bot and redeploy with the latest version. If it recurs, reduce parallelism.",
 "새 프로세스를 만들지 못했습니다. 자원 사용량과 로그를 확인하세요.": "A new process could not be created. Check resource usage and logs.",
 "자동 승인 검토가 실패했습니다. 자원 상태와 Harness Log를 확인하세요.": "Automatic approval review failed. Check resources and the Harness Log.",
@@ -159,6 +167,14 @@
   "시작 준비": "Ready to start",
   "실행 중": "Running",
   "중지됨": "Stopped",
+  "설정한 작업 시작 한도에 도달했습니다. 시간이 지나면 새 요청을 받을 수 있습니다. 계속 작업하려면 봇 설정의 횟수 한도를 0으로 변경한 뒤 재배포하세요.": "The configured prompt budget was reached. New requests can run after it expires. For continuous work, set the prompt limits to 0 in agent settings and redeploy.",
+  "한 작업이 최대 시간과 정리 대기 시간을 초과했습니다. 해당 작업만 중단했습니다. Harness Log에서 재시도 결과를 확인하세요.": "A worker exceeded its maximum duration and cleanup grace. Only that worker was stopped. Check Harness Log for the retry outcome.",
+  "메시지가 공식 실행기의 10MB 한도를 초과했습니다. 이미지나 첨부 내용을 나누어 다시 요청하세요.": "A message exceeded the official runtime's 10MB limit. Split images or attachments and send the request again.",
+  "실행기에서 올바르지 않은 메시지를 받았습니다. Harness Log와 실행기 버전을 확인하세요.": "An invalid message was received from the runtime. Check Harness Log and the runtime version.",
+  "실행기의 메시지 형식이 올바르지 않습니다. Harness Log를 확인하세요.": "The runtime message has an invalid structure. Check Harness Log.",
+  "실행기와의 통신이 끊겼습니다. Harness Log에서 재시도 결과를 확인하세요.": "Communication with the runtime was interrupted. Check Harness Log for the retry outcome.",
+  "실행기가 메시지를 제때 받지 못해 연결을 중단했습니다. Harness Log를 확인하세요.": "The connection stopped because outgoing messages could not drain. Check Harness Log.",
+  "이전 작업의 종료를 확인하지 못해 봇을 보류했습니다. 로그를 확인한 뒤 봇을 중지하고 다시 배포하세요.": "The bot is held because cleanup of a previous worker could not be confirmed. Check the logs, then stop and redeploy the bot.",
   "보호 정책으로 대기": "Held by protection policy",
   "상태 확인 필요": "Status needs checking",
   "연결됨": "Connected",

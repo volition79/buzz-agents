@@ -122,3 +122,17 @@ func TestProtocolFailureVisibleToBuzzStderr(t *testing.T) {
 		t.Fatal(status, diagnostic.String())
 	}
 }
+
+func TestOptionalPromptBudgetsAndOfficialTimeoutDefaults(t *testing.T) {
+	props := info()["config_schema"].(map[string]any)["properties"].(map[string]any)
+	for _, name := range []string{"turn_limit", "daily_limit"} {
+		field := props[name].(map[string]any)
+		if field["minimum"] != 0 || field["default"] != 0 {
+			t.Fatalf("%s must permit and default to disabled: %v", name, field)
+		}
+	}
+	duration := props["max_turn_seconds"].(map[string]any)
+	if duration["default"] != 7200 || duration["maximum"] != 604800 {
+		t.Fatalf("official duration defaults/cap differ: %v", duration)
+	}
+}

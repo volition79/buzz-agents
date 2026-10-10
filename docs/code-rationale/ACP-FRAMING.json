@@ -1,0 +1,111 @@
+{
+  "id": "ACP-FRAMING",
+  "reason": "Match the pinned official ACP line limit and classify protocol faults without raw content; a combined read is not a single frame.",
+  "invariants": [
+    "Keep operator/auth/fault holds and cleanup-before-slot-release",
+    "Never expose raw protocol content or credentials in diagnostics"
+  ],
+  "evidence_level": "documented",
+  "evidence": [
+    "docs/GUARD-RECOVERY.md",
+    "CONTRACT.md"
+  ],
+  "status": "active",
+  "importance_score": 700,
+  "anchors": [
+    {
+      "path": "buzz_agents/guard.py",
+      "function": "decode_frames",
+      "role": "runtime helper",
+      "start_line": 21,
+      "end_line": 37,
+      "code": "def decode_frames(buffer, chunk):\n    buffer.extend(chunk)\n    while b\"\\n\" in buffer:\n        end = buffer.index(b\"\\n\")\n        if end > MAX_LINE:\n            raise ProtocolFault(\"runtime_frame_too_large\")\n        raw = bytes(buffer[:end])\n        del buffer[:end + 1]\n        try:\n            message = json.loads(raw)\n        except (ValueError, UnicodeError, RecursionError):\n            raise ProtocolFault(\"runtime_frame_invalid_json\") from None\n        if not isinstance(message, dict):\n            raise ProtocolFault(\"runtime_frame_invalid_shape\")\n        yield message\n    if len(buffer) > MAX_LINE:\n        raise ProtocolFault(\"runtime_frame_too_large\")\n",
+      "code_sha256": "5c7ac5c8c4e8cadcb922a44636d60645fec4fa3fb3fcb7e4fa63502095525d69",
+      "file_sha256": "c49a487b2c54e9da91a2e0ee0a515cd5f0d782ea94534a1b948658f7f0beeffd"
+    },
+    {
+      "path": "buzz_agents/diagnostics.py",
+      "function": "RuntimeDiagnostics._feed",
+      "role": "runtime helper",
+      "start_line": 41,
+      "end_line": 68,
+      "code": "    def _feed(self, chunk):\n        self.buffer.extend(chunk)\n        # Bounded overlap covers split phrases without storing arbitrary logs.\n        data = bytes(self.buffer[-8192:]).lower()\n        self.buffer[:] = data[-512:]\n        patterns = (\n            (\"runtime_authentication_required\", (b\"authentication required\", b\"not logged in\", b\"unauthorized\", b\"auth expired\")),\n            (\"runtime_rate_limited\", (b\"rate limit\", b\"too many requests\")),\n            (\"runtime_model_unavailable\", (b\"model not found\", b\"invalid model\", b\"model is not available\")),\n            (\"runtime_adapter_initialization_failed\", (b\"agent initialize failed\", b\"agent timed out during init\", b\"agent failed to spawn\")),\n            (\"runtime_relay_connection_failed\", (b\"connection refused\", b\"failed to connect\", b\"tls error\")),\n            (\"runtime_process_creation_failed\", (b\"cannot fork\", b\"resource temporarily unavailable\", b\"unable to create new native thread\")),\n            (\"runtime_approval_review_failed\", (b\"automatic approval review failed:\",)),\n            (\"runtime_configuration_invalid\", (b\"configuration error\", b\"unexpected argument\", b\"invalid value\")),\n        )\n        result = []\n        patterns += tuple((code, (code.encode(),)) for code in (\n            \"runtime_prompt_failed\", \"runtime_adapter_exited\", \"runtime_protocol_failed\",\n            \"runtime_approval_review_failed\", \"runtime_process_creation_failed\",\n            \"runtime_budget_wait\", \"runtime_worker_deadline\", \"runtime_frame_too_large\",\n            \"runtime_frame_invalid_json\", \"runtime_frame_invalid_shape\", \"runtime_transport_failed\",\n            \"runtime_output_backpressure\", \"runtime_adapter_cleanup_failed\"))\n        for code, needles in patterns:\n            if code not in self.seen and (any(n in data for n in needles) or\n                                          (\"buzz-agents-diagnostic:\" + code).encode() in data):\n                self.seen.add(code)\n                result.append(code)\n        return result\n",
+      "code_sha256": "a53331ae6792e2242042921958ee319a10ce502f18c3daa0c9c91527d9385dd4",
+      "file_sha256": "8932dd9d51254ec3bc038537e39d85f18a953b1206ef5ec6678ec190b96f9cd1"
+    }
+  ],
+  "decision_context": {
+    "schema": "sonol.code-rationale-context.v1",
+    "authoring_environment": {
+      "os": "Linux WSL",
+      "provider": "Codex",
+      "execution_environment": "local repository"
+    },
+    "targets": [
+      {
+        "os": "linux",
+        "provider": "Claude and Codex ACP",
+        "execution_environment": "Ubuntu Docker VPS",
+        "applicability": "affected",
+        "reason": "Shared worker runtime for both providers; live acceptance pending"
+      },
+      {
+        "os": "Windows",
+        "provider": "SSH and HTTPS Buzz backends",
+        "execution_environment": "desktop Buzz",
+        "applicability": "affected",
+        "reason": "Provider option schema defaults only; no credential-format changes"
+      }
+    ],
+    "conditions": [
+      {
+        "condition": "New and existing normalized configuration",
+        "relevance": "applies",
+        "reason": "New defaults opt out of budgets; historical explicit values remain unchanged"
+      },
+      {
+        "condition": "Root-owned state and worker process groups",
+        "relevance": "applies",
+        "reason": "Only expired budget holds recover; login and cleanup protections remain"
+      }
+    ],
+    "boundaries": [
+      {
+        "path": "buzz_agents/guard.py",
+        "logical_owner": "decode_frames",
+        "role": "helper",
+        "review": "Source and deterministic regression reviewed; pinned official engine owns retry semantics"
+      },
+      {
+        "path": "buzz_agents/diagnostics.py",
+        "logical_owner": "RuntimeDiagnostics._feed",
+        "role": "helper",
+        "review": "Source and deterministic regression reviewed; pinned official engine owns retry semantics"
+      }
+    ],
+    "verification": [
+      {
+        "assertion_id": "FramingTests",
+        "test_reference": "tests/test_guard_recovery.py::FramingTests",
+        "environment": {
+          "os": "linux",
+          "provider": "Claude and Codex ACP",
+          "execution_environment": "Ubuntu Docker VPS"
+        },
+        "status": "passed",
+        "evidence_kind": "fixture",
+        "evidence": [
+          "docs/GUARD-RECOVERY.md"
+        ]
+      }
+    ]
+  },
+  "related_decision_ids": [],
+  "importance_reason": "Shared execution boundary affects both provider types and existing held state",
+  "schema": "sonol.code-rationale.v1",
+  "source": {
+    "commit": "d1a887eb422ed0dcc24e37b700863670d0917866",
+    "dirty": true
+  },
+  "assessment_status": "assessed"
+}

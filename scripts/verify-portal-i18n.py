@@ -86,6 +86,16 @@ def main():
                 cdp.call('Network.setUserAgentOverride', {'userAgent':ua, 'acceptLanguage':locale})
                 cdp.call('Page.navigate', {'url':app.url})
                 cdp.until("document.querySelector('#communityRelay')?.value === 'wss://relay.example.com'")
+                cdp.js("document.querySelector('#mobileGuide').open=true")
+                mobile_copy=cdp.js("document.querySelector('#mobileGuide').textContent")
+                assert 'Settings → Mobile' in mobile_copy and 'Try again' in mobile_copy
+                if locale.startswith('en'):
+                    assert not re.search('[가-힣]', mobile_copy)
+                    assert 'needs checking' in cdp.js("document.querySelector('#mobilePairingStatus').textContent")
+                else:
+                    assert '자동 설정' in cdp.js("document.querySelector('#mobilePairingStatus').textContent")
+                cdp.js("document.querySelector('#mobileGuide').scrollIntoView()")
+                cdp.shot(output/('mobile-pairing-'+locale.split(',')[0]+'.png'))
                 cdp.js("document.querySelectorAll('#buzzGuide img').forEach(i=>i.loading='eager')")
                 try:
                     cdp.until("[...document.querySelectorAll('#buzzGuide img')].length === 8 && [...document.querySelectorAll('#buzzGuide img')].every(i=>i.complete && i.naturalWidth>0)")

@@ -49,10 +49,10 @@ func info() map[string]any {
 				"workspace":        map[string]any{"type": "string", "title": "VPS workspace group", "default": "team"},
 				"memory_mb":        map[string]any{"type": "integer", "title": "RAM limit (MiB)", "minimum": 512, "default": 1536},
 				"cpus":             map[string]any{"type": "number", "title": "CPU limit", "minimum": 0.1, "default": 0.75},
-				"max_turn_seconds": map[string]any{"type": "integer", "title": "Maximum time per AI turn (seconds)", "minimum": 60, "maximum": 7200, "default": 1800},
-				"turn_limit":       map[string]any{"type": "integer", "title": "Maximum prompt starts per window", "minimum": 1, "maximum": 500, "default": 20},
+				"max_turn_seconds": map[string]any{"type": "integer", "title": "Maximum time per AI turn (seconds)", "minimum": 60, "maximum": 604800, "default": 7200},
+				"turn_limit":       map[string]any{"type": "integer", "title": "Prompt starts per window (0 = unlimited)", "minimum": 0, "maximum": 500, "default": 0},
 				"window_seconds":   map[string]any{"type": "integer", "title": "Rate window (seconds)", "minimum": 60, "maximum": 86400, "default": 3600},
-				"daily_limit":      map[string]any{"type": "integer", "title": "Maximum prompt starts in 24 hours", "minimum": 1, "maximum": 2000, "default": 100},
+				"daily_limit":      map[string]any{"type": "integer", "title": "Prompt starts in 24 hours (0 = unlimited)", "minimum": 0, "maximum": 2000, "default": 0},
 			},
 		},
 	}

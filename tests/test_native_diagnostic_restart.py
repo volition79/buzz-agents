@@ -8,6 +8,40 @@ from unittest.mock import patch
 from buzz_agents import native
 
 class DiagnosticRestartTests(unittest.TestCase):
+    def test_legacy_budget_hold_expires_in_running_supervisor_without_auth_bypass(self):
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d);state=root/'runtime.json';now=[100000.0]
+            state.write_text(json.dumps({'status':'held','reason':'turn_window_limit',
+                'diagnostic':'runtime_protocol_failed','startup_consumed':True}))
+            (root/'quota.json').write_text(json.dumps({'starts':[100000],'last':100000}))
+            cfg={'pubkey':'b'*64,'provider':'claude',
+                 'policy':{'turn_limit':1,'window_seconds':3600,'daily_limit':0,'max_turn_seconds':7200}}
+            def expire(_):
+                now[0]+=3601
+                return False
+            with patch.dict(os.environ,{'NATIVE_STATE':d}), \
+                 patch.object(native,'load_config',return_value=cfg), \
+                 patch.object(native.signal,'signal'), \
+                 patch.object(native.time,'time',side_effect=lambda:now[0]), \
+                 patch.object(native.threading.Event,'wait',side_effect=expire), \
+                 patch.object(native.subprocess,'Popen') as spawn:
+                self.assertEqual(native.main(),0)
+                spawn.assert_not_called()
+            saved=json.loads(state.read_text())
+            self.assertEqual(saved['status'],'ready')
+            self.assertEqual(saved['reason'],'expired_budget_hold')
+            self.assertTrue(saved['startup_consumed'])
+            self.assertEqual(saved['diagnostic'],'runtime_protocol_failed')
+            # A fresh supervisor still requires the existing subscription-login record.
+            with patch.dict(os.environ,{'NATIVE_STATE':d}), \
+                 patch.object(native,'load_config',return_value=cfg), \
+                 patch.object(native.signal,'signal'), \
+                 patch.object(native.threading.Event,'wait',return_value=True), \
+                 patch.object(native.subprocess,'Popen') as spawn:
+                self.assertEqual(native.main(),0)
+                spawn.assert_not_called()
+            self.assertEqual(json.loads(state.read_text())['status'],'needs_login')
+
     def test_nonlaunch_restart_preserves_last_diagnosis(self):
         for status in ('held','stopped','needs_login','ready'):
             with self.subTest(status=status),tempfile.TemporaryDirectory() as d:

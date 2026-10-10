@@ -56,7 +56,10 @@ class RuntimeDiagnostics:
         result = []
         patterns += tuple((code, (code.encode(),)) for code in (
             "runtime_prompt_failed", "runtime_adapter_exited", "runtime_protocol_failed",
-            "runtime_approval_review_failed", "runtime_process_creation_failed"))
+            "runtime_approval_review_failed", "runtime_process_creation_failed",
+            "runtime_budget_wait", "runtime_worker_deadline", "runtime_frame_too_large",
+            "runtime_frame_invalid_json", "runtime_frame_invalid_shape", "runtime_transport_failed",
+            "runtime_output_backpressure", "runtime_adapter_cleanup_failed"))
         for code, needles in patterns:
             if code not in self.seen and (any(n in data for n in needles) or
                                           ("buzz-agents-diagnostic:" + code).encode() in data):
@@ -68,11 +71,13 @@ class RuntimeDiagnostics:
 DIAGNOSTIC_CODES = frozenset("""runtime_authentication_required runtime_rate_limited
 runtime_model_unavailable runtime_adapter_initialization_failed runtime_relay_connection_failed
 runtime_configuration_invalid runtime_prompt_failed runtime_adapter_exited runtime_protocol_failed
-runtime_approval_review_failed runtime_process_creation_failed runtime_process_limit""".split())
+runtime_approval_review_failed runtime_process_creation_failed runtime_process_limit
+runtime_budget_wait runtime_worker_deadline runtime_frame_too_large runtime_frame_invalid_json
+runtime_frame_invalid_shape runtime_transport_failed runtime_output_backpressure runtime_adapter_cleanup_failed""".split())
 REASON_CODES = frozenset("""operator_action_required first_subscription_login_required explicit_login
 external_graceful_stop external_stop_incomplete native_clean_exit native_process_failed supervisor_fault
 clock_moved_backwards turn_window_limit daily_start_limit quota_storage_failed worker_lifetime_check_failed
-turn_deadline adapter_or_guard_fault unexpected_container_restart""".split())
+turn_deadline adapter_or_guard_fault unexpected_container_restart expired_budget_hold worker_cleanup_timeout""".split())
 
 
 def structured_diagnostic(message):

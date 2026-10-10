@@ -52,8 +52,33 @@ class RealProxyTests(unittest.TestCase):
             self.assertIn('result',self.read())
         self.send({'id':3,'method':'session/prompt','params':{'sessionId':'s','prompt':[]}})
         self.assertIn('error',self.read())
+        self.assertIsNone(self.process.poll())
+        self.assertEqual(self.policy.tripped,'')
+        self.policy.clock=lambda: __import__('time').time()+61
+        self.send({'id':4,'method':'session/prompt','params':{'sessionId':'s','prompt':[]}})
+        self.assertIn('result',self.read())
+    def test_real_large_frame_and_following_request(self):
+        self.send({'id':1,'method':'test/large-frame'})
+        self.assertEqual(len(self.read()['result']['data']),5*1024*1024)
+        self.send({'id':2,'method':'session/prompt','params':{}})
+        self.assertEqual(self.read()['result']['stopReason'],'end_turn')
+
+    def test_real_invalid_json_has_safe_specific_diagnosis(self):
+        self.process.stdin.write(b'SECRET-INVALID-JSON\n');self.process.stdin.flush()
         self.assertEqual(self.process.wait(timeout=4),3)
-        self.assertEqual(self.policy.tripped,'turn_window_limit')
+        raw=self.process.stderr.read()
+        self.assertIn(b'runtime_frame_invalid_json',raw)
+        self.assertNotIn(b'SECRET',raw)
+        self.assertEqual(self.policy.tripped,'')
+
+    def test_real_sustained_work_with_budgets_disabled(self):
+        self.policy.limits.update(turn_limit=0,daily_limit=0)
+        for n in range(105):
+            self.send({'id':n,'method':'session/prompt','params':{}})
+            self.assertEqual(self.read()['result']['stopReason'],'end_turn')
+        self.assertIsNone(self.process.poll())
+        self.assertEqual(self.policy.check(),'')
+        self.assertEqual(self.policy.data['starts'],[])
     def test_adapter_crash_is_observed(self):
         self.send({'id':1,'method':'session/prompt','params':{'crash':True}})
         self.assertEqual(self.process.wait(timeout=4),3)
