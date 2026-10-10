@@ -1,3 +1,7 @@
+# Claude login link fix verified
+
+Release `portal-candidate-d8cbf92e1149-42-1`, source `d8cbf92e114968edebba7772e09e52342758b5a8`, CI https://github.com/volition79/buzz-agents/actions/runs/38059745781. Python260, Go race/vet, ko/en real browser with explicit CI clipboard fixture, four Docker bootstrap/upgrade cases and both-provider bot update passed. Native clipboard readback passed separately in local headless and headed Chrome. Anonymous7 assets,40 runtime/build files,128 public source files and both Windows EXEs matched reviewed bytes. Actual provider subscription login and user VPS are not tested or modified. See docs/AUTH-LOGIN-LINKS.md for portal-only existing-install update.
+
 Published `portal-candidate-4581d501a9e3-36-1` from source `4581d501a9e385206e9b8ee152e6c6be61bed334`.
 [CI38056923464](https://github.com/volition79/buzz-agents/actions/runs/38056923464) passed259 Python tests, Go race/vet, browser checks, four Docker startup/upgrade fixtures and real Docker existing-bot replacement for both providers. Anonymous readback verified7 manifest assets,40 runtime/build source files,125 public source files and both Windows binaries against local Go1.26.5 builds. Canonical Compose adopts only the reviewed immutable image references. Exact public Raw startup is checked separately before handoff. Live VPS/account and Windows-off acceptance remain pending.
 

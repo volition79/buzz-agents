@@ -1,5 +1,13 @@
 # Claude login links / Claude 로그인 링크
 
+Verified release: `portal-candidate-d8cbf92e1149-42-1` · [CI verification](https://github.com/volition79/buzz-agents/actions/runs/38059745781).
+
+Replace only `services.portal.image` for this UI fix:
+
+```text
+ghcr.io/volition79/buzz-agents-portal@sha256:4af5f65b05bcd712fd485c9c8bb170309be224701a4602f6882ef0ea51823e39
+```
+
 The portal previously recognized claude.ai, console.anthropic.com and platform.claude.com, but not the current Claude subscription authorization endpoint `https://claude.com/cai/oauth/authorize`. The pinned ACP 0.88.0 depends on official SDK 0.3.293. Its Linux x64 binary contains this endpoint (binary SHA256 `8968405e26db478af44eabc4635ab5ca557057b702a54460a59c13e1b253e978`). The original link renderer accepts the Codex fixture but produces zero links for this Claude URL. This reproduces the reported symptom; the user's private OAuth transcript was not collected.
 
 The portal now renders **Open official sign-in** and **Copy address**, plus a selectable full address. The complete OAuth query is retained. Terminal ANSI formatting and OSC8 destinations are handled separately; arbitrary hard-wrapped text is not guessed into an authorization URL. Only HTTPS official hosts are accepted, with the new claude.com host restricted to its authorization path; userinfo and non-default ports are rejected. Repeated polling preserves selection and copy feedback. Clipboard denial selects the address for manual copying. Korean/English follow the browser language.

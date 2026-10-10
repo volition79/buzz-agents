@@ -2,26 +2,26 @@
 
 ## Verified release references / 검증된 릴리스 참조
 
-Release: `portal-candidate-4581d501a9e3-36-1` · [CI verification](https://github.com/volition79/buzz-agents/actions/runs/38056923464).
+Release: `portal-candidate-d8cbf92e1149-42-1` · [CI verification](https://github.com/volition79/buzz-agents/actions/runs/38059745781).
 
 In the **existing** project, replace only these values. 기존 프로젝트에서 아래 값만 변경하세요.
 
 `broker.image`
 
 ```text
-ghcr.io/volition79/buzz-agents-broker@sha256:471451bf9546d93711b5e82535779684c06568190104d39c65624484010d33ee
+ghcr.io/volition79/buzz-agents-broker@sha256:306d8a8fde5f683bfe5f84617f6e35b1d557906777c00574bcfdb4f575251e16
 ```
 
 `broker.environment.BUZZ_RUNTIME_IMAGE and runtime-image.image`
 
 ```text
-ghcr.io/volition79/buzz-agents-runtime@sha256:a98466829a95c47b2c84ed4620e8f80df64b891fbaa74636bee1cd647ebfd801
+ghcr.io/volition79/buzz-agents-runtime@sha256:ad6183d5ea68fe3bf4d72ac31f872b9a226a78c8b8967bcdfb2182e3ae83775a
 ```
 
 `portal.image`
 
 ```text
-ghcr.io/volition79/buzz-agents-portal@sha256:0a9483daf9e8b5b8354fe1fbab7b528ce62adde8d2054b51cbb963c7f5520b47
+ghcr.io/volition79/buzz-agents-portal@sha256:4af5f65b05bcd712fd485c9c8bb170309be224701a4602f6882ef0ea51823e39
 ```
 
 ## 한국어
