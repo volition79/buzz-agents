@@ -19,6 +19,7 @@ from .common import ToolError
 from .config import HEX, relay_url
 from .host import Deployer, execute, inspect_container, check_ownership, container_name
 from .bridge import bot_records
+from .bot_update import ExistingBotUpdater
 from .policy import atomic_json, read_json
 from . import easy_schedule, portal_bootstrap, portal_compose, mobile_pairing
 
@@ -190,6 +191,63 @@ class Broker:
         self.image, self.root, self.control = image, Path(root), Path(control)
         self.lock = threading.RLock()
         self.logins = LoginSessions()
+        self.update_running = False
+
+    def update_job(self):
+        job = read_json(self.control / 'bot-update.json', {})
+        if job.get('state') == 'running' and not self.update_running:
+            return {**job, 'state': 'interrupted', 'error': 'bot_update_interrupted'}
+        return job
+
+    def start_update(self, settings, request):
+        job_id = request['request_id']
+        if not isinstance(job_id, str) or not re.fullmatch(r'[0-9a-f]{32}', job_id):
+            raise ToolError('invalid_bot_update_request')
+        if type(request['use_defaults']) is not bool or not isinstance(request['revision'], str) or not HEX.fullmatch(request['revision']):
+            raise ToolError('invalid_bot_update_request')
+        previous = self.update_job()
+        if previous.get('id') == job_id:
+            if any(previous.get(k) != request[k] for k in ('pubkey', 'revision', 'use_defaults')):
+                raise ToolError('invalid_bot_update_request')
+            return {'ok': True, 'update': previous}
+        if self.update_running:
+            raise ToolError('bot_update_busy')
+        updater = ExistingBotUpdater(Deployer(settings))
+        plan = updater.preview(request['pubkey'])
+        if plan['revision'] != request['revision']:
+            raise ToolError('bot_update_preview_changed')
+        with self.logins.lock:
+            if any(v['process'].poll() is None for v in self.logins.items.values()):
+                raise ToolError('authentication_already_in_progress')
+        job = {'id': job_id, 'pubkey': request['pubkey'], 'revision': request['revision'],
+               'use_defaults': request['use_defaults'], 'state': 'running'}
+        atomic_json(self.control / 'bot-update.json', job)
+        self.update_running = True
+        def work():
+            result = {**job, 'state': 'failed', 'error': 'bot_update_failed_check_status'}
+            try:
+                updater.apply(request['pubkey'], request['revision'], request['use_defaults'])
+                result = {**job, 'state': 'succeeded'}
+            except ToolError as exc:
+                code = str(exc)
+                if re.fullmatch(r'[a-zA-Z0-9_]{1,160}', code):
+                    result['error'] = code
+            except Exception:
+                pass
+            finally:
+                with self.lock:
+                    try:
+                        atomic_json(self.control / 'bot-update.json', result)
+                        print('Buzz bot update: ' + result['state'] + ' ' + result.get('error', 'verified'), flush=True)
+                    finally:
+                        self.update_running = False
+        try:
+            threading.Thread(target=work, daemon=True).start()
+        except RuntimeError:
+            self.update_running = False
+            atomic_json(self.control / 'bot-update.json', {**job, 'state': 'failed', 'error': 'bot_update_failed_check_status'})
+            raise ToolError('bot_update_failed_check_status') from None
+        return {'ok': True, 'update': job}
 
     def reconcile_mobile_pairing(self, containers=None):
         settings = read_json(self.control / 'settings.json', {})
@@ -247,6 +305,8 @@ class Broker:
             raise ToolError('invalid_request')
         op = request.get('op')
         fields = {'bootstrap-plan': set(), 'bootstrap-activate': {'fingerprint'}, 'status': set(), 'discover': set(), 'configure': {'owner', 'relay'},
+                  'bot-update-preview': {'pubkey'},
+                  'bot-update': {'pubkey', 'revision', 'use_defaults', 'request_id'},
                   'deploy': {'request'}, 'auth-start': {'pubkey'}, 'auth-poll': {'session'},
                   'auth-input': {'session', 'text'}, 'auth-cancel': {'session'},
                   'schedule-init': set(), 'schedule-save': {'schedule'}, 'schedule-disable': set()}
@@ -286,6 +346,8 @@ class Broker:
             if op == 'auth-input': return self.logins.send(request['session'], request['text'])
             return self.logins.cancel(request['session'])
         with self.lock:
+            if self.update_running and op not in ('status', 'bot-update'):
+                raise ToolError('bot_update_busy')
             if op == 'configure':
                 owner = request['owner']
                 if not isinstance(owner, str) or not HEX.fullmatch(owner):
@@ -324,8 +386,13 @@ class Broker:
                 return {'ok': True, 'configured': bool(settings),
                         'relay': settings.get('relay'), 'owner': settings.get('owner'),
                         'mobile_pairing': read_json(self.control / 'mobile-pairing.json', {'state': 'not_configured'}),
+                        'update': self.update_job(),
                         'bots': bot_records(settings) if settings else []}
             settings = self.settings()
+            if op == 'bot-update-preview':
+                return ExistingBotUpdater(Deployer(settings)).preview(request['pubkey'])
+            if op == 'bot-update':
+                return self.start_update(settings, request)
             if op == 'deploy':
                 payload = request['request']
                 if not isinstance(payload, dict) or payload.get('op') != 'deploy' or 'agent' not in payload:

@@ -25,3 +25,5 @@ header{gap:14px}header button{white-space:nowrap}
 .guide-account-link{display:inline-block;font-weight:700;text-underline-offset:4px}
 #botsPanel{scroll-margin-top:28px}
 @media(max-width:650px){.guide-tabs{grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}.guide-tabs button{font-size:12px;min-height:54px;padding:9px}.guide-tabs b{font-size:20px}.guide-panel>h3{font-size:21px}.guide-panel .guide-image img{max-height:230px}.guide-navigation button{padding:10px 13px}}
+
+#updateDialog{border:1px solid #cbd5c9;border-radius:16px;background:#f4f3ec;color:#21382f;max-width:560px;width:calc(100% - 32px);padding:28px}#updateDialog::backdrop{background:#14261db3}.update-option{display:flex;gap:12px;align-items:flex-start}.update-option input{width:auto;margin-top:8px}.update-actions,.bot-actions{display:flex;gap:8px;flex-wrap:wrap}.bot-actions{flex-direction:column}.bot-actions button{font-size:12px}#updateError{color:#a33328}#updateStatus{white-space:pre-line}

@@ -3,12 +3,19 @@ const {t} = window.BuzzI18n;
 window.BuzzI18n.translatePage();
 const $ = id => document.getElementById(id);
 let configured = false, authSession = null, pollBusy = false, tick = 0;
+let updatePlan = null, updateBusy = false;
 let pendingPairing = null, knownDevices = new Set();
 let requestQueue = Promise.resolve(), initializing = false;
 function queuedRequest(fn) {
   const result=requestQueue.then(fn);requestQueue=result.catch(()=>{});return result;
 }
 const errors = {
+  bot_update_busy: t('다른 업데이트나 배포가 진행 중입니다. 완료 후 다시 시도하세요.'),
+  bot_update_preview_changed: t('봇 설정이 변경되었습니다. 업데이트 창을 닫고 다시 열어 확인하세요.'),
+  authentication_already_in_progress: t('공식 계정 로그인이 진행 중입니다. 먼저 로그인을 마치거나 취소하세요.'),
+  deployment_image_mismatch: t('새 컨테이너의 실행 이미지를 확인하지 못했습니다. 현재 상태와 broker 로그를 확인하세요.'),
+  bot_update_stop_unconfirmed: t('봇 중지를 확인하지 못해 업데이트를 중단했습니다. 현재 상태를 확인하세요.'),
+
   invalid_or_expired_setup_code: t('최초 설정 코드가 틀리거나 만료되었습니다. Docker Manager에서 buzz-agents 오른쪽 ⋮ → 다시 시작을 선택한 뒤 portal의 최신 로그에서 새 코드를 복사하세요.'),
   invalid_or_expired_recovery_code: t('복구 코드가 틀리거나 만료·사용되었습니다. portal 터미널에서 복구 명령을 다시 실행하고 최신 로그를 확인하세요.'),
   pairing_expired_or_used: t('연결 파일이 만료되었거나 이미 사용되었습니다. 새 연결 파일을 받아 주세요.'),
@@ -148,8 +155,9 @@ async function refresh(){
   $('saveRelay').hidden=configured;$('discover').hidden=configured;
   $('bots').replaceChildren();const selected=$('scheduleBot').value;$('scheduleBot').replaceChildren();
   if(!data.bots.length){const p=document.createElement('p');p.className='empty';p.textContent=t('Windows Buzz에서 봇을 만들고 배포하면 여기에 표시됩니다.');$('bots').append(p);}
-  for(const bot of data.bots){const card=document.createElement('div');card.className='bot';const details=document.createElement('div');const name=document.createElement('strong');name.textContent=bot.name;const sub=document.createElement('small');sub.textContent=(bot.provider==='codex'?'Codex':'Claude Code')+' · '+bot.pubkey.slice(0,12)+'…';details.append(name,sub);const health=botHealth(bot);if(health){const info=document.createElement('small');info.textContent=health;details.append(info);}const state=document.createElement('span');state.className='state';state.textContent=statusName(bot.status);const button=document.createElement('button');button.className='secondary';button.textContent=t('계정 로그인');button.disabled=bot.status==='running'||!bot.container_running||Boolean(authSession);button.onclick=async()=>{button.disabled=true;try{await startLogin(bot);}catch(e){message(e.message,true);button.disabled=false;}};card.append(details,state,button);$('bots').append(card);const option=document.createElement('option');option.value=bot.pubkey;option.textContent=bot.name;$('scheduleBot').append(option);}
+  for(const bot of data.bots){const card=document.createElement('div');card.className='bot';const details=document.createElement('div');const name=document.createElement('strong');name.textContent=bot.name;const sub=document.createElement('small');sub.textContent=(bot.provider==='codex'?'Codex':'Claude Code')+' · '+bot.pubkey.slice(0,12)+'…';details.append(name,sub);const health=botHealth(bot);if(health){const info=document.createElement('small');info.textContent=health;details.append(info);}const state=document.createElement('span');state.className='state';state.textContent=statusName(bot.status);const button=document.createElement('button');button.className='secondary';button.textContent=t('계정 로그인');button.disabled=bot.status==='running'||!bot.container_running||Boolean(authSession);button.onclick=async()=>{button.disabled=true;try{await startLogin(bot);}catch(e){message(e.message,true);button.disabled=false;}};const actions=document.createElement('div');actions.className='bot-actions';const updateButton=document.createElement('button');updateButton.className='secondary update-bot';updateButton.textContent=t('업데이트·다시 시작');updateButton.disabled=Boolean(authSession)||data.update?.state==='running';updateButton.onclick=()=>openUpdate(bot).catch(e=>message(e.message,true));button.disabled=button.disabled||data.update?.state==='running';actions.append(button,updateButton);card.append(details,state,actions);$('bots').append(card);const option=document.createElement('option');option.value=bot.pubkey;option.textContent=bot.name;$('scheduleBot').append(option);}
   if(selected)$('scheduleBot').value=selected;
+  renderUpdateStatus(data.update);
   const devices=await api('devices');$('devices').replaceChildren();$('step2').classList.toggle('done',devices.devices.length>0);
   knownDevices=new Set(devices.devices.map(d=>d.id));
   if(pendingPairing && devices.devices.some(d=>!pendingPairing.ids.has(d.id))){pendingPairing=null;$('connectionHint').textContent=t('서버에 Windows 연결이 등록되었습니다. 연결 프로그램의 저장 완료 메시지도 확인하세요. 연결 완료 후에는 파일의 10분 제한이 적용되지 않습니다.');message(t('Windows 연결이 서버에 등록되었습니다. 프로그램에서 저장 완료를 확인한 뒤 Buzz를 다시 실행하세요.'));}
@@ -244,3 +252,29 @@ guideTabs.forEach((tab,index)=>{
 });
 $('guidePrev').addEventListener('click',()=>showGuideStep(guideIndex-1,true,true));
 $('guideNext').addEventListener('click',()=>showGuideStep(guideIndex+1,true,true));
+
+function renderUpdateStatus(job){
+  const el=$('updateStatus');el.hidden=!job?.state;
+  if(!job?.state)return;
+  const descriptions={running:t('봇 업데이트 중입니다. 창을 닫아도 서버에서 계속 진행됩니다.'),succeeded:t('봇 컨테이너 업데이트를 확인했습니다. 아래 상태와 Buzz의 실제 답변을 확인하세요. 로그인 필요로 표시되면 해당 봇에 로그인하세요.'),failed:t('업데이트를 완료하지 못했습니다. 기존 봇을 삭제하지 말고 오류와 현재 상태를 확인하세요.'),interrupted:t('업데이트 도중 관리 서비스가 재시작되어 완료 여부를 확인할 수 없습니다. 현재 상태를 확인한 뒤 다시 시도하세요.')};
+  el.textContent=job.pubkey.slice(0,12)+'… · '+(descriptions[job.state]||'')+(job.error?'\n'+(errors[job.error]||job.error):'');
+}
+async function openUpdate(bot){
+  if(authSession||updateBusy)return;
+  const plan=await api('bot/update-preview',{pubkey:bot.pubkey});
+  updatePlan={...plan,request_id:crypto.randomUUID().replaceAll('-','')};
+  $('updateBotName').textContent=plan.name+' · '+plan.pubkey.slice(0,12)+'…';
+  $('updatePolicy').textContent=t('현재 실행 제한')+': '+plan.policy.turn_limit+' / '+plan.policy.window_seconds+'s · '+plan.policy.daily_limit+' / 24h · '+plan.policy.max_turn_seconds+'s';
+  $('updateDefaults').checked=false;$('updateError').textContent='';$('updateDialog').showModal();
+}
+action('cancelUpdate',()=>{if(!updateBusy){$('updateDialog').close();updatePlan=null;}});
+$('updateDialog').addEventListener('cancel',e=>{if(updateBusy)e.preventDefault();else updatePlan=null;});
+action('updateForm',async()=>{
+  if(!updatePlan||updateBusy)return;
+  updateBusy=true;$('cancelUpdate').disabled=true;$('updateError').textContent='';
+  try{
+    const result=await api('bot/update',{pubkey:updatePlan.pubkey,revision:updatePlan.revision,request_id:updatePlan.request_id,use_defaults:$('updateDefaults').checked});
+    renderUpdateStatus(result.update);$('updateDialog').close();updatePlan=null;await refresh();
+  }catch(e){$('updateError').textContent=e.message+' '+t('응답을 받지 못했더라도 서버 작업은 진행됐을 수 있습니다. 창을 닫고 현재 상태를 확인하세요.');}
+  finally{updateBusy=false;$('cancelUpdate').disabled=false;}
+},'submit');

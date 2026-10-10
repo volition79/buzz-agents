@@ -1,3 +1,24 @@
+# Existing bot update candidate — 2026-10-10
+
+Adds an administrator-only **Update / restart** action for existing Claude/Codex
+bots, including ones left Deployed in Buzz after Shutdown. It preserves the last
+deployed identity, role/model, authentication and work files, with optional explicit
+removal of historical count budgets. See [update instructions](EXISTING-BOT-UPDATE.md).
+
+Local verification: 257 Python regressions passed before final auth-lock and
+retire-image tests; final focused update suite16 passed. Korean/English Chrome
+checks cover confirmation, opt-in defaults, cancel, double-click, refresh, completion,
+failure and interrupted jobs. Existing multilingual/viewport regression passed.
+Current release CI runs the full current suite and real Docker replacement for both
+providers before publishing. Synthetic account-file preservation does not prove
+live provider tokens or replies. User VPS and Windows-off acceptance remain pending.
+
+In-place management updates replace only broker/portal/runtime references; preserve
+setup-route and all existing volumes, paths and project names. No VPS mutation is
+performed by this publication.
+
+## Previous release evidence (historical)
+
 Published candidate `portal-candidate-06c848475608-33-1` from source
 `06c8484756087803e04792af157ab1ee8a7cc76a`.
 Candidate CI: https://github.com/volition79/buzz-agents/actions/runs/38052003782

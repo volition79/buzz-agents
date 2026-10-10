@@ -148,9 +148,14 @@ def service(config, settings):
     }
 
 
-def compose_document(registry, settings):
-    return {"name": "buzz-agents-v2", "services": {
-        service_name(c["pubkey"]): service(c, settings) for c in registry.values()}}
+def compose_document(registry, settings, previous=None):
+    services = {}
+    for config in registry.values():
+        name = service_name(config['pubkey'])
+        old = (previous or {}).get('services', {}).get(name, {})
+        image = config.get('runtime_image', old.get('image', settings['image']))
+        services[name] = service(config, {**settings, 'image': image})
+    return {'name': 'buzz-agents-v2', 'services': services}
 
 
 def check_ownership(container, config):
@@ -218,7 +223,7 @@ class Deployer:
                 self.run(["docker", "rm", container_name(pubkey)])
             del registry[pubkey]
             atomic_json(self.root / "registry.json", registry)
-            atomic_json(self.root / "compose.yaml", compose_document(registry, self.settings))
+            atomic_json(self.root / "compose.yaml", compose_document(registry, self.settings, read_json(self.root / "compose.yaml", {})))
             return {"ok": True, "retired": pubkey, "data_preserved": True}
         finally:
             os.close(lock)
@@ -253,9 +258,10 @@ class Deployer:
         atomic_json(folder / "config" / "config.json", config, 0o400)
         # Keep quota counters across explicit redeploys; no silent budget reset.
         atomic_json(folder / "state" / "runtime.json", {"status": "ready", "reason": "explicit_deploy", "pubkey": pubkey})
-        registry[pubkey] = public_record(config)
+        previous = read_json(self.root / 'compose.yaml', {})
+        registry[pubkey] = {**public_record(config), 'runtime_image': self.settings['image']}
         atomic_json(self.root / "registry.json", registry)
-        manifest = compose_document(registry, self.settings)
+        manifest = compose_document(registry, self.settings, previous)
         atomic_json(self.root / "compose.yaml", manifest)
         self.run(["docker", "compose", "-p", "buzz-agents-v2", "-f", str(self.root / "compose.yaml"),
                   "up", "-d", "--no-deps", "--force-recreate", service_name(pubkey)], timeout=180)
@@ -263,6 +269,8 @@ class Deployer:
         if actual is None or not actual.get("State", {}).get("Running"):
             raise ToolError("deployment_not_running_inspect_host")
         check_ownership(actual, config)
+        if actual.get('Image') != self.settings['image_id']:
+            raise ToolError('deployment_image_mismatch')
         if not process_limit_matches(actual, config):
             raise ToolError("deployment_resource_limit_mismatch")
         return {"ok": True, "agent_id": name, "action": "deployed",

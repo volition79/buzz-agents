@@ -1,0 +1,131 @@
+{
+  "id": "EXISTING-BOT-UPDATE",
+  "reason": "Buzz deployment registration can remain Deployed after Shutdown; add an administrator-only explicit in-place update without recreating identity or discarding files.",
+  "invariants": [
+    "Keep identity, auth homes, workspace and other bot images",
+    "Never auto-retry uncertain mutations or report success without image and PID readback",
+    "Retain device deployment permission boundary and guard/auth locks"
+  ],
+  "evidence_level": "documented",
+  "evidence": [
+    "docs/EXISTING-BOT-UPDATE.md",
+    "tests/test_bot_update.py"
+  ],
+  "status": "active",
+  "importance_score": 760,
+  "importance_reason": "Privileged one-bot container replacement and persistent account/work preservation",
+  "anchors": [
+    {
+      "path": "buzz_agents/bot_update.py",
+      "function": "ExistingBotUpdater.apply",
+      "role": "helper",
+      "start_line": 93,
+      "end_line": 152,
+      "code": "    def apply(self, pubkey, revision, use_defaults):\n        if not isinstance(revision, str) or not HEX.fullmatch(revision) or type(use_defaults) is not bool:\n            raise ToolError('invalid_bot_update_request')\n        private_directory(self.root)\n        fd = os.open(self.root / 'deploy.lock', os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)\n        try:\n            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)\n        except BlockingIOError:\n            os.close(fd)\n            raise ToolError('bot_update_busy') from None\n        auth_locks = []\n        try:\n            old, actual, current = self.inspect(pubkey)\n            if current != revision:\n                raise ToolError('bot_update_preview_changed')\n            for name in ('portal-auth.lock', 'auth.lock'):\n                auth_fd = os.open(self.root / 'bots' / pubkey / 'state' / name,\n                                  os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)\n                auth_locks.append(auth_fd)\n                try:\n                    fcntl.flock(auth_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)\n                except BlockingIOError:\n                    raise ToolError('authentication_already_in_progress') from None\n            d = self.deployer\n            image = json.loads(d.run(['docker', 'image', 'inspect', d.settings['image']]))[0]\n            if image['Id'] != d.settings['image_id']:\n                raise ToolError('image_changed_revalidate_before_deploy')\n            config = d.normalizer(request_from_saved(old, d.settings, use_defaults))\n            # Updating must never switch identities, auth homes, files or models.\n            for key in ('pubkey', 'owner', 'provider', 'command', 'workspace', 'memory_mb', 'cpus', 'name'):\n                if config.get(key) != old[key]:\n                    raise ToolError('bot_update_identity_or_settings_changed')\n            changed = {'BUZZ_ACP_MAX_TURN_DURATION'} if use_defaults else set()\n            if {k: v for k, v in config['env'].items() if k not in changed} != {k: v for k, v in old['env'].items() if k not in changed}:\n                raise ToolError('bot_update_identity_or_settings_changed')\n            expected_policy = {**old['policy']}\n            if use_defaults:\n                expected_policy.update(turn_limit=0, daily_limit=0, max_turn_seconds=7200)\n            if config['policy'] != expected_policy or config.get('startup_env'):\n                raise ToolError('bot_update_identity_or_settings_changed')\n            registry = read_json(self.root / 'registry.json', {})\n            check_resources(config, registry, d.settings, host_capacity(d.run))\n            # Also fence a login left running across a broker restart. Do not\n            # guess whether its PID belongs to this host or the container.\n            if (self.root / 'bots' / pubkey / 'state' / 'portal-auth.json').exists():\n                raise ToolError('authentication_already_in_progress')\n            # The operator explicitly consented to interrupt this one bot. The\n            # device deploy-only API still requires a prior native stop.\n            if actual:\n                d.run(['docker', 'stop', '--time', '70', container_name(pubkey)], timeout=80)\n                stopped = d.inspect(container_name(pubkey))\n                if stopped:\n                    check_ownership(stopped, config)\n                    if stopped.get('State', {}).get('Running'):\n                        raise ToolError('bot_update_stop_unconfirmed')\n            return d._deploy_locked(config)\n        finally:\n            for auth_fd in auth_locks:\n                os.close(auth_fd)\n            os.close(fd)\n",
+      "code_sha256": "45fbe794cb0c93980e10d3ebb0dd1cd057535c3c08181ddc11e90149ecfcac3d",
+      "file_sha256": "2b2efbc2daa97f49f3e144dec335b08875e476d4596b55889ee783654c4de347"
+    },
+    {
+      "path": "buzz_agents/host.py",
+      "function": "compose_document",
+      "role": "helper",
+      "start_line": 151,
+      "end_line": 158,
+      "code": "def compose_document(registry, settings, previous=None):\n    services = {}\n    for config in registry.values():\n        name = service_name(config['pubkey'])\n        old = (previous or {}).get('services', {}).get(name, {})\n        image = config.get('runtime_image', old.get('image', settings['image']))\n        services[name] = service(config, {**settings, 'image': image})\n    return {'name': 'buzz-agents-v2', 'services': services}\n",
+      "code_sha256": "29e7af89e2fe14780b0d485358c94d738740009755060f25d4b7515be018f96d",
+      "file_sha256": "9f1a6baa320fb063e296cf554a796c3c3ba9b1982ec4cb9b20a962452a335d8e"
+    },
+    {
+      "path": "buzz_agents/portal_broker.py",
+      "function": "Broker.start_update",
+      "role": "helper",
+      "start_line": 202,
+      "end_line": 250,
+      "code": "    def start_update(self, settings, request):\n        job_id = request['request_id']\n        if not isinstance(job_id, str) or not re.fullmatch(r'[0-9a-f]{32}', job_id):\n            raise ToolError('invalid_bot_update_request')\n        if type(request['use_defaults']) is not bool or not isinstance(request['revision'], str) or not HEX.fullmatch(request['revision']):\n            raise ToolError('invalid_bot_update_request')\n        previous = self.update_job()\n        if previous.get('id') == job_id:\n            if any(previous.get(k) != request[k] for k in ('pubkey', 'revision', 'use_defaults')):\n                raise ToolError('invalid_bot_update_request')\n            return {'ok': True, 'update': previous}\n        if self.update_running:\n            raise ToolError('bot_update_busy')\n        updater = ExistingBotUpdater(Deployer(settings))\n        plan = updater.preview(request['pubkey'])\n        if plan['revision'] != request['revision']:\n            raise ToolError('bot_update_preview_changed')\n        with self.logins.lock:\n            if any(v['process'].poll() is None for v in self.logins.items.values()):\n                raise ToolError('authentication_already_in_progress')\n        job = {'id': job_id, 'pubkey': request['pubkey'], 'revision': request['revision'],\n               'use_defaults': request['use_defaults'], 'state': 'running'}\n        atomic_json(self.control / 'bot-update.json', job)\n        self.update_running = True\n        def work():\n            result = {**job, 'state': 'failed', 'error': 'bot_update_failed_check_status'}\n            try:\n                updater.apply(request['pubkey'], request['revision'], request['use_defaults'])\n                result = {**job, 'state': 'succeeded'}\n            except ToolError as exc:\n                code = str(exc)\n                if re.fullmatch(r'[a-zA-Z0-9_]{1,160}', code):\n                    result['error'] = code\n            except Exception:\n                pass\n            finally:\n                with self.lock:\n                    try:\n                        atomic_json(self.control / 'bot-update.json', result)\n                        print('Buzz bot update: ' + result['state'] + ' ' + result.get('error', 'verified'), flush=True)\n                    finally:\n                        self.update_running = False\n        try:\n            threading.Thread(target=work, daemon=True).start()\n        except RuntimeError:\n            self.update_running = False\n            atomic_json(self.control / 'bot-update.json', {**job, 'state': 'failed', 'error': 'bot_update_failed_check_status'})\n            raise ToolError('bot_update_failed_check_status') from None\n        return {'ok': True, 'update': job}\n",
+      "code_sha256": "88d1c9c36c16197e53f8a1f2391fe12fde734de52e4d23f3a7f1d234d3e8f894",
+      "file_sha256": "3a78313c5e7eb50855be8cddb321581c748a439fcb6eee7d7e9b6cca5cf4d61c"
+    }
+  ],
+  "decision_context": {
+    "schema": "sonol.code-rationale-context.v1",
+    "authoring_environment": {
+      "os": "Linux WSL",
+      "provider": "Codex",
+      "execution_environment": "local repository"
+    },
+    "targets": [
+      {
+        "os": "linux",
+        "provider": "Claude and Codex ACP",
+        "execution_environment": "Ubuntu Docker VPS",
+        "applicability": "affected",
+        "reason": "Real Docker CI required; local fixture tests passed, actual provider reply pending"
+      }
+    ],
+    "conditions": [
+      {
+        "condition": "Existing registered root-owned bot configuration",
+        "relevance": "applies",
+        "reason": "Administrator confirmation and selected runtime revalidation required"
+      }
+    ],
+    "boundaries": [
+      {
+        "path": "buzz_agents/bot_update.py",
+        "logical_owner": "ExistingBotUpdater.apply",
+        "role": "helper",
+        "review": "Source reviewed with preserved state and failure regression"
+      },
+      {
+        "path": "buzz_agents/host.py",
+        "logical_owner": "compose_document",
+        "role": "helper",
+        "review": "Source reviewed with preserved state and failure regression"
+      },
+      {
+        "path": "buzz_agents/portal_broker.py",
+        "logical_owner": "Broker.start_update",
+        "role": "helper",
+        "review": "Source reviewed with preserved state and failure regression"
+      }
+    ],
+    "verification": [
+      {
+        "assertion_id": "UpdateTests",
+        "test_reference": "tests/test_bot_update.py",
+        "environment": {
+          "os": "linux",
+          "provider": "Claude and Codex ACP",
+          "execution_environment": "Ubuntu Docker VPS"
+        },
+        "status": "passed",
+        "evidence_kind": "fixture",
+        "evidence": [
+          "docs/EXISTING-BOT-UPDATE.md",
+          "TASK.md"
+        ]
+      },
+      {
+        "assertion_id": "real-docker-update",
+        "test_reference": "scripts/verify-bot-update-docker.py",
+        "environment": {
+          "os": "linux",
+          "provider": "Claude and Codex ACP",
+          "execution_environment": "Ubuntu Docker VPS"
+        },
+        "status": "planned",
+        "evidence_kind": "native_execution",
+        "evidence": []
+      }
+    ]
+  },
+  "related_decision_ids": [
+    "GUARD-RECOVERY"
+  ],
+  "schema": "sonol.code-rationale.v1",
+  "source": {
+    "commit": "f58112a621174a7ae8c07629b5fe1fae8c8c1be2",
+    "dirty": true
+  },
+  "assessment_status": "assessed"
+}

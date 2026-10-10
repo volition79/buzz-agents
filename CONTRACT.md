@@ -84,3 +84,7 @@ A ticket remaining 30s after the guard-local watchdog deadline is a cleanup
 integrity failure (worker_cleanup_timeout), which retains the whole-container
 safety hold. It is not charged as normal-work exhaustion. Clock rollback and
 storage faults remain explicit; successful semantic loops are not inferred.
+
+## Existing-bot administrator update
+
+The setup administrator can explicitly interrupt and update one existing bot from its root-owned normalized configuration. Revalidation in the broker-selected runtime must preserve identity, owner, relay, provider, model, role, workspace and resources. Count budgets remain unchanged unless explicitly opting into current defaults. The global deployment lock and both authentication locks fence concurrent mutation. Device deployment permissions are unchanged. Job identifiers deduplicate immediate request retries; persisted status does not auto-resume an interrupted update. Other bots retain their image references. Actual image, ownership and PID-limit readback precede success. See docs/EXISTING-BOT-UPDATE.md for failure and acceptance boundaries.

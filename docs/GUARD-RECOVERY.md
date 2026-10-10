@@ -42,7 +42,7 @@ There is no project policy pack and no validator allow receipt is claimed.
 
 ## Remaining acceptance
 
-Publish/rebuild runtime and provider artifacts, then stop and redeploy existing
-bots to the new image. Existing configured limits need explicit review; see
+Publish/rebuild runtime and provider artifacts, then update existing bots with
+the administrator portal action documented in EXISTING-BOT-UPDATE.md. Existing configured limits need explicit review; see
 DEPLOYMENT.md. Validate actual Claude/Codex tasks and Windows-off operation on
 VPS. No such deployment, subscription login or paid inference occurred here.

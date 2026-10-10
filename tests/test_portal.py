@@ -74,6 +74,21 @@ class PortalHTTPTests(unittest.TestCase):
             self.assertIn('Buzz-VPS-Connect.exe', archive.namelist())
             return json.loads(archive.read('buzz-pairing.json'))
 
+    def test_bot_updates_require_admin_not_device_and_same_origin(self):
+        for path in ('/api/bot/update-preview', '/api/bot/update'):
+            self.assertEqual(self.call(path, {'pubkey':PUBKEY})[0], 401)
+        pairing = self.pair()
+        status, device, _ = self.call('/api/pair/exchange', {'pairing_code':pairing['pairing_code'], 'name':'test'})
+        # Administrator session, not a persistent device token, grants lifecycle changes.
+        self.assertEqual(status,200,device)
+        token = device['token']
+        for path in ('/api/bot/update-preview', '/api/bot/update'):
+            self.assertEqual(self.call(path, {'pubkey':PUBKEY}, cookie='', headers={'Authorization':'Bearer '+token})[0], 401)
+            self.assertEqual(self.call(path, {'pubkey':PUBKEY}, origin='https://evil.example')[0], 403)
+        before=len(self.calls)
+        self.assertEqual(self.call('/api/bot/update-preview', {'pubkey':PUBKEY})[0],200)
+        self.assertEqual(self.calls[before],{'op':'bot-update-preview','pubkey':PUBKEY})
+
     def test_anonymous_admin_and_device_refused_before_broker(self):
         for path in ['/api/status', '/api/discover', '/api/auth/start', '/api/device/deploy']:
             self.assertEqual(self.call(path, {})[0], 401)
