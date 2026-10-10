@@ -24,7 +24,7 @@ def main():
     for filename in ('Buzz-VPS-Connect.exe', 'buzz-backend-hostinger-https.exe'):
         shutil.copyfile(assets/filename, output/filename)
     shutil.copyfile(ROOT/'compose.portal.yaml', output/'compose.hostinger.yaml')
-    shutil.copyfile(ROOT/'docs/PORTAL-INSTALL.ko.md', output/'시작하기.md')
+    shutil.copyfile(ROOT/'docs/PORTAL-INSTALL.ko.md', output/'START-HERE.ko.md')
     paths = [ROOT/n for n in ('Dockerfile', 'Dockerfile.portal', '.dockerignore', 'LICENSE',
                               'package.json', 'package-lock.json', 'compose.portal.yaml')]
     for folder in ('buzz_agents', 'guard-bin'):
