@@ -28,7 +28,7 @@ def main():
         root=Path(tmp);broker=Broker();app=f.Portal(root/'state','http://127.0.0.1',local=True,rpc=broker)
         server=f.Server(('127.0.0.1',0),app);app.url='http://127.0.0.1:'+str(server.server_port)
         threading.Thread(target=server.serve_forever,daemon=True).start()
-        chrome=subprocess.Popen(['google-chrome',*([] if os.environ.get('BUZZ_TEST_HEADED')=='1' else ['--headless=new']),'--no-sandbox','--disable-dev-shm-usage','--remote-debugging-port=0','--user-data-dir='+str(root/'chrome'),'about:blank'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+        chrome=subprocess.Popen(['google-chrome',*([] if os.environ.get('BUZZ_TEST_HEADED')=='1' else ['--headless=new']),'--no-first-run','--no-default-browser-check','--no-sandbox','--disable-dev-shm-usage','--remote-debugging-port=0','--user-data-dir='+str(root/'chrome'),'about:blank'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
         cdp=None
         try:
             deadline=time.monotonic()+15
@@ -36,7 +36,12 @@ def main():
                 if time.monotonic()>deadline:raise RuntimeError('chrome timeout')
                 time.sleep(.1)
             port=(root/'chrome/DevToolsActivePort').read_text().splitlines()[0]
-            page=next(p for p in json.load(urllib.request.urlopen('http://127.0.0.1:'+port+'/json/list')) if p.get('type')=='page')
+            while True:
+                pages=json.load(urllib.request.urlopen('http://127.0.0.1:'+port+'/json/list'))
+                page=next((p for p in pages if p.get('type')=='page'),None)
+                if page:break
+                if time.monotonic()>deadline:raise RuntimeError('chrome page timeout')
+                time.sleep(.1)
             cdp=f.CDP(page['webSocketDebuggerUrl']);cdp.call('Runtime.enable');cdp.call('Page.enable');cdp.call('Network.enable')
             ua=cdp.js('navigator.userAgent')
             for lang,width in [('ko-KR',1440),('en-US',390)]:
