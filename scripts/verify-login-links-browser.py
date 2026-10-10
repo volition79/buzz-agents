@@ -64,7 +64,10 @@ def main():
                     assert cdp.js("document.querySelector('.auth-url').value") == url
                     assert cdp.js("document.querySelector('#authLinks a').target === '_blank' && document.querySelector('#authLinks a').rel === 'noopener noreferrer'")
                 cdp.call('Browser.grantPermissions',{'origin':app.url,'permissions':['clipboardReadWrite','clipboardSanitizedWrite']})
-                # Headed Chrome under Xvfb in CI provides an actual display clipboard.
+                # CI Linux clipboard probe fails independently of the app. Explicit
+                # boundary fixture there; default local run requires native readback.
+                if os.environ.get('BUZZ_TEST_CLIPBOARD')=='fixture':
+                    cdp.js("window.fixtureClipboard='';navigator.clipboard.writeText=async value=>{window.fixtureClipboard=value};navigator.clipboard.readText=async()=>window.fixtureClipboard")
                 probe=cdp.js("navigator.clipboard.writeText('clipboard-fixture-probe').then(()=>navigator.clipboard.readText())")
                 assert probe=='clipboard-fixture-probe', 'Browser display clipboard failed its independent write/read probe'
                 cdp.call('Runtime.evaluate',{'expression':"document.querySelector('.auth-link button').click()",'userGesture':True})
@@ -92,7 +95,7 @@ def main():
                 cdp.js("$('cancelAuth').click()")
                 cdp.until('authSession === null')
             assert not cdp.errors, cdp.errors
-            print(json.dumps({'ok':True,'locales':['ko-KR','en-US'],'flows':['Claude-domain','ANSI','OSC8','clipboard','manual-copy','poll-focus','code-input','cancel','Codex','untrusted-hosts']}))
+            print(json.dumps({'ok':True,'locales':['ko-KR','en-US'],'clipboard':os.environ.get('BUZZ_TEST_CLIPBOARD','native'),'flows':['Claude-domain','ANSI','OSC8','clipboard','manual-copy','poll-focus','code-input','cancel','Codex','untrusted-hosts']}))
         finally:
             if cdp:cdp.ws.close()
             chrome.terminate();chrome.wait(timeout=10);server.shutdown();server.server_close()
