@@ -26,6 +26,10 @@ jobs:
           # Anonymous image pull, no registry login in this job.
           INSTALL_URL: https://raw.githubusercontent.com/${{ github.repository }}/${{ github.sha }}/docker-compose.yml
         run: python3 scripts/verify-url-install.py --url "$INSTALL_URL" --start
+      - name: Verify anonymous stable URL installation with embedded contract
+        env:
+          INSTALL_URL: https://raw.githubusercontent.com/${{ github.repository }}/${{ github.sha }}/compose.stable.yaml
+        run: python3 scripts/verify-url-install.py --url "$INSTALL_URL" --stable --start
   candidate:
     if: ${{ !inputs.verify_only }}
     runs-on: ubuntu-24.04

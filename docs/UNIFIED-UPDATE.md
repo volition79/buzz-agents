@@ -1,8 +1,15 @@
 # Unified update candidate / 통합 업데이트 후보
 
-This source is not a promoted stable release. Do not use a new `stable` install
-URL until candidate acceptance and registry publication are complete.
-현재 소스는 공개된 stable 릴리스가 아닙니다. 기존 설치 URL은 그대로 유지합니다.
+Verified release: [portal-candidate-396648e39341-49-1](https://github.com/volition79/buzz-agents/releases/tag/portal-candidate-396648e39341-49-1).
+[CI verification](https://github.com/volition79/buzz-agents/actions/runs/38105165263)
+passed Python292, browser flows, actual Docker bootstrap, legacy upgrade,
+contract broker configuration, stopped-state preservation and reauthentication.
+The stable management tags were promoted only after those gates passed.
+Anonymous release assets and stable tag digests were independently checked.
+Live Hostinger and real AI subscription acceptance remain user tests.
+
+기존 설치는 [한 번만 전환하는 방법](EXISTING-BOT-UPDATE.md)을 따르세요.
+새 설치는 `compose.stable.yaml`을 사용합니다. 버전 고정용 `docker-compose.yml`도 유지합니다.
 
 ## Implemented boundaries
 

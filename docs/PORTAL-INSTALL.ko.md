@@ -6,7 +6,7 @@
 
 새 설정 화면에서 연결 파일을 내려받아 실행하면, 이전 공식 버전의 연결기도 자동 갱신합니다. 정상 연결은 유지하고, 서버에서 무효로 확인된 연결은 화면 안내에 따라 재연결합니다. 기존 파일을 직접 삭제하거나 이름을 바꿀 필요가 없습니다. Buzz를 먼저 종료하세요. 출처를 확인할 수 없는 파일은 덮어쓰지 않습니다.
 
-기존 Docker 프로젝트를 직접 편집해 업데이트할 때는 `setup-route` 이미지를 변경하지 마세요. 검증된 기존 접속 경로를 유지하고 `portal`, `broker`, runtime 참조만 갱신합니다. 신규 설치는 아래 URL의 자동 구성을 사용합니다.
+기존 Docker 프로젝트의 `setup-route`는 그대로 유지하세요. 통합 업데이트 전환은 [기존 설치 안내](EXISTING-BOT-UPDATE.md)에 따라 관리 이미지 두 값만 처음 한 번 변경합니다. 신규 설치는 아래 URL의 자동 구성을 사용합니다.
 
 ## 현재 상태
 
@@ -17,7 +17,7 @@ v0.4 공개 개발 후보입니다. GitHub에서 이미지 빌드·임시 Compos
 캡처 기반 한국어·영어 안내, 실제 Relay 주소 복사와 Windows 연결 상태별 선택을 포함한 Docker Manager **컴포즈 → URL에서 Compose** 주소:
 
 ```text
-https://raw.githubusercontent.com/volition79/buzz-agents/main/docker-compose.yml
+https://raw.githubusercontent.com/volition79/buzz-agents/main/compose.stable.yaml
 ```
 
 위 URL은 신규 설치용입니다. 기존 설치는 프로젝트를 유지하고 위의 기존 봇 업데이트 안내에 있는 이미지 참조만 갱신한 뒤 **열기**로 다시 접속하세요. 주소 끝에 `?`가 남은 오류 페이지를 새로고침하지 마세요. portal 로그의 최신 최초 설정 코드를 사용합니다. 설정 버튼은 화면 준비가 끝나면 활성화됩니다.
@@ -151,7 +151,7 @@ docker build -f Dockerfile.portal --target portal -t buzz-agents-portal:0.4.0 .
 
 CI37912336094에서 134개 Python 검사와 실제 Docker 신규 설치·기존 helper 전환을 통과했습니다. 공개 URL 그대로 내려받은 배포 검사도 CI37912789643에서 통과했습니다. 접속용 서비스는 정식 Compose 목록과 종료 대상에 포함되며 기존 설정 화면 이미지·URL·인증 볼륨을 유지합니다. 이후 사용자가 기존 「열기」 클릭으로 설정 화면 접속을 확인했습니다. 「열기」가 인증값까지 전달하는지는 아직 확인되지 않았습니다.
 
-기존 프로젝트의 단순 「업데이트」가 GitHub URL의 새 내용을 다시 가져온다고 가정하지 마세요. 이미지가 digest로 고정되어 있으므로 새 Compose 내용이 실제 저장됐는지 확인해야 합니다. 기존 프로젝트를 삭제하거나 이름을 바꾸면 현재 URL·볼륨과 달라질 수 있으므로, 기존 `buzz-agents` 구성을 보존한 적용 경로를 먼저 확인합니다.
+「업데이트」가 GitHub URL의 Compose 내용을 다시 가져오는 것은 아닙니다. `stable` 관리 이미지로 전환한 설치는 이 버튼으로 새 관리 이미지를 받습니다. 이전 digest 고정 설치는 먼저 [관리 이미지 두 값 전환](EXISTING-BOT-UPDATE.md)이 필요합니다. 기존 프로젝트를 삭제하거나 이름을 바꾸면 현재 URL·볼륨과 달라질 수 있으므로, 기존 `buzz-agents` 구성을 보존한 적용 경로를 먼저 확인합니다.
 
 ## 이번 후보의 검증
 

@@ -16,29 +16,39 @@ def main():
     parser=argparse.ArgumentParser()
     parser.add_argument('--url',required=True)
     parser.add_argument('--start',action='store_true')
+    parser.add_argument('--stable',action='store_true')
     args=parser.parse_args()
     with urllib.request.urlopen(args.url,timeout=30) as response:raw=response.read()
-    assert raw==(ROOT/'docker-compose.yml').read_bytes(),'public URL bytes differ from checkout'
+    assert raw==(ROOT/('compose.stable.yaml' if args.stable else 'docker-compose.yml')).read_bytes(),'public URL bytes differ from checkout'
     env={k:v for k,v in os.environ.items() if not k.startswith(('BUZZ_','TRAEFIK_','COMPOSE_'))}
     with tempfile.TemporaryDirectory(prefix='buzz-url-') as tmp:
         compose=Path(tmp)/'docker-compose.yml';compose.write_bytes(raw)
         cmd=['docker','compose','--env-file','/dev/null','-p','buzz-url-check','-f',str(compose)]
         config=json.loads(subprocess.check_output(cmd+['config','--format','json'],env=env,cwd=tmp))
-        spec=importlib.util.spec_from_file_location('release',ROOT/'scripts/render-portal-release.py')
-        renderer=importlib.util.module_from_spec(spec);spec.loader.exec_module(renderer)
-        images={role:config['services'][name]['image'] for role,name in [('runtime','runtime-image'),('broker','broker'),('portal','portal')]}
-        assert raw.decode()==renderer.render(images),'public artifact differs from reviewed template'
         assert config['name']=='buzz-url-check'
-        assert set(config['services'])=={'runtime-image','broker','portal'}
-        assert all('@sha256:' in s['image'] for s in config['services'].values())
+        if args.stable:
+            spec=importlib.util.spec_from_file_location('release',ROOT/'scripts/render-unified-release.py')
+            renderer=importlib.util.module_from_spec(spec);spec.loader.exec_module(renderer)
+            assert raw.decode()==renderer.compose('ghcr.io/volition79/buzz-agents-broker:stable')
+            assert set(config['services'])=={'broker','portal'}
+            for role in ('broker','portal'):
+                assert config['services'][role]['image']=='ghcr.io/volition79/buzz-agents-'+role+':stable'
+            assert 'BUZZ_RUNTIME_IMAGE' not in config['services']['broker'].get('environment',{})
+        else:
+            spec=importlib.util.spec_from_file_location('release',ROOT/'scripts/render-portal-release.py')
+            renderer=importlib.util.module_from_spec(spec);spec.loader.exec_module(renderer)
+            images={role:config['services'][name]['image'] for role,name in [('runtime','runtime-image'),('broker','broker'),('portal','portal')]}
+            assert raw.decode()==renderer.render(images),'public artifact differs from reviewed template'
+            assert set(config['services'])=={'runtime-image','broker','portal'}
+            assert all('@sha256:' in v['image'] for v in config['services'].values())
         assert 'BUZZ_PUBLIC_URL' not in config['services']['portal'].get('environment',{})
         assert config['services']['portal']['labels']['traefik.enable']=='false'
         assert config['services']['broker']['network_mode']=='none'
         if args.start:
             assert os.environ.get('GITHUB_ACTIONS')=='true','CI only'
             subprocess.run(cmd+['pull'],env=env,cwd=tmp,check=True)
-            subprocess.run(['python3',str(ROOT/'scripts/verify-bootstrap-docker.py'),'--compose',str(compose)],env=env,check=True)
-            subprocess.run(['python3',str(ROOT/'scripts/verify-bootstrap-docker.py'),'--compose',str(compose),'--host-proxy'],env=env,check=True)
+            subprocess.run(['python3',str(ROOT/'scripts/verify-bootstrap-docker.py'),'--compose',str(compose),*(['--contract'] if args.stable else [])],env=env,check=True)
+            subprocess.run(['python3',str(ROOT/'scripts/verify-bootstrap-docker.py'),'--compose',str(compose),'--host-proxy',*(['--contract'] if args.stable else [])],env=env,check=True)
     print(json.dumps({'url_sha256':hashlib.sha256(raw).hexdigest(),'public_bytes_match':True,
                       'no_domain_environment':True,'fixture_dns_only':True,
                       'hostinger_import_verified':False,'runtime_smoke':args.start}))

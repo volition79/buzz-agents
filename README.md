@@ -6,7 +6,7 @@
 - [검증 결과](docs/PORTAL-VERIFICATION.md)
 - 새 로컬 패키지: `dist/portal-v0.4/`
 
-공개 이미지 3개와 [설치 Compose](https://raw.githubusercontent.com/volition79/buzz-agents/main/docker-compose.yml)가 준비되었습니다. GitHub Docker 빌드·임시 실행·익명 다운로드 검증은 통과했으며, 기존 후보의 실제 Hostinger 설치와 공인 HTTPS는 확인했습니다. 기존 「열기」 접속은 확인됐으며, 새 후보는 한국어·영어 자동 표시, 로그에서 설정 코드 복사, 메뉴를 통한 초기 설정 재시도, 비밀번호 복구·Windows 재연결을 포함합니다. Docker 업데이트 시 계정과 기존 연결 보존을 검증했습니다. Hostinger ‘열기’의 인증값 자동 전달은 사용하지 않습니다. KVM 2 Windows-off 검증은 아직 남아 있습니다.
+공개 이미지 3개와 [설치 Compose](https://raw.githubusercontent.com/volition79/buzz-agents/main/compose.stable.yaml)가 준비되었습니다. GitHub Docker 빌드·임시 실행·익명 다운로드 검증은 통과했으며, 기존 후보의 실제 Hostinger 설치와 공인 HTTPS는 확인했습니다. 기존 「열기」 접속은 확인됐으며, 새 후보는 한국어·영어 자동 표시, 로그에서 설정 코드 복사, 메뉴를 통한 초기 설정 재시도, 비밀번호 복구·Windows 재연결을 포함합니다. Docker 업데이트 시 계정과 기존 연결 보존을 검증했습니다. Hostinger ‘열기’의 인증값 자동 전달은 사용하지 않습니다. KVM 2 Windows-off 검증은 아직 남아 있습니다.
 
 ## 보존된 v0.3 SSH 방식
 
@@ -45,3 +45,5 @@ v0.2 문서와 테스트 로그는 이력입니다. 새 사용자 설치는 위 
 실행 중인 봇도 설정 화면의 **재로그인**으로 복구할 수 있습니다. 인증·사용량 오류는 기존 Buzz 오류 뒤에 한국어·영어 안내를 덧붙입니다. [기존 설치 업데이트](docs/EXISTING-BOT-UPDATE.md)와 [재로그인 사용법](docs/AI-REAUTHENTICATION.md)을 확인하세요.
 
 Running bots support **Re-login** in the setup portal. Recognized authentication and usage errors retain the original Buzz notice and append Korean/English recovery guidance. See the guides above.
+
+통합 업데이트: 기존 설치는 [한 번만 관리 이미지 두 값을 전환](docs/EXISTING-BOT-UPDATE.md)한 뒤 Docker Manager 업데이트를 사용합니다. 작업을 마친 후 적용하세요. 대기 메시지·진행 중 작업의 자동 재개는 보장하지 않습니다.

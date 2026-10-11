@@ -1,5 +1,39 @@
 # 기존 봇 업데이트 / Update existing bots
 
+## 이번 배포로 전환 / Enable button-based updates
+
+검증된 배포: [portal-candidate-396648e39341-49-1](https://github.com/volition79/buzz-agents/releases/tag/portal-candidate-396648e39341-49-1).
+[실제 Docker 검증](https://github.com/volition79/buzz-agents/actions/runs/38105165263).
+
+**처음 한 번만**, 작업을 마친 후 기존 **buzz-agents → 관리 → Compose 편집**에서 다음 두 값만 바꾸고 배포하세요.
+
+| 항목 / Field | 값 / Value |
+|---|---|
+| `services.broker.image` | `ghcr.io/volition79/buzz-agents-broker:stable` |
+| `services.portal.image` | `ghcr.io/volition79/buzz-agents-portal:stable` |
+
+프로젝트 이름·볼륨·경로·네트워크·기존 `setup-route`와 나머지 값은 유지합니다.
+기존 `BUZZ_RUNTIME_IMAGE`와 `runtime-image` 항목이 남아 있어도 됩니다.
+새 broker에 내장된 검증된 실행 버전이 우선하며 기존 봇은 별도로 적용합니다.
+**이후에는 buzz-agents → ⋯ → 업데이트**를 사용합니다. 이어서 **열기**에서
+필요한 봇별로 **업데이트·다시 시작**을 눌러 적용합니다. Windows 재연결은 필요하지 않습니다.
+관리 서비스 버전이 다르다는 안내가 나오면 Docker Manager의 업데이트를 다시 실행하세요.
+설정 화면의 적용 재시도만으로 관리 이미지가 교체되지는 않습니다.
+
+**One-time migration:** finish work, edit the existing buzz-agents Compose, replace
+only the two image values above, and deploy. Preserve the project name, volumes,
+paths, networks, entire setup-route, and all other values. The old runtime preload
+and environment reference may remain; the embedded broker contract selects the
+reviewed runtime. For later releases, use **buzz-agents → ⋯ → Update**, then
+**Open → Update / restart** for each bot needing the installed runtime. No Windows
+re-pairing is needed. If management versions differ, run Docker Manager Update again;
+the portal's application retry cannot replace management images.
+
+New installations / 신규 설치: [Compose URL](https://raw.githubusercontent.com/volition79/buzz-agents/main/compose.stable.yaml).
+This URL uses the verified management update channel; its image versions can change.
+아래 digest 참조는 특정 버전을 고정하려는 경우에 사용합니다.
+The digest references below are an alternative for installations that pin a release.
+
 ## 업데이트 전 주의 / Before updating
 
 **진행 중인 작업과 대기 메시지는 자동 재개를 보장하지 않습니다.** 로그인 정보와
@@ -20,8 +54,7 @@
 업데이트할 필요가 없습니다. 오류가 나거나 완료 여부가 불분명하면 현재 상태부터 확인합니다.
 설정 화면의 **업데이트 적용 재시도**는 실패한 적용을 다시 시도합니다. 중지된 봇에는 서버에 설치된 릴리스의 실행 버전을 적용할 수 있으며, 실행 중인 봇은 계속 사용자 확인을 기다립니다. 새 릴리스를 검색하는 버튼은 아닙니다.
 
-통합 업데이트는 현재 미공개 후보 기능입니다. [후보 상태와 전환 조건](UNIFIED-UPDATE.md)을
-참고하세요. 공개·검증 전에는 아래 기존 설치 절차를 사용합니다.
+통합 업데이트의 [동작과 검증 범위](UNIFIED-UPDATE.md)를 참고하세요.
 
 **Pending messages and active work are not guaranteed to resume automatically.**
 Retaining sign-in data and work files does not preserve an in-progress task.
@@ -43,38 +76,39 @@ check the current state first. **Retry update application** retries failed appli
 Stopped bots may receive its runtime; running bots still wait for explicit confirmation.
 It does not discover newly published releases.
 
-Unified updates are an unpublished candidate. See [candidate and migration status](UNIFIED-UPDATE.md).
-Until publication and verification, use the existing-installation procedure below.
+See [unified update behavior and verification limits](UNIFIED-UPDATE.md).
 
 ## Verified release references / 검증된 릴리스 참조
 
-Release: `portal-candidate-d530454dd7c9-47-1` · [CI verification](https://github.com/volition79/buzz-agents/actions/runs/38101464868).
+Release: `portal-candidate-396648e39341-49-1` · [CI verification](https://github.com/volition79/buzz-agents/actions/runs/38105165263).
 
 In the **existing** project, replace only these values. 기존 프로젝트에서 아래 값만 변경하세요.
 
 `broker.image`
 
 ```text
-ghcr.io/volition79/buzz-agents-broker@sha256:ed7a4bef8d7a4135094cf98b957cd157132462bc085a419a104f81989a54ee45
+ghcr.io/volition79/buzz-agents-broker@sha256:3414b920a93c4763c3b8bf8b09ed2326edd5540cdd4ea682c102995daedc88b5
 ```
 
 `broker.environment.BUZZ_RUNTIME_IMAGE and runtime-image.image`
 
 ```text
-ghcr.io/volition79/buzz-agents-runtime@sha256:e94980ee0d6e36954bcf415101a25704fc34f9a952df038e7f0bc69f9cb5dcc6
+ghcr.io/volition79/buzz-agents-runtime@sha256:ea420bf321cf73b03aa9234df7a26fc56af22830b1c4778a03aa78fd16eef496
 ```
 
 `portal.image`
 
 ```text
-ghcr.io/volition79/buzz-agents-portal@sha256:2f938da95d6df5cb73cba75bea575c043ddd9b267b4a97baa05592e7c1a0c8af
+ghcr.io/volition79/buzz-agents-portal@sha256:f5dddde38b1e06c0f6f398a2e9625ce940870e5ea5873ece044d5898c9245c2a
 ```
 
-## 이번 변경 / This update
+## 버전을 고정하는 경우 / Digest-pinned alternative
 
-실행 중인 AI에도 **재로그인** 버튼을 제공합니다. 이번에는 네 이미지 참조를 모두 변경하고 각 기존 봇에 **업데이트·다시 시작**을 한 번 적용해야 합니다. [한국어·영어 재로그인 안내](AI-REAUTHENTICATION.md)를 확인하세요.
+아래 절차는 stable 채널 대신 특정 릴리스에 고정하려는 설치용입니다.
+업데이트 버튼을 사용하려면 문서 맨 위의 두 이미지 전환 방법을 사용하세요.
 
-Running bots now support **Re-login**. Update all four image references and apply **Update / restart** once to each existing bot. See the [Korean/English recovery guide](AI-REAUTHENTICATION.md).
+The following procedure pins a specific release. For button-based updates, use
+the two-image migration at the top of this document instead.
 
 ## 한국어
 
