@@ -2,27 +2,33 @@
 
 ## Verified release references / 검증된 릴리스 참조
 
-Release: `portal-candidate-d8cbf92e1149-42-1` · [CI verification](https://github.com/volition79/buzz-agents/actions/runs/38059745781).
+Release: `portal-candidate-d530454dd7c9-47-1` · [CI verification](https://github.com/volition79/buzz-agents/actions/runs/38101464868).
 
 In the **existing** project, replace only these values. 기존 프로젝트에서 아래 값만 변경하세요.
 
 `broker.image`
 
 ```text
-ghcr.io/volition79/buzz-agents-broker@sha256:306d8a8fde5f683bfe5f84617f6e35b1d557906777c00574bcfdb4f575251e16
+ghcr.io/volition79/buzz-agents-broker@sha256:ed7a4bef8d7a4135094cf98b957cd157132462bc085a419a104f81989a54ee45
 ```
 
 `broker.environment.BUZZ_RUNTIME_IMAGE and runtime-image.image`
 
 ```text
-ghcr.io/volition79/buzz-agents-runtime@sha256:ad6183d5ea68fe3bf4d72ac31f872b9a226a78c8b8967bcdfb2182e3ae83775a
+ghcr.io/volition79/buzz-agents-runtime@sha256:e94980ee0d6e36954bcf415101a25704fc34f9a952df038e7f0bc69f9cb5dcc6
 ```
 
 `portal.image`
 
 ```text
-ghcr.io/volition79/buzz-agents-portal@sha256:4af5f65b05bcd712fd485c9c8bb170309be224701a4602f6882ef0ea51823e39
+ghcr.io/volition79/buzz-agents-portal@sha256:2f938da95d6df5cb73cba75bea575c043ddd9b267b4a97baa05592e7c1a0c8af
 ```
+
+## 이번 변경 / This update
+
+실행 중인 AI에도 **재로그인** 버튼을 제공합니다. 이번에는 네 이미지 참조를 모두 변경하고 각 기존 봇에 **업데이트·다시 시작**을 한 번 적용해야 합니다. [한국어·영어 재로그인 안내](AI-REAUTHENTICATION.md)를 확인하세요.
+
+Running bots now support **Re-login**. Update all four image references and apply **Update / restart** once to each existing bot. See the [Korean/English recovery guide](AI-REAUTHENTICATION.md).
 
 ## 한국어
 

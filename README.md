@@ -39,3 +39,9 @@ python3 scripts/build-easy.py
 v0.2 문서와 테스트 로그는 이력입니다. 새 사용자 설치는 위 사용 방법을 따릅니다.
 
 자동 초기 설정 후보는 도메인 환경값 없이 기존 Hostinger 기본 도메인의 Buzz Relay를 검색합니다. `setup-route`가 추가 생성되며, 기존 후보의 URL 설치·공인 TLS는 확인했으며, AI 인증·Windows-off 수용 시험은 별도입니다.
+
+## AI 계정 재로그인 / AI re-login
+
+실행 중인 봇도 설정 화면의 **재로그인**으로 복구할 수 있습니다. 인증·사용량 오류는 기존 Buzz 오류 뒤에 한국어·영어 안내를 덧붙입니다. [기존 설치 업데이트](docs/EXISTING-BOT-UPDATE.md)와 [재로그인 사용법](docs/AI-REAUTHENTICATION.md)을 확인하세요.
+
+Running bots support **Re-login** in the setup portal. Recognized authentication and usage errors retain the original Buzz notice and append Korean/English recovery guidance. See the guides above.

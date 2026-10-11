@@ -1,3 +1,13 @@
+# Safe AI reauthentication verified — 2026-10-11
+
+Release `portal-candidate-d530454dd7c9-47-1`, source `d530454dd7c9c9cc4a2104ea0f48389796daa962`, [CI38101464868](https://github.com/volition79/buzz-agents/actions/runs/38101464868).
+
+Passed270 Python tests, Go race/vet, Korean/English browser checks, two Rust notice-helper tests and optimized build of the exact patched official source, four Docker bootstrap/upgrade scenarios, existing-bot updates and both-provider reauthentication lifecycle. Real Docker with explicitly synthetic CLI/AI programs verified same-container success/automatic start, failure hold, restart hold, cancellation/retry and identity/files retention. No real subscription login or user VPS mutation.
+
+Anonymous readback verified7 manifest assets,49 build-context members,135 public source files and both Windows EXEs against reviewed local bytes. Canonical Compose promotes only the four verified image references. [Existing install update](EXISTING-BOT-UPDATE.md) · [Re-login guide](AI-REAUTHENTICATION.md). Exact immutable Raw URL startup is checked separately before final handoff.
+
+## Historical verification
+
 # Claude login link fix verified
 
 Release `portal-candidate-d8cbf92e1149-42-1`, source `d8cbf92e114968edebba7772e09e52342758b5a8`, CI https://github.com/volition79/buzz-agents/actions/runs/38059745781. Python260, Go race/vet, ko/en real browser with explicit CI clipboard fixture, four Docker bootstrap/upgrade cases and both-provider bot update passed. Native clipboard readback passed separately in local headless and headed Chrome. Anonymous7 assets,40 runtime/build files,128 public source files and both Windows EXEs matched reviewed bytes. Actual provider subscription login and user VPS are not tested or modified. See docs/AUTH-LOGIN-LINKS.md for portal-only existing-install update.
