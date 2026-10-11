@@ -1,0 +1,152 @@
+{
+  "id": "AI-REAUTHENTICATION",
+  "reason": "Running bots need safe administrator reauthentication; preserve official failure notices and append actionable recovery hints without changing retry policy.",
+  "invariants": [
+    "Preserve identity, config, files, limits and other bots",
+    "Require confirmed one-container shutdown and process cleanup; durable hold survives restart",
+    "Official CLI success releases hold and auto-starts same bot; never auto-resend work",
+    "Administrator-only session endpoint; no auth session in device status",
+    "Upstream retry/auth classification unchanged; original notice preserved"
+  ],
+  "evidence_level": "documented",
+  "evidence": [
+    "docs/AI-REAUTHENTICATION.md",
+    "tests/test_reauth.py",
+    "scripts/verify-reauth-browser.py",
+    "patches/apply.py"
+  ],
+  "status": "active",
+  "importance_score": 800,
+  "importance_reason": "Privileged lifecycle recovery and account isolation across interrupted login",
+  "anchors": [
+    {
+      "path": "buzz_agents/reauth.py",
+      "module": "Reauthentication",
+      "role": "helper",
+      "start_line": 1,
+      "end_line": 90,
+      "code": "\"\"\"One-bot, admin-consented reauthentication; persisted hold survives broker loss.\"\"\"\nimport fcntl\nimport os\nfrom pathlib import Path\nimport re\nimport threading\nimport time\n\nfrom .bot_update import ExistingBotUpdater\nfrom .common import ToolError\nfrom .host import container_name, check_ownership\nfrom .policy import atomic_json, read_json\n\nHOLD = 'reauth-hold.json'\nCAPABILITY = 'io.buzz-agents.reauth'\n\n\ndef pending(root, pubkey):\n    return (Path(root) / 'bots' / pubkey / 'state' / HOLD).exists()\n\n\ndef require_unheld(root, pubkey):\n    if pending(root, pubkey):\n        raise ToolError('bot_reauthentication_pending')\n\n\ndef inspect_bot(deployer, pubkey):\n    config, actual, revision = ExistingBotUpdater(deployer).inspect(pubkey)\n    if actual and (actual.get('Config', {}).get('Labels') or {}).get('io.buzz-agents.fingerprint') != config['fingerprint']:\n        raise ToolError('saved_bot_configuration_changed')\n    return config, actual, revision\n\n\nclass Reauthentication:\n    def __init__(self, control, logins, root):\n        self.path = Path(control) / 'reauth.json'\n        self.root = Path(root)\n        self.logins = logins\n        self.lock = threading.RLock()\n        self.running = False\n        self.session = None  # Only the authenticated admin endpoint can read this.\n\n    def status(self):\n        with self.lock:\n            job = read_json(self.path, {})\n            if job.get('state') in ('preparing', 'authenticating') and not self.running:\n                completed = read_json(self.root / 'bots' / job['pubkey'] / 'state' / 'reauth-result.json', {})\n                if completed.get('request_id') == job['id'] and completed.get('success') is True and not pending(self.root, job['pubkey']):\n                    job = {**job, 'state': 'succeeded'}\n                else:\n                    job = {**job, 'state': 'interrupted', 'error': 'reauth_interrupted'}\n            result = {'ok': True, 'reauth': job}\n            if self.running and self.session:\n                result['session'] = self.session\n            return result\n\n    def start(self, deployer, pubkey, request_id):\n        if not isinstance(request_id, str) or not re.fullmatch('[0-9a-f]{32}', request_id):\n            raise ToolError('invalid_reauth_request')\n        with self.lock:\n            previous = self.status()['reauth']\n            if previous.get('id') == request_id:\n                if previous.get('pubkey') != pubkey:\n                    raise ToolError('invalid_reauth_request')\n                return self.status()\n            if self.running:\n                raise ToolError('authentication_already_in_progress')\n            config, actual, _ = inspect_bot(deployer, pubkey)\n            if not actual or (actual.get('Config', {}).get('Labels') or {}).get(CAPABILITY) != '1':\n                raise ToolError('reauth_runtime_update_required')\n            with self.logins.lock:\n                self.logins.expire()\n                if any(v['process'].poll() is None for v in self.logins.items.values()):\n                    raise ToolError('authentication_already_in_progress')\n            job = {'id': request_id, 'pubkey': pubkey, 'name': config['name'], 'state': 'preparing'}\n            atomic_json(self.path, job)\n            self.running, self.session = True, None\n            try:\n                threading.Thread(target=self._work, args=(deployer, job), daemon=True).start()\n            except RuntimeError:\n                self.running = False\n                atomic_json(self.path, {**job, 'state': 'failed', 'error': 'reauth_failed'})\n                raise ToolError('reauth_failed') from None\n            return {'ok': True, 'reauth': job}\n\n    def prepare(self, d, job):\n        inspect_bot(d, job['pubkey'])\n        folder = d.root / 'bots' / job['pubkey'] / 'state'\n        auth_locks = []\n        try:\n",
+      "code_sha256": "df8f5e4e6dade0c56ae8253cbffa5b9445f1b491c871feea2a27e1c2fe841035",
+      "file_sha256": "7c31ee8776883c283c3c18787e6d62db45c513f0991a8e682526709d1e61e6e2"
+    },
+    {
+      "path": "buzz_agents/native.py",
+      "module": "native",
+      "role": "helper",
+      "start_line": 1,
+      "end_line": 90,
+      "code": "\"\"\"One native buzz-acp process per container. Clean stops persist across restarts.\"\"\"\nimport fcntl\nimport json\nimport logging\nimport os\nfrom pathlib import Path\nimport selectors\nimport secrets\nimport signal\nimport stat\nimport subprocess\nimport threading\nimport time\nfrom .common import ToolError, clean_env\nfrom .policy import Policy, Broker, atomic_json, read_json, budget_wait\nfrom .diagnostics import RuntimeDiagnostics\nfrom .runtime_health import ResourceSampler, public_resources\n\nUID = 10001\n\n\ndef load_config(path):\n    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)\n    with os.fdopen(fd, \"rb\") as stream:\n        info = os.fstat(stream.fileno())\n        if info.st_uid != 0 or info.st_mode & 0o077 or not stat.S_ISREG(info.st_mode):\n            raise ToolError(\"private_config_permissions\")\n        data = stream.read(1024 * 1024 + 1)\n    if len(data) > 1024 * 1024:\n        raise ToolError(\"config_too_large\")\n    return json.loads(data)\n\n\ndef runtime_parallelism(config):\n    # Existing configs without an explicit pool size retain their old limit.\n    value = config[\"env\"].get(\"BUZZ_ACP_AGENTS\", \"1\")\n    if not isinstance(value, str) or not value.isascii() or not value.isdigit() or not 1 <= int(value) <= 32:\n        raise ToolError(\"invalid_parallelism\")\n    return int(value)\n\n\ndef runtime_env(config, socket_path, startup_consumed=True):\n    env = clean_env()\n    env.update(config[\"env\"])\n    env.pop(\"BUZZ_ACP_REPLAY_FLOOR\", None)\n    if not startup_consumed:\n        env.update(config.get(\"startup_env\", {}))\n    env[\"BUZZ_MANAGED_AGENT_START_NONCE\"] = secrets.token_hex(16)\n    env.update(BUZZ_ACP_AGENTS=str(runtime_parallelism(config)), HOME=\"/home/agent\", USER=\"agent\", LOGNAME=\"agent\", PYTHONPATH=\"/app\",\n               NO_BROWSER=\"1\", BUZZ_ACP_AGENT_COMMAND=\"/app/guard-bin/\" + config[\"command\"],\n               BUZZ_ACP_AGENT_ARGS=\"\", BUZZ_NATIVE_COMMAND=config[\"command\"],\n               BUZZ_GUARD_SOCKET=str(socket_path), PYTHONDONTWRITEBYTECODE=\"1\")\n    return env\n\n\ndef stop_group(process, grace=60, drain=None):\n    \"\"\"Allow native shutdown to finish while draining its bounded output pipes.\"\"\"\n    try:\n        os.killpg(process.pid, signal.SIGTERM)\n    except ProcessLookupError:\n        pass\n    deadline = time.monotonic() + grace\n    while process.poll() is None and time.monotonic() < deadline:\n        if drain:\n            drain()\n        else:\n            time.sleep(min(0.05, max(0, deadline - time.monotonic())))\n    # Reap remaining descendants even when the group leader has already exited.\n    try:\n        os.killpg(process.pid, signal.SIGKILL)\n    except ProcessLookupError:\n        pass\n    process.wait(timeout=5)\n\n\ndef state_on_start(previous, limits=None, quota=None, now=None):\n    if previous is None or previous.get(\"status\") == \"ready\":\n        return \"ready\", \"\"\n    if previous.get(\"status\") == \"running\":\n        return \"held\", \"unexpected_container_restart\"\n    if (previous.get(\"status\") == \"held\" and limits is not None and quota is not None\n            and previous.get(\"reason\") in (\"turn_window_limit\", \"daily_start_limit\")\n            and (time.time() if now is None else now) + 2 >= quota.get(\"last\", 0)\n            and budget_wait(limits, quota, time.time() if now is None else now) is None):\n        return \"ready\", \"expired_budget_hold\"\n    return previous.get(\"status\", \"held\"), previous.get(\"reason\", \"operator_action_required\")\n\n\ndef main():\n    logging.basicConfig(level=logging.INFO, format=\"%(message)s\")\n",
+      "code_sha256": "bed68ef47a4cd12dbb28f9b927464f74a2316573fbb6e44260310d7be6cb2790",
+      "file_sha256": "97f5ddd9a3fb7714a8ed4b3b839257f50e35ae855aaa48fa1485306aa7c8bf15"
+    },
+    {
+      "path": "buzz_agents/portal_auth.py",
+      "module": "portal_auth",
+      "role": "helper",
+      "start_line": 1,
+      "end_line": 90,
+      "code": "\"\"\"Bounded official-login process group inside ONE bot, never a general terminal.\"\"\"\nimport fcntl\nimport os\nfrom pathlib import Path\nimport re\nimport signal\nimport subprocess\nimport sys\nimport time\nfrom .common import ToolError\nfrom .policy import atomic_json, read_json\n\nBASE = Path('/native-state')\n\n\ndef process_start(pid):\n    # comm may contain spaces/parentheses; fields after its final ')' start at #3.\n    return Path(f'/proc/{pid}/stat').read_text().rsplit(')', 1)[1].split()[19]\n\n\ndef validate_session(session):\n    if not isinstance(session, str) or not re.fullmatch(r'[a-f0-9]{32}', session):\n        raise ToolError('invalid_auth_session')\n\n\ndef cancel(session):\n    validate_session(session)\n    # Persist intent BEFORE reading PID, covering cancellation during startup.\n    atomic_json(BASE / 'portal-auth-cancel.json', {'session': session})\n    record = read_json(BASE / 'portal-auth.json', {})\n    if record and record.get('session') == session:\n        pid = record.get('pid')\n        if type(pid) is not int or pid <= 1:\n            raise ToolError('invalid_auth_process')\n        try:\n            if process_start(pid) == record['start']:\n                os.killpg(pid, signal.SIGTERM)\n        except (FileNotFoundError, ProcessLookupError):\n            pass\n\n\ndef group_quiet(pgid):\n    # Ignore reaped/exited zombies; any live group member blocks automatic start.\n    try:\n        for entry in Path('/proc').iterdir():\n            if not entry.name.isdigit():\n                continue\n            try:\n                fields = (entry / 'stat').read_text().rsplit(')', 1)[1].split()\n            except FileNotFoundError:\n                continue\n            if int(fields[2]) == pgid and fields[0] not in ('Z', 'X'):\n                return False\n        return True\n    except (OSError, ValueError, IndexError):\n        return False\n\n\ndef run(provider, session, timeout=600):\n    validate_session(session)\n    if provider not in ('codex', 'claude') or os.geteuid() != 0:\n        raise ToolError('invalid_auth_request')\n    with open(BASE / 'portal-auth.lock', 'w') as lock:\n        try:\n            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)\n        except BlockingIOError:\n            raise ToolError('authentication_already_in_progress') from None\n        if read_json(BASE / 'portal-auth-cancel.json', {}).get('session') == session:\n            (BASE / 'portal-auth-cancel.json').unlink(missing_ok=True)\n            return 130\n        child = subprocess.Popen([sys.executable, '-m', 'buzz_agents.cli', 'auth', provider],\n                                 start_new_session=True)\n        code = None\n        try:\n            atomic_json(BASE / 'portal-auth.json', {'pid': child.pid, 'start': process_start(child.pid), 'session': session})\n            if read_json(BASE / 'portal-auth-cancel.json', {}).get('session') == session:\n                return 130\n            try:\n                code = child.wait(timeout=timeout)\n                return code\n            except subprocess.TimeoutExpired:\n                return 124\n        finally:\n            try:\n                os.killpg(child.pid, signal.SIGTERM)\n                child.wait(timeout=3)\n            except (ProcessLookupError, subprocess.TimeoutExpired):\n                pass\n            try:\n                os.killpg(child.pid, signal.SIGKILL)\n",
+      "code_sha256": "361cfcfe70e99464b7b6d8898fa69790634beaf1115f3f7cc029d5eea489794d",
+      "file_sha256": "d3e67faf36a5cfa35d2cd3b954c4461f726a4632dc60ff9af815264d6faa814f"
+    },
+    {
+      "path": "patches/hosting_recovery.rs",
+      "module": "hosting_recovery",
+      "role": "helper",
+      "start_line": 1,
+      "end_line": 52,
+      "code": "//! Deployment-specific guidance only. Upstream scheduling/classification stays intact.\n#[derive(Clone, Copy, Debug, PartialEq)]\npub enum Kind { Authentication, Usage }\n\npub fn classify(message: &str) -> Option<Kind> {\n    let text = message.to_ascii_lowercase();\n    if [\"re-authenticate\", \"api error: 401\", \"authentication required\", \"not logged in\", \"oauth token has expired\"].iter().any(|p| text.contains(p)) {\n        Some(Kind::Authentication)\n    } else if [\"usage limit\", \"rate limit\", \"rate_limit_exceeded\", \"insufficient_quota\", \"too many requests\", \"api error: 429\"].iter().any(|p| text.contains(p)) {\n        Some(Kind::Usage)\n    } else { None }\n}\n\npub fn append(mut original: String, kind: Option<Kind>) -> String {\n    match kind {\n        Some(Kind::Authentication) => {\n            eprintln!(\"buzz-agents-diagnostic:runtime_authentication_required\");\n            original.push_str(\"\\n\\n[buzz-agents] Hostinger Docker Manager → 이 buzz-agents 프로젝트 → 열기 → 해당 AI의 ‘재로그인’을 진행한 뒤 Buzz에서 요청을 다시 보내세요.\\nHostinger Docker Manager → your buzz-agents project → Open → Re-login for this AI, then resend your request in Buzz.\");\n        }\n        Some(Kind::Usage) => {\n            eprintln!(\"buzz-agents-diagnostic:runtime_rate_limited\");\n            original.push_str(\"\\n\\n[buzz-agents] 사용량 또는 요청 속도 제한이 감지되었습니다. 소유하신 AI 플랜의 사용량과 초기화 시간을 확인하고, 다시 이용할 수 있을 때 요청을 보내세요. 재로그인으로 사용량 제한이 해제되지는 않습니다.\\nA usage or request-rate limit was detected. Check your AI plan’s usage and reset time, then resend when available. Re-login does not reset usage limits.\");\n        }\n        None => {}\n    }\n    original\n}\n\n#[cfg(test)]\nmod tests {\n    use super::*;\n    #[test] fn preserves_original() {\n        for kind in [Some(Kind::Authentication), Some(Kind::Usage)] {\n            let original = \"⚠️ original failure (provider details).\";\n            let output = append(original.to_string(), kind);\n            assert!(output.starts_with(original));\n            assert_eq!(output.matches(\"[buzz-agents]\").count(), 1);\n            assert!(output.contains(\"Hostinger\") || output.contains(\"AI plan\"));\n        }\n    }\n    #[test] fn only_known_provider_failures() {\n        assert_eq!(classify(\"OAuth access token expired. Re-authenticate\"), Some(Kind::Authentication));\n        assert_eq!(classify(\"API Error: 401\"), Some(Kind::Authentication));\n        for message in [\"usage limit reached\", \"rate_limit_exceeded\", \"API Error: 429\"] {\n            assert_eq!(classify(message), Some(Kind::Usage));\n        }\n        for message in [\"connection reset\", \"HTTP 500\", \"relay rate_limited\", \"tool execution failed\"] {\n            assert_eq!(classify(message), None);\n            assert_eq!(append(message.into(), None), message);\n        }\n    }\n}\n",
+      "code_sha256": "ec21bebfe0700c036bc3fb79c75b8af793874c0f18acc33f48031b181d67d5d2",
+      "file_sha256": "ec21bebfe0700c036bc3fb79c75b8af793874c0f18acc33f48031b181d67d5d2"
+    },
+    {
+      "path": "buzz_agents/web/app.js",
+      "module": "app",
+      "role": "helper",
+      "start_line": 1,
+      "end_line": 90,
+      "code": "'use strict';\nconst {t} = window.BuzzI18n;\nwindow.BuzzI18n.translatePage();\nconst $ = id => document.getElementById(id);\nlet configured = false, authSession = null, pollBusy = false, tick = 0;\nlet reauthBusy = false;\nlet updatePlan = null, updateBusy = false;\nlet pendingPairing = null, knownDevices = new Set();\nlet requestQueue = Promise.resolve(), initializing = false;\nfunction queuedRequest(fn) {\n  const result=requestQueue.then(fn);requestQueue=result.catch(()=>{});return result;\n}\nconst errors = {\n  bot_update_busy: t('다른 업데이트나 배포가 진행 중입니다. 완료 후 다시 시도하세요.'),\n  bot_update_preview_changed: t('봇 설정이 변경되었습니다. 업데이트 창을 닫고 다시 열어 확인하세요.'),\n  bot_reauthentication_pending: t('이 봇은 재로그인을 기다리고 있습니다. 재로그인 버튼으로 다시 시도하세요.'),\n  reauth_runtime_update_required: t('먼저 이 봇의 업데이트·다시 시작을 눌러 최신 실행 버전을 적용한 뒤 재로그인하세요.'),\n  reauth_interrupted: t('관리 서비스가 재시작되었습니다. 재로그인을 다시 눌러 안전하게 처음부터 시도하세요.'),\n  reauth_failed: t('재로그인을 준비하지 못했습니다. 봇을 삭제하지 말고 상태와 로그를 확인한 뒤 다시 시도하세요.'),\n  reauth_login_incomplete: t('로그인이 완료되지 않았습니다. 봇은 대기 상태로 유지됩니다. 재로그인을 다시 시도하세요.'),\n  reauth_stop_unconfirmed: t('봇 종료를 확인하지 못해 로그인을 시작하지 않았습니다. 상태와 로그를 확인하세요.'),\n  reauth_cleanup_unconfirmed: t('이전 프로세스 정리를 확인하지 못해 로그인을 시작하지 않았습니다. 다시 시도하세요.'),\n  reauth_start_unconfirmed: t('로그인 대기 컨테이너를 시작하지 못했습니다. 재로그인을 다시 시도하세요.'),\n  authentication_already_in_progress: t('공식 계정 로그인이 진행 중입니다. 먼저 로그인을 마치거나 취소하세요.'),\n  deployment_image_mismatch: t('새 컨테이너의 실행 이미지를 확인하지 못했습니다. 현재 상태와 broker 로그를 확인하세요.'),\n  bot_update_stop_unconfirmed: t('봇 중지를 확인하지 못해 업데이트를 중단했습니다. 현재 상태를 확인하세요.'),\n\n  invalid_or_expired_setup_code: t('최초 설정 코드가 틀리거나 만료되었습니다. Docker Manager에서 buzz-agents 오른쪽 ⋮ → 다시 시작을 선택한 뒤 portal의 최신 로그에서 새 코드를 복사하세요.'),\n  invalid_or_expired_recovery_code: t('복구 코드가 틀리거나 만료·사용되었습니다. portal 터미널에서 복구 명령을 다시 실행하고 최신 로그를 확인하세요.'),\n  pairing_expired_or_used: t('연결 파일이 만료되었거나 이미 사용되었습니다. 새 연결 파일을 받아 주세요.'),\n  pairing_limit_revoke_old_connections: t('연결 한도에 도달했습니다. 사용하지 않는 Windows 연결을 해제하세요. 미사용 연결 파일은 10분 후 만료됩니다.'),\n  invalid_settings_password: t('설정 화면 비밀번호가 맞지 않습니다.'),\n  settings_password_minimum_12_characters: t('설정 화면 비밀번호는 12자 이상이어야 합니다.'),\n  settings_login_required: t('설정 화면에 다시 로그인해 주세요.'),\n  try_again_in_one_minute: t('요청이 많습니다. 1분 후 다시 시도해 주세요.'),\n  configure_relay_first: t('먼저 내 Relay를 연결해 주세요.'),\n  existing_relay_configuration_preserved: t('이미 연결된 Relay 설정은 자동으로 변경하지 않습니다.'),\n  connection_program_not_packaged: t('Windows 연결 프로그램이 아직 이미지에 포함되지 않았습니다.'),\n  stop_bot_before_authentication: t('실행 중인 봇을 Buzz에서 중지한 뒤 로그인해 주세요.'),\n  existing_installation_requires_migration: t('이전 설치 데이터가 있습니다. 자동으로 덮어쓰지 않습니다.'),\n  login_session_expired: t('로그인 시간이 만료되었습니다. 해당 봇의 로그인 버튼을 다시 눌러 주세요.'),\n  service_unavailable_check_docker_manager: t('관리 서비스에 연결하지 못했습니다. Docker Manager에서 broker 상태를 확인해 주세요.'),\n};\nfunction message(text, bad=false) { $('message').textContent=text; $('message').className=bad?'error':''; $('message').hidden=false; }\nasync function api(path, body={}) {\n  const result=await queuedRequest(async()=>{\n    const retryable=['status','devices','discover'].includes(path);\n    for(let attempt=0;;attempt++) {\n      let response;\n      try {\n        response=await fetch('/api/'+path, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body), credentials:'same-origin'});\n      } catch {\n        if(retryable && attempt<2){await new Promise(resolve=>setTimeout(resolve,300*(attempt+1)));continue;}\n        throw new Error(t('서버에 연결하지 못했습니다. 잠시 후 다시 시도하세요.'));\n      }\n      if([502,503,504].includes(response.status)) {\n        await response.arrayBuffer();\n        if(retryable && attempt<2){await new Promise(resolve=>setTimeout(resolve,300*(attempt+1)));continue;}\n        throw new Error(t('서버 연결이 일시적으로 원활하지 않습니다. 잠시 후 다시 시도하세요.'));\n      }\n      if(response.ok && response.headers.get('Content-Type')?.startsWith('application/zip'))return {blob:await response.blob()};\n      let data;\n      try {data=await response.json();} catch {throw new Error(t('서버에서 올바른 응답을 받지 못했습니다. 잠시 후 다시 시도하세요.'));}\n      if(!data || typeof data!=='object')throw new Error(t('서버에서 올바른 응답을 받지 못했습니다. 잠시 후 다시 시도하세요.'));\n      return {response,data};\n    }\n  });\n  if(result.blob)return result.blob;\n  const {response,data}=result;\n  if (data.error==='login_session_expired' && ['auth/poll','auth/input','auth/cancel'].includes(path)) {\n    if(authSession===body.session) {\n      authSession=null;\n      $('authForm').hidden=true;$('cancelAuth').hidden=true;\n      $('authInput').value='';$('terminal').textContent='';$('authLinks').replaceChildren();\n      $('authStatus').textContent=errors.login_session_expired;\n    }\n    // Cancellation of an already absent session is complete, including logout.\n    if(path==='auth/cancel')return {ok:true,expired:true};\n  }\n  if (response.status===401 && data.error==='settings_login_required') {authSession=null;$('workspace').hidden=true;$('logout').hidden=true;$('loginPanel').hidden=false;await boot();}\n  if (!response.ok || !data.ok) throw new Error(errors[data.error] || t('처리하지 못했습니다: ')+(data.error || response.status));\n  return data;\n}\n// Guide images share the API queue so retained two-slot bridges never receive\n// an unbounded browser image burst. No credentials or writes are retried here.\nfunction loadGuide() {\n  for(const img of document.querySelectorAll('#buzzGuide img[data-src]')) {\n    if(img.dataset.queued)continue;\n    img.dataset.queued='true';\n    queuedRequest(()=>new Promise(resolve=>{\n",
+      "code_sha256": "ac5f20f2fbd70ef8b382dceef6d2c9c8899a9856a37b0bc9071f5ea3865db4e7",
+      "file_sha256": "41ac92266ca0241848c48a17ef4dcfb263a20480ec831570b2e4e9fc65152754"
+    }
+  ],
+  "decision_context": {
+    "schema": "sonol.code-rationale-context.v1",
+    "authoring_environment": {
+      "os": "Linux WSL",
+      "provider": "Codex",
+      "execution_environment": "local repository"
+    },
+    "targets": [
+      {
+        "os": "linux",
+        "provider": "Claude and Codex fixtures",
+        "execution_environment": "local Python and Chrome",
+        "applicability": "affected",
+        "reason": "Focused lifecycle and browser fixtures; real Docker release checks separate"
+      }
+    ],
+    "conditions": [
+      {
+        "condition": "Registered owned bot with reauth-capable image",
+        "relevance": "applies",
+        "reason": "Older runtime refused until explicit in-place update"
+      }
+    ],
+    "boundaries": [
+      {
+        "path": "buzz_agents/reauth.py",
+        "logical_owner": "Reauthentication",
+        "role": "helper",
+        "review": "Source reviewed; retained official behavior and persistent hold boundaries"
+      },
+      {
+        "path": "buzz_agents/native.py",
+        "logical_owner": "native",
+        "role": "helper",
+        "review": "Source reviewed; retained official behavior and persistent hold boundaries"
+      },
+      {
+        "path": "buzz_agents/portal_auth.py",
+        "logical_owner": "portal_auth",
+        "role": "helper",
+        "review": "Source reviewed; retained official behavior and persistent hold boundaries"
+      },
+      {
+        "path": "patches/hosting_recovery.rs",
+        "logical_owner": "hosting_recovery",
+        "role": "helper",
+        "review": "Source reviewed; retained official behavior and persistent hold boundaries"
+      },
+      {
+        "path": "buzz_agents/web/app.js",
+        "logical_owner": "app",
+        "role": "helper",
+        "review": "Source reviewed; retained official behavior and persistent hold boundaries"
+      }
+    ],
+    "verification": [
+      {
+        "assertion_id": "reauth-fixtures",
+        "test_reference": "tests/test_reauth.py and scripts/verify-reauth-browser.py",
+        "environment": {
+          "os": "linux",
+          "provider": "Claude and Codex fixtures",
+          "execution_environment": "local Python and Chrome"
+        },
+        "status": "passed",
+        "evidence_kind": "fixture",
+        "evidence": [
+          "TASK.md",
+          "docs/AI-REAUTHENTICATION.md"
+        ]
+      }
+    ]
+  },
+  "schema": "sonol.code-rationale.v1",
+  "source": {
+    "commit": "5f472ac8299438e2bc8879ea365f8634e70df49d",
+    "dirty": true
+  },
+  "assessment_status": "assessed"
+}

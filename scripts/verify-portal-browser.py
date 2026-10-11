@@ -47,6 +47,7 @@ class FixtureBroker:
             self.bots = [{'pubkey':'b'*64,'name':'기획 담당 · 테스트 봇','provider':'codex','status':'needs_login','container_running':True},
                          {'pubkey':'c'*64,'name':'제작 담당 · 테스트 봇','provider':'claude','status':'needs_login','container_running':True}]
             return {'ok':True,'agent_id':'buzz-native-'+'b'*20}
+        if op == 'reauth-status': return {'ok':True,'reauth':{}}
         if op == 'auth-start':
             return {'ok':True,'session':'fixture-session','expires_in':600}
         if op == 'auth-poll':

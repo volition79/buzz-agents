@@ -85,6 +85,11 @@
       "tag": "portal-candidate-d2ed537e1043-21-1",
       "sha256": "679e86972762f7331ce3ddc92c9de1623b205b58ca5c85ccc27cab7d6ca86e1b",
       "size": 6558208
+    },
+    {
+      "tag": "portal-candidate-d8cbf92e1149-42-1",
+      "sha256": "85cbd502d01dec01999a68809a3e8458d85ef382f560fe4565fdb4eb02575510",
+      "size": 6565376
     }
   ]
 }

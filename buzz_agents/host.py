@@ -209,6 +209,8 @@ class Deployer:
         lock = os.open(self.root / "deploy.lock", os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
         try:
             fcntl.flock(lock, fcntl.LOCK_EX)
+            from .reauth import require_unheld
+            require_unheld(self.root, pubkey)
             registry = read_json(self.root / "registry.json", {})
             config = registry.get(pubkey)
             if config is None:
@@ -229,6 +231,8 @@ class Deployer:
             os.close(lock)
 
     def _deploy_locked(self, config):
+        from .reauth import require_unheld
+        require_unheld(self.root, config["pubkey"])
         registry = read_json(self.root / "registry.json", {})
         pubkey = config["pubkey"]
         folder = self.root / "bots" / pubkey

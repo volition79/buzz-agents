@@ -54,6 +54,7 @@ jobs:
           python3 -m pip install websocket-client==1.9.0
           python3 scripts/verify-portal-route-browser.py
           python3 scripts/verify-bot-update-browser.py
+          python3 scripts/verify-reauth-browser.py
           BUZZ_TEST_CLIPBOARD=fixture python3 scripts/verify-login-links-browser.py
       - name: Build runtime, portal and broker from the same reviewed source
         shell: bash
@@ -85,6 +86,8 @@ jobs:
           python3 scripts/verify-bootstrap-docker.py --compose compose.portal.yaml --host-proxy --portal-upgrade
       - name: Existing bot update preserves identity and files
         run: sudo env "PATH=$PATH" "BUZZ_RUNTIME_IMAGE=$BUZZ_RUNTIME_IMAGE" python3 scripts/verify-bot-update-docker.py
+      - name: Safe reauthentication preserves running bots
+        run: sudo env "PATH=$PATH" "BUZZ_RUNTIME_IMAGE=$BUZZ_RUNTIME_IMAGE" python3 scripts/verify-reauth-docker.py
       - name: Publish reviewed images
         env:
           GH_TOKEN: ${{ github.token }}

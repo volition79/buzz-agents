@@ -342,6 +342,7 @@ class Handler(BaseHTTPRequestHandler):
             return self.respond(200, app.revoke(data.get('id')))
         operations = {'/api/status': 'status', '/api/discover': 'discover', '/api/configure': 'configure',
                       '/api/bot/update-preview': 'bot-update-preview', '/api/bot/update': 'bot-update',
+                      '/api/auth/reauth/start': 'reauth-start', '/api/auth/reauth/status': 'reauth-status',
                       '/api/auth/start': 'auth-start', '/api/auth/poll': 'auth-poll',
                       '/api/auth/input': 'auth-input', '/api/auth/cancel': 'auth-cancel',
                       '/api/schedule/init': 'schedule-init', '/api/schedule/save': 'schedule-save',

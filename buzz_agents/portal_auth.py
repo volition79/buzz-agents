@@ -6,6 +6,7 @@ import re
 import signal
 import subprocess
 import sys
+import time
 from .common import ToolError
 from .policy import atomic_json, read_json
 
@@ -38,6 +39,23 @@ def cancel(session):
             pass
 
 
+def group_quiet(pgid):
+    # Ignore reaped/exited zombies; any live group member blocks automatic start.
+    try:
+        for entry in Path('/proc').iterdir():
+            if not entry.name.isdigit():
+                continue
+            try:
+                fields = (entry / 'stat').read_text().rsplit(')', 1)[1].split()
+            except FileNotFoundError:
+                continue
+            if int(fields[2]) == pgid and fields[0] not in ('Z', 'X'):
+                return False
+        return True
+    except (OSError, ValueError, IndexError):
+        return False
+
+
 def run(provider, session, timeout=600):
     validate_session(session)
     if provider not in ('codex', 'claude') or os.geteuid() != 0:
@@ -52,12 +70,14 @@ def run(provider, session, timeout=600):
             return 130
         child = subprocess.Popen([sys.executable, '-m', 'buzz_agents.cli', 'auth', provider],
                                  start_new_session=True)
+        code = None
         try:
             atomic_json(BASE / 'portal-auth.json', {'pid': child.pid, 'start': process_start(child.pid), 'session': session})
             if read_json(BASE / 'portal-auth-cancel.json', {}).get('session') == session:
                 return 130
             try:
-                return child.wait(timeout=timeout)
+                code = child.wait(timeout=timeout)
+                return code
             except subprocess.TimeoutExpired:
                 return 124
         finally:
@@ -71,7 +91,17 @@ def run(provider, session, timeout=600):
             except ProcessLookupError:
                 pass
             child.wait()
+            deadline = time.monotonic() + 3
+            while not group_quiet(child.pid):
+                if time.monotonic() >= deadline:
+                    raise ToolError('reauth_cleanup_unconfirmed')
+                time.sleep(.05)
             (BASE / 'portal-auth.json').unlink(missing_ok=True)
+            if code == 0 and read_json(BASE / 'portal-auth-cancel.json', {}).get('session') != session:
+                hold = read_json(BASE / 'reauth-hold.json', {})
+                if hold:
+                    atomic_json(BASE / 'reauth-result.json', {**hold, 'success': True})
+                    (BASE / 'reauth-hold.json').unlink(missing_ok=True)
             if read_json(BASE / 'portal-auth-cancel.json', {}).get('session') == session:
                 (BASE / 'portal-auth-cancel.json').unlink(missing_ok=True)
 

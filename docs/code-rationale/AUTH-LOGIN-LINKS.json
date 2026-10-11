@@ -41,6 +41,13 @@
         "execution_environment": "ko/en desktop/mobile browser",
         "applicability": "affected",
         "reason": "Portal UI only; provider process unchanged"
+      },
+      {
+        "os": "linux",
+        "provider": "synthetic provider output",
+        "execution_environment": "native Chrome and HTTP",
+        "applicability": "affected",
+        "reason": "Declare the actual local browser fixture target already recorded in historical verification; no production login claim."
       }
     ],
     "conditions": [
@@ -53,7 +60,7 @@
     "boundaries": [
       {
         "path": "buzz_agents/web/app.js",
-        "logical_owner": "officialLinks",
+        "logical_owner": "extractLoginLinks / officialLinks",
         "role": "helper",
         "review": "Exact host checks and raw transcript handling"
       }

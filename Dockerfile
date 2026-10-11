@@ -6,13 +6,26 @@ ARG PYTHON_IMAGE=python:3.12.15-slim-bookworm@sha256:34386ef0cb081344d7ec1c103ba
 
 FROM ghcr.io/block/buzz-sprig:sha-4db7bb0@sha256:eb739a94eab5745e9804232fbbc048f8b2e348be3a7a15deb623200f83c80c2c AS sprig
 FROM node:24-bookworm-slim@sha256:d6aa754f16b3197301076f047b5def2f02ea1dbbc2ca920407d46d7ec7f87b20 AS node
+# Minimal audited notice patch to the exact official source. All other sprig
+# tools remain official binaries; queue/retry/auth classification is untouched.
+FROM rust:1.95.0-bookworm@sha256:6258907abe69656e41cd992e0b705cdcfabcbbe3db374f92ed2d47121282d4a1 AS acp-build
+RUN apt-get update && apt-get install -y --no-install-recommends python3 cmake clang libclang-dev pkg-config libssl-dev protobuf-compiler && rm -rf /var/lib/apt/lists/*
+ADD --checksum=sha256:58f249f809c0bcc7779ef601a6f808f61cbfdca9ac17ea3b66229efc69cbb14c https://codeload.github.com/block/buzz/tar.gz/4db7bb0e7f904b2f0ea232aacae6cd7f6b8a3b39 /tmp/buzz.tar.gz
+WORKDIR /src
+RUN tar -xzf /tmp/buzz.tar.gz --strip-components=1 && rm /tmp/buzz.tar.gz
+COPY patches /patches
+RUN python3 /patches/apply.py /src && rustc --test /patches/hosting_recovery.rs -o /tmp/notice-tests && /tmp/notice-tests
+RUN --mount=type=cache,target=/usr/local/cargo/registry --mount=type=cache,target=/usr/local/cargo/git \
+    cargo build --locked --release -p buzz-acp --bin buzz-acp && strip target/release/buzz-acp
+
 FROM ${PYTHON_IMAGE} AS runtime
 
 ARG PYTHON_IMAGE
 ARG CODEX_ACP_VERSION=2.1.1
 ARG CLAUDE_ACP_VERSION=0.88.0
 
-LABEL org.opencontainers.image.title="buzz-agents" \
+LABEL io.buzz-agents.reauth="1" \
+      org.opencontainers.image.title="buzz-agents" \
       org.opencontainers.image.description="Native independently configurable Buzz bots with loop/time guards" \
       org.opencontainers.image.version="0.4.0" \
       io.buzz-agents.sprig.source="4db7bb0e7f904b2f0ea232aacae6cd7f6b8a3b39" \
@@ -38,6 +51,7 @@ COPY --from=node /usr/local/bin/node /usr/local/bin/node
 COPY --from=node /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/npm
 COPY --from=node /usr/local/LICENSE /usr/local/share/licenses/node/LICENSE
 COPY --from=sprig --chmod=0755 /usr/local/bin/sprig /usr/local/bin/sprig
+COPY --from=acp-build --chmod=0755 /src/target/release/buzz-acp /usr/local/bin/buzz-acp
 
 # A checksum protects this separately copied upstream distribution notice.
 ADD --checksum=sha256:108cb15997e51b75a8d18b0c1e2c52bd3879d051ab02118973387df1e4aab584 --chmod=0444 \
@@ -46,11 +60,11 @@ ADD --checksum=sha256:108cb15997e51b75a8d18b0c1e2c52bd3879d051ab02118973387df1e4
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-       ca-certificates git libatomic1 libstdc++6 \
+       ca-certificates git libatomic1 libstdc++6 libssl3 \
     && rm -rf /var/lib/apt/lists/* \
     && ln -s ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
     && ln -s ../lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx \
-    && for tool in buzz-acp buzz buzz-dev-mcp git-credential-nostr git-sign-nostr rg tree; do \
+    && for tool in buzz buzz-dev-mcp git-credential-nostr git-sign-nostr rg tree; do \
          ln -s sprig "/usr/local/bin/$tool"; \
        done \
     && groupadd --gid 10001 agent \

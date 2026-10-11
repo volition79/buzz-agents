@@ -20,6 +20,7 @@ from .config import HEX, relay_url
 from .host import Deployer, execute, inspect_container, check_ownership, container_name
 from .bridge import bot_records
 from .bot_update import ExistingBotUpdater
+from .reauth import Reauthentication, pending
 from .policy import atomic_json, read_json
 from . import easy_schedule, portal_bootstrap, portal_compose, mobile_pairing
 
@@ -192,6 +193,7 @@ class Broker:
         self.lock = threading.RLock()
         self.logins = LoginSessions()
         self.update_running = False
+        self.reauth = Reauthentication(self.control, self.logins, self.root)
 
     def update_job(self):
         job = read_json(self.control / 'bot-update.json', {})
@@ -307,6 +309,7 @@ class Broker:
         fields = {'bootstrap-plan': set(), 'bootstrap-activate': {'fingerprint'}, 'status': set(), 'discover': set(), 'configure': {'owner', 'relay'},
                   'bot-update-preview': {'pubkey'},
                   'bot-update': {'pubkey', 'revision', 'use_defaults', 'request_id'},
+                  'reauth-start': {'pubkey', 'request_id'}, 'reauth-status': set(),
                   'deploy': {'request'}, 'auth-start': {'pubkey'}, 'auth-poll': {'session'},
                   'auth-input': {'session', 'text'}, 'auth-cancel': {'session'},
                   'schedule-init': set(), 'schedule-save': {'schedule'}, 'schedule-disable': set()}
@@ -346,6 +349,10 @@ class Broker:
             if op == 'auth-input': return self.logins.send(request['session'], request['text'])
             return self.logins.cancel(request['session'])
         with self.lock:
+            if op == 'reauth-status':
+                return self.reauth.status()
+            if self.reauth.running and op not in ('status', 'reauth-start'):
+                raise ToolError('authentication_already_in_progress')
             if self.update_running and op not in ('status', 'bot-update'):
                 raise ToolError('bot_update_busy')
             if op == 'configure':
@@ -398,7 +405,11 @@ class Broker:
                 if not isinstance(payload, dict) or payload.get('op') != 'deploy' or 'agent' not in payload:
                     raise ToolError('only_deploy_is_allowed')
                 return Deployer(settings).deploy(payload)
+            if op == 'reauth-start':
+                return self.reauth.start(Deployer(settings), request['pubkey'], request['request_id'])
             if op == 'auth-start':
+                if isinstance(request['pubkey'], str) and HEX.fullmatch(request['pubkey']) and pending(self.root, request['pubkey']):
+                    raise ToolError('bot_reauthentication_pending')
                 return self.logins.start(settings, request['pubkey'])
             if op == 'schedule-init': return easy_schedule.initialize(settings)
             if op == 'schedule-save': return easy_schedule.configure(settings, request['schedule'])

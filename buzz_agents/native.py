@@ -101,6 +101,8 @@ def main():
     def startup_state(record):
         return state_on_start(record, config.get("policy"), read_json(state_dir / "quota.json"))
     status, reason = startup_state(previous)
+    if (state_dir / "reauth-hold.json").exists():
+        status, reason = "needs_login", "explicit_reauthentication"
     startup_consumed = bool((previous or {}).get("startup_consumed", False))
     latest_diagnostic = (previous or {}).get("diagnostic", "")
     resources = public_resources((previous or {}).get("resources"))
@@ -122,6 +124,8 @@ def main():
             while not stopping.wait(2):
                 # Only expired rate holds can self-rearm. Auth/operator/fault holds stay put.
                 current = read_json(state_dir / "runtime.json", {})
+                if (state_dir / "reauth-hold.json").exists():
+                    continue
                 if current.get("status") == "ready":
                     return 0
                 next_status, next_reason = startup_state(current)

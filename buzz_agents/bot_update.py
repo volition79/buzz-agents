@@ -102,6 +102,8 @@ class ExistingBotUpdater:
             raise ToolError('bot_update_busy') from None
         auth_locks = []
         try:
+            from .reauth import require_unheld
+            require_unheld(self.root, pubkey)
             old, actual, current = self.inspect(pubkey)
             if current != revision:
                 raise ToolError('bot_update_preview_changed')

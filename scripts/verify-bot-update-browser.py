@@ -31,7 +31,7 @@ def main():
         root=Path(tmp);broker=Broker();app=f.Portal(root/'state','http://127.0.0.1',local=True,rpc=broker)
         server=f.Server(('127.0.0.1',0),app);app.url='http://127.0.0.1:'+str(server.server_port)
         threading.Thread(target=server.serve_forever,daemon=True).start()
-        chrome=subprocess.Popen(['google-chrome','--headless=new','--no-sandbox','--disable-dev-shm-usage','--remote-debugging-port=0','--user-data-dir='+str(root/'chrome'),'about:blank'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+        chrome=subprocess.Popen(['google-chrome','--headless=new','--no-first-run','--no-default-browser-check','--no-sandbox','--disable-dev-shm-usage','--remote-debugging-port=0','--user-data-dir='+str(root/'chrome'),'about:blank'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
         cdp=None
         try:
             deadline=time.monotonic()+15
@@ -46,8 +46,9 @@ def main():
                 broker.update={}
                 cdp.call('Network.setUserAgentOverride',{'userAgent':ua,'acceptLanguage':lang})
                 cdp.call('Emulation.setDeviceMetricsOverride',{'width':width,'height':1000,'deviceScaleFactor':1,'mobile':width<500})
+                cdp.js('window.__previousDocument=true')
                 cdp.call('Page.navigate',{'url':app.url})
-                cdp.until("typeof openUpdate === 'function'")
+                cdp.until("!window.__previousDocument && typeof openUpdate === 'function' && !document.querySelector('#loginForm button').disabled")
                 if not app.account:
                     cdp.js("$('setupCode').value="+json.dumps(app.setup_code)+";$('password').value='test-password-long';$('loginForm button').click()".replace("$('loginForm button')","document.querySelector('#loginForm button')"))
                 cdp.until("document.querySelector('.update-bot') !== null")

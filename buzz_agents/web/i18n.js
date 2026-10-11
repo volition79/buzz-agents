@@ -2,6 +2,21 @@
 // Korean source copy is the message key. Add another catalog to support another locale.
 (() => {
   const catalogs = {en: {
+"재로그인": "Re-login",
+"이 봇의 진행 중인 작업을 중단하고 다시 로그인할까요? 역할·모델·작업 파일은 유지됩니다. 로그인 성공 후 같은 봇이 자동으로 실행됩니다. 중단한 요청은 Buzz에서 다시 보내세요.": "Interrupt this bot’s active work and sign in again? Its role, model and work files are retained. The same bot starts automatically after successful sign-in. Resend interrupted requests in Buzz.",
+"이 봇을 안전하게 중지하고 로그인을 준비하고 있습니다. 새로고침해도 진행 상태를 확인할 수 있습니다.": "Safely stopping this bot and preparing sign-in. You can refresh this page to check progress.",
+"재로그인이 완료되어 같은 봇을 다시 실행합니다. Buzz에서 요청을 다시 보내고 실제 답변을 확인하세요.": "Re-login completed. The same bot is starting again. Resend your request in Buzz and verify a real reply.",
+"AI 인증에 문제가 있습니다. 이 봇의 재로그인을 누른 뒤 Buzz에서 요청을 다시 보내세요.": "AI authentication failed. Use Re-login for this bot, then resend your request in Buzz.",
+"사용량 또는 요청 속도 제한이 감지되었습니다. 소유하신 AI 플랜의 사용량과 초기화 시간을 확인하세요.": "A usage or request-rate limit was detected. Check your AI plan’s usage and reset time.",
+"이 봇은 재로그인을 기다리고 있습니다. 재로그인 버튼으로 다시 시도하세요.": "This bot is waiting for reauthentication. Use Re-login to retry.",
+"먼저 이 봇의 업데이트·다시 시작을 눌러 최신 실행 버전을 적용한 뒤 재로그인하세요.": "First use Update / restart on this bot to apply the latest runtime, then use Re-login.",
+"관리 서비스가 재시작되었습니다. 재로그인을 다시 눌러 안전하게 처음부터 시도하세요.": "The management service restarted. Use Re-login again to safely start over.",
+"재로그인을 준비하지 못했습니다. 봇을 삭제하지 말고 상태와 로그를 확인한 뒤 다시 시도하세요.": "Could not prepare reauthentication. Keep this bot; check status and logs before retrying.",
+"로그인이 완료되지 않았습니다. 봇은 대기 상태로 유지됩니다. 재로그인을 다시 시도하세요.": "Sign-in did not complete. The bot remains waiting. Use Re-login to retry.",
+"봇 종료를 확인하지 못해 로그인을 시작하지 않았습니다. 상태와 로그를 확인하세요.": "Bot shutdown could not be verified; sign-in was not started. Check status and logs.",
+"이전 프로세스 정리를 확인하지 못해 로그인을 시작하지 않았습니다. 다시 시도하세요.": "Previous process cleanup could not be verified; sign-in was not started. Retry.",
+"로그인 대기 컨테이너를 시작하지 못했습니다. 재로그인을 다시 시도하세요.": "Could not start the sign-in waiting container. Use Re-login to retry.",
+
 "공식 로그인 주소": "Official sign-in URL",
 "로그인 주소를 복사했습니다. 브라우저 주소창에 붙여넣으세요.": "Sign-in URL copied. Paste it into your browser address bar.",
 "자동 복사를 사용할 수 없습니다. 선택된 주소를 직접 복사하세요.": "Automatic copying is unavailable. Copy the selected URL manually.",
