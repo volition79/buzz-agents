@@ -69,7 +69,7 @@ def main():
                 cdp.until("authSession===null && !reauthBusy && !document.querySelector('.reauth-bot').disabled")
                 assert ('대기' if lang.startswith('ko') else 'waiting') in cdp.js("$('authStatus').textContent")
                 cdp.js("window.confirm=()=>true;document.querySelector('.reauth-bot').click()")
-                cdp.until('reauthBusy');assert len(broker.starts)==2
+                cdp.until("reauthBusy && document.querySelector('.reauth-bot').disabled");assert len(broker.starts)==2
                 broker.job['state']='succeeded';cdp.js('refresh()');cdp.until('!reauthBusy')
                 assert ('다시 실행' if lang.startswith('ko') else 'starting again') in cdp.js("$('authStatus').textContent")
                 cdp.js("$('authPanel').scrollIntoView({block:'center'})");cdp.shot(out/(lang+'.png'))
