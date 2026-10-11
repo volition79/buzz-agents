@@ -66,7 +66,10 @@ def main():
                     assert cdp.js("$('releaseRetry').textContent") == 'Retry update application'
                 else:
                     assert '자동 재개는 보장하지 않습니다' in guide and '새 버전 출시 알림은 아닙니다' in guide
-                assert cdp.js("$('updateGuide').querySelectorAll('li').length") == 4
+                assert cdp.js("$('updateGuide').querySelectorAll('li').length") == 5
+                steps=cdp.js("Array.from($('updateGuide').querySelectorAll('li'), e=>e.innerText)")
+                assert 'Shutdown' in steps[1] and 'Docker Manager' in steps[2]
+                assert ('Closing Windows Buzz does not stop VPS bots' in steps[1]) if lang=='en-US' else ('Windows Buzz 창만 닫는 것은 VPS 봇 중지가 아닙니다' in steps[1])
                 assert cdp.js("document.documentElement.scrollWidth <= window.innerWidth"), 'guide must fit mobile viewport'
                 cdp.js("$('updateGuide').open=false")
                 retry_before=broker.retries

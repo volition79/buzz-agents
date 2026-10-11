@@ -3,11 +3,13 @@
 (() => {
   const catalogs = {en: {
 "업데이트 적용 재시도는 실패한 적용을 다시 시도합니다. 중지된 봇은 업데이트될 수 있으며 실행 중인 봇은 사용자 확인을 기다립니다. 새 버전을 검색하는 버튼은 아닙니다.": "Retry update application retries failed application of the installed release. Stopped bots may be updated; running bots wait for your confirmation. It does not check for new releases.",
+"작업이 끝나면 Buzz에서 각 VPS 봇의 Shutdown을 누르고, 이 설정 화면에서 중지 상태를 확인한 뒤 다음 단계로 진행하세요. 봇은 삭제하지 마세요. Windows Buzz 창만 닫는 것은 VPS 봇 중지가 아닙니다.": "After work finishes, select Shutdown for each VPS bot in Buzz. Confirm that the bots are stopped on this setup page before continuing. Do not delete the bots. Closing Windows Buzz does not stop VPS bots.",
+"Shutdown도 진행 중인 작업을 중단할 수 있으므로 작업 완료와 결과 저장을 먼저 확인하세요.": "Shutdown can also interrupt active work, so confirm completion and saved results first.",
 "업데이트 전 꼭 확인하세요": "Before updating",
 "새 버전이 공개되면 아래 순서로 업데이트하세요. 이 화면의 업데이트 상태는 서버에 설치된 버전의 적용 상태이며, 새 버전 출시 알림은 아닙니다.": "When a new version is released, follow these steps. Update status on this page shows whether the installed server version has been applied; it is not a new-release notification.",
 "먼저 Buzz에서 작업 완료와 결과 저장을 확인하고, 팀원에게 업데이트 중 새 요청을 보내지 않도록 알려주세요. 예약 작업도 확인하세요.": "First confirm that work is finished and results are saved in Buzz. Ask teammates not to send new requests during the update, and check scheduled tasks.",
 "통합 업데이트로 전환된 설치는 Docker Manager → buzz-agents → ⋯ → 업데이트를 누르세요. 이전 설치는 매뉴얼의 이미지 참조 변경 방법을 따르세요.": "For installations migrated to unified updates, select Docker Manager → buzz-agents → ⋯ → Update. For older installations, follow the image-reference update instructions in the manual.",
-"완료 후 열기로 돌아와 봇별 상태를 확인하세요. 적용이 필요한 봇은 한 명씩 업데이트·다시 시작을 누르고 완료를 기다리세요.": "Afterward, return through Open and check each bot. For bots needing the update, select Update / restart one at a time and wait for completion.",
+"완료 후 열기로 돌아와 봇 계정 로그인에서 사용할 봇 각각의 업데이트·다시 시작을 한 명씩 누르고 완료를 기다리세요.": "Afterward, return through Open. Under Bot account sign-in, select Update / restart for each bot you want to use, one at a time, and wait for completion.",
 "각 봇의 로그인 상태와 실제 답변을 확인한 뒤 작업을 재개하세요. 중지 상태를 유지한 봇은 별도로 시작해야 합니다.": "Check each bot’s sign-in status and an actual reply before resuming work. Bots kept stopped need to be started separately.",
 "업데이트·다시 시작은 진행 중인 작업을 중단합니다. 대기 메시지와 진행 중인 작업의 자동 재개는 보장하지 않습니다. 로그인 정보와 작업 파일이 유지되어도 실행 중이던 작업까지 이어지는 것은 아닙니다.": "Update / restart interrupts active work. Pending messages and active work are not guaranteed to resume automatically. Retaining sign-in data and work files does not preserve an in-progress task.",
 "프로젝트를 삭제하거나 새로 설치하지 마세요. buzz-agents-v2는 별도로 업데이트할 필요가 없습니다. 실패하면 현재 상태와 오류를 확인한 뒤 재시도하세요.": "Do not delete or reinstall the project. buzz-agents-v2 does not need a separate update. If an update fails, check its current status and error before retrying.",

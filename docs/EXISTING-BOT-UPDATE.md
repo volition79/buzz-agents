@@ -5,7 +5,7 @@
 검증된 배포: [portal-candidate-396648e39341-49-1](https://github.com/volition79/buzz-agents/releases/tag/portal-candidate-396648e39341-49-1).
 [실제 Docker 검증](https://github.com/volition79/buzz-agents/actions/runs/38105165263).
 
-**처음 한 번만**, 작업을 마친 후 기존 **buzz-agents → 관리 → Compose 편집**에서 다음 두 값만 바꾸고 배포하세요.
+**처음 한 번만**, 작업 완료·결과 저장을 확인하고 Buzz에서 각 VPS 봇을 **Shutdown**한 후 설정 화면의 중지 상태를 확인하세요. 그다음 기존 **buzz-agents → 관리 → Compose 편집**에서 다음 두 값만 바꾸고 배포하세요.
 
 | 항목 / Field | 값 / Value |
 |---|---|
@@ -20,7 +20,7 @@
 관리 서비스 버전이 다르다는 안내가 나오면 Docker Manager의 업데이트를 다시 실행하세요.
 설정 화면의 적용 재시도만으로 관리 이미지가 교체되지는 않습니다.
 
-**One-time migration:** finish work, edit the existing buzz-agents Compose, replace
+**One-time migration:** finish work, save results, select **Shutdown** for each VPS bot in Buzz, and confirm stopped status on the setup page. Then edit the existing buzz-agents Compose, replace
 only the two image values above, and deploy. Preserve the project name, volumes,
 paths, networks, entire setup-route, and all other values. The old runtime preload
 and environment reference may remain; the embedded broker contract selects the
@@ -36,18 +36,21 @@ The digest references below are an alternative for installations that pin a rele
 
 ## 업데이트 전 주의 / Before updating
 
+**Shutdown도 진행 중인 작업을 중단할 수 있으므로 먼저 작업 완료와 결과 저장을 확인하세요.**
 **진행 중인 작업과 대기 메시지는 자동 재개를 보장하지 않습니다.** 로그인 정보와
 작업 파일 보존은 실행 중인 작업의 연속성을 의미하지 않습니다.
 
 1. Buzz에서 작업 완료와 결과 저장을 확인합니다. 팀원에게 새 요청을 보내지 않도록
    알리고, 예약 작업이 업데이트 시간과 겹치지 않는지 확인합니다.
-2. **통합 업데이트로 전환된 설치에 한해** Docker Manager → **buzz-agents → ⋯ → 업데이트**를
+2. 작업이 끝나면 Buzz에서 각 VPS 봇의 **Shutdown**을 누르고 설정 화면의 중지 상태를 확인합니다.
+   봇을 삭제하지 마세요. Windows Buzz 창만 닫아서는 VPS 봇이 중지되지 않습니다.
+3. **통합 업데이트로 전환된 설치에 한해** Docker Manager → **buzz-agents → ⋯ → 업데이트**를
    사용합니다. 아래 검증된 릴리스처럼 이미지가 digest로 고정된 기존 설치는 버튼만으로
    새 릴리스로 바뀌지 않습니다. 해당 릴리스의 이미지 참조 변경 안내를 따르세요.
-3. 완료 후 **열기** → 봇별 상태를 확인합니다. 실행 중인 봇은 자동 교체하지 않습니다.
-   적용이 필요한 봇마다 **업데이트·다시 시작**을 한 번씩 누르고 완료를 기다립니다.
+4. 완료 후 **열기** → 봇별 상태를 확인합니다. 실행 중인 봇은 자동 교체하지 않습니다.
+   사용할 봇 각각에 **업데이트·다시 시작**을 한 번씩 누르고 완료를 기다립니다.
    작업 중이라면 버튼을 누르기 전에 마무리하세요. 중지 상태로 유지된 봇은 별도로 시작합니다.
-4. 로그인 상태와 실제 답변을 확인한 뒤 작업을 재개합니다. 중단된 작업은 결과와
+5. 로그인 상태와 실제 답변을 확인한 뒤 작업을 재개합니다. 중단된 작업은 결과와
    파일을 확인한 후 필요한 부분만 다시 지시합니다.
 
 프로젝트·봇을 삭제하거나 신규 설치로 대체하지 마세요. **buzz-agents-v2**는 별도로
@@ -56,18 +59,21 @@ The digest references below are an alternative for installations that pin a rele
 
 통합 업데이트의 [동작과 검증 범위](UNIFIED-UPDATE.md)를 참고하세요.
 
+**Shutdown can also interrupt active work; confirm completion and saved results first.**
 **Pending messages and active work are not guaranteed to resume automatically.**
 Retaining sign-in data and work files does not preserve an in-progress task.
 
 1. Confirm completion and saved results in Buzz. Ask teammates to pause new requests
    and check that scheduled tasks will not overlap maintenance.
-2. **Only after migration to unified updates**, use Docker Manager → **buzz-agents → ⋯ → Update**.
+2. After work finishes, select **Shutdown** for each VPS bot in Buzz and confirm stopped status
+   on the setup page. Do not delete bots. Closing Windows Buzz does not stop VPS bots.
+3. **Only after migration to unified updates**, use Docker Manager → **buzz-agents → ⋯ → Update**.
    Existing installations pinned to image digests, including the verified release
    below, need the documented image-reference changes to select a newer release.
-3. Return through **Open** and check each bot. Running bots are not replaced automatically.
-   Use **Update / restart** for each bot needing the installed runtime, one at a time.
+4. Return through **Open** and check each bot. Running bots are not replaced automatically.
+   Under **Bot account sign-in**, use **Update / restart** for each bot you want to use, one at a time.
    Finish its work first. Bots kept stopped need to be started separately.
-4. Verify sign-in state and an actual reply before resuming work. Review results and
+5. Verify sign-in state and an actual reply before resuming work. Review results and
    files before requesting only the unfinished parts of an interrupted task.
 
 Do not delete projects or bots, or replace them with a new installation.
@@ -114,6 +120,8 @@ the two-image migration at the top of this document instead.
 
 Docker Manager에서 관리 서비스만 업데이트해도 이미 실행 중인 봇의 이미지는 바뀌지 않습니다. 또한 Windows Buzz의 `Deployed`는 배포 등록 상태이므로 Shutdown 후에도 남을 수 있습니다. 그 상태에서 봇을 삭제하거나 새로 만들 필요는 없습니다.
 
+먼저 작업 완료·결과 저장 → 각 VPS 봇 Shutdown → 설정 화면의 중지 상태 확인을 마치세요.
+
 1. 기존 **buzz-agents → 관리 → Compose 편집**에서 검증된 새 릴리스의 네 참조만 갱신하고 배포합니다: `broker.image`, `broker.environment.BUZZ_RUNTIME_IMAGE`, `portal.image`, `runtime-image.image`.
 2. 프로젝트 이름, 볼륨, 경로, 네트워크 및 기존 `setup-route` 전체를 유지합니다. 새 프로젝트나 신규 설치 URL로 대체하지 않습니다.
 3. **열기**로 기존 설정 비밀번호를 사용해 로그인합니다. **봇 계정 로그인** 단계에서 기존 봇을 찾고 **업데이트·다시 시작**을 누릅니다.
@@ -130,6 +138,8 @@ Docker Manager에서 관리 서비스만 업데이트해도 이미 실행 중인
 ## English
 
 Updating the management project alone does not replace existing bot containers. Buzz's `Deployed` describes its deployment registration, which may remain after Shutdown. Keep the existing bot identity.
+
+First finish work, save results, select **Shutdown** for each VPS bot and confirm stopped status on the setup page.
 
 1. Edit the existing **buzz-agents** Compose project. Replace only four references from a verified release: `broker.image`, `broker.environment.BUZZ_RUNTIME_IMAGE`, `portal.image`, and `runtime-image.image`.
 2. Preserve the project name, volumes, paths, networks and the entire existing `setup-route`. Do not create a replacement project.

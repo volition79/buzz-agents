@@ -26,7 +26,8 @@ this pinned official Buzz version has an in-memory queue and startup-time replay
 floor, so empty guard slots do not prove a lossless handoff. No drain capability
 or automatic continuation is advertised. The user selected option 1 instead
 of the previously proposed durable queue extension. Finish work and verify saved
-results before updating management, then explicitly apply the installed runtime
+results, select Shutdown for each VPS bot in Buzz and confirm stopped status on
+the setup page before updating management, then explicitly apply the installed runtime
 to each running bot through Update / restart. This interrupts any active work;
 pending messages and active tasks are not guaranteed to resume. Check scheduled
 tasks and coordinate with channel members before starting maintenance.
