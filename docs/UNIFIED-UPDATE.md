@@ -1,7 +1,7 @@
 # Unified update candidate / 통합 업데이트 후보
 
-Verified release: [portal-candidate-396648e39341-49-1](https://github.com/volition79/buzz-agents/releases/tag/portal-candidate-396648e39341-49-1).
-[CI verification](https://github.com/volition79/buzz-agents/actions/runs/38105165263)
+Verified release: [portal-candidate-d798dd4a17b5-51-1](https://github.com/volition79/buzz-agents/releases/tag/portal-candidate-d798dd4a17b5-51-1).
+[CI verification](https://github.com/volition79/buzz-agents/actions/runs/38107825503)
 passed Python292, browser flows, actual Docker bootstrap, legacy upgrade,
 contract broker configuration, stopped-state preservation and reauthentication.
 The stable management tags were promoted only after those gates passed.

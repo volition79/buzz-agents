@@ -2,8 +2,8 @@
 
 ## 이번 배포로 전환 / Enable button-based updates
 
-검증된 배포: [portal-candidate-396648e39341-49-1](https://github.com/volition79/buzz-agents/releases/tag/portal-candidate-396648e39341-49-1).
-[실제 Docker 검증](https://github.com/volition79/buzz-agents/actions/runs/38105165263).
+검증된 배포: [portal-candidate-d798dd4a17b5-51-1](https://github.com/volition79/buzz-agents/releases/tag/portal-candidate-d798dd4a17b5-51-1).
+[실제 Docker 검증](https://github.com/volition79/buzz-agents/actions/runs/38107825503).
 
 **처음 한 번만**, 작업 완료·결과 저장을 확인하고 Buzz에서 각 VPS 봇을 **Shutdown**한 후 설정 화면의 중지 상태를 확인하세요. 그다음 기존 **buzz-agents → 관리 → Compose 편집**에서 다음 두 값만 바꾸고 배포하세요.
 
@@ -86,26 +86,26 @@ See [unified update behavior and verification limits](UNIFIED-UPDATE.md).
 
 ## Verified release references / 검증된 릴리스 참조
 
-Release: `portal-candidate-396648e39341-49-1` · [CI verification](https://github.com/volition79/buzz-agents/actions/runs/38105165263).
+Release: `portal-candidate-d798dd4a17b5-51-1` · [CI verification](https://github.com/volition79/buzz-agents/actions/runs/38107825503).
 
 In the **existing** project, replace only these values. 기존 프로젝트에서 아래 값만 변경하세요.
 
 `broker.image`
 
 ```text
-ghcr.io/volition79/buzz-agents-broker@sha256:3414b920a93c4763c3b8bf8b09ed2326edd5540cdd4ea682c102995daedc88b5
+ghcr.io/volition79/buzz-agents-broker@sha256:a5a8f98c4b6d58a49b4ff4ae8f0b3838d7dabdec0831b5207e0fd14e02abb7e0
 ```
 
 `broker.environment.BUZZ_RUNTIME_IMAGE and runtime-image.image`
 
 ```text
-ghcr.io/volition79/buzz-agents-runtime@sha256:ea420bf321cf73b03aa9234df7a26fc56af22830b1c4778a03aa78fd16eef496
+ghcr.io/volition79/buzz-agents-runtime@sha256:01d00dd2e4dbcb11f3262e446ae43b51759c779a028077c0e3d142b4c44c2552
 ```
 
 `portal.image`
 
 ```text
-ghcr.io/volition79/buzz-agents-portal@sha256:f5dddde38b1e06c0f6f398a2e9625ce940870e5ea5873ece044d5898c9245c2a
+ghcr.io/volition79/buzz-agents-portal@sha256:852fd1a7475ca22c4890bbc32699c3c36bd4bd5e6d2d4f2c634ab1d6c36c987b
 ```
 
 ## 버전을 고정하는 경우 / Digest-pinned alternative
