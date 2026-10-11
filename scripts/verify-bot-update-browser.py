@@ -14,9 +14,12 @@ f=importlib.util.module_from_spec(spec);spec.loader.exec_module(f)
 
 class Broker(f.FixtureBroker):
     def __init__(self):
-        super().__init__();self.configured=True;self.update={};self.starts=[]
+        super().__init__();self.configured=True;self.update={};self.starts=[];self.retries=0
         self.bots=[{'name':'Claude VPS','pubkey':'b'*64,'provider':'claude','status':'stopped','container_running':True}]
     def __call__(self,r):
+        if r['op']=='release-status':return {'ok':True,'release_update':{'state':'attention','target':'a'*40,'bots':{'b'*64:{'name':'Claude VPS','state':'waiting','error':'update_requires_interruption_confirmation'}}}}
+        if r['op']=='release-retry':
+            self.retries+=1;return {'ok':True}
         if r['op']=='bot-update-preview':return {'ok':True,'name':'Claude VPS','pubkey':'b'*64,'revision':'a'*64,'policy':{'turn_limit':20,'daily_limit':100,'max_turn_seconds':600,'window_seconds':3600}}
         if r['op']=='bot-update':
             self.starts.append(r);self.update={'id':r['request_id'],'pubkey':r['pubkey'],'state':'running'}
@@ -52,6 +55,24 @@ def main():
                 if not app.account:
                     cdp.js("$('setupCode').value="+json.dumps(app.setup_code)+";$('password').value='test-password-long';$('loginForm button').click()".replace("$('loginForm button')","document.querySelector('#loginForm button')"))
                 cdp.until("document.querySelector('.update-bot') !== null")
+                cdp.until("!$('releaseRetry').hidden && $('releaseUpdate').textContent.includes('Claude VPS')")
+                if lang=='en-US':assert not re.search('[가-힣]',cdp.js("$('releaseUpdate').textContent"))
+                cdp.js("$('updateGuide').open=true")
+                guide=cdp.js("$('updateGuide').innerText")
+                if lang=='en-US':
+                    assert not re.search('[가-힣]',guide)
+                    assert 'not guaranteed to resume' in guide and 'not a new-release notification' in guide
+                    assert 'Stopped bots may be updated' in guide
+                    assert cdp.js("$('releaseRetry').textContent") == 'Retry update application'
+                else:
+                    assert '자동 재개는 보장하지 않습니다' in guide and '새 버전 출시 알림은 아닙니다' in guide
+                assert cdp.js("$('updateGuide').querySelectorAll('li').length") == 4
+                assert cdp.js("document.documentElement.scrollWidth <= window.innerWidth"), 'guide must fit mobile viewport'
+                cdp.js("$('updateGuide').open=false")
+                retry_before=broker.retries
+                cdp.js("$('releaseRetry').click()")
+                cdp.until("!$('releaseRetry').disabled")
+                assert broker.retries==retry_before+1
                 before=len(broker.starts)
                 cdp.js("document.querySelector('.update-bot').click()")
                 cdp.until("$('updateDialog').open")

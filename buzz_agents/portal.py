@@ -340,7 +340,7 @@ class Handler(BaseHTTPRequestHandler):
             return self.respond(200, {'ok': True, 'devices': [{'id': k, 'name': v['name']} for k, v in app.devices.items()]})
         if self.path == '/api/revoke':
             return self.respond(200, app.revoke(data.get('id')))
-        operations = {'/api/status': 'status', '/api/discover': 'discover', '/api/configure': 'configure',
+        operations = {'/api/release/status': 'release-status', '/api/release/retry': 'release-retry', '/api/status': 'status', '/api/discover': 'discover', '/api/configure': 'configure',
                       '/api/bot/update-preview': 'bot-update-preview', '/api/bot/update': 'bot-update',
                       '/api/auth/reauth/start': 'reauth-start', '/api/auth/reauth/status': 'reauth-status',
                       '/api/auth/start': 'auth-start', '/api/auth/poll': 'auth-poll',

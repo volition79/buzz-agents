@@ -230,7 +230,7 @@ class Deployer:
         finally:
             os.close(lock)
 
-    def _deploy_locked(self, config):
+    def _deploy_locked(self, config, runtime_state=None, start=True, expected_container_id=None):
         from .reauth import require_unheld
         require_unheld(self.root, config["pubkey"])
         registry = read_json(self.root / "registry.json", {})
@@ -238,6 +238,8 @@ class Deployer:
         folder = self.root / "bots" / pubkey
         name = container_name(pubkey)
         actual = self.inspect(name)
+        if expected_container_id is not None and (not actual or actual.get("Id") != expected_container_id):
+            raise ToolError("bot_update_container_changed")
         if actual:
             check_ownership(actual, config)
             state = read_json(folder / "state" / "runtime.json", {})
@@ -253,7 +255,15 @@ class Deployer:
         check_resources(config, registry, self.settings, host_capacity(self.run))
         if actual:
             # Previous container must fully stop before state/config can be replaced.
-            self.run(["docker", "stop", "--time", "70", name], timeout=80)
+            self.run(["docker", "stop", "--time", "70", expected_container_id or name], timeout=80)
+            if expected_container_id is not None:
+                stopped = self.inspect(name)
+                if not stopped or stopped.get("Id") != expected_container_id:
+                    raise ToolError("bot_update_container_changed")
+                check_ownership(stopped, config)
+                state = stopped.get("State", {})
+                if state.get("Running") or state.get("Restarting") or state.get("Pid", 0):
+                    raise ToolError("bot_update_stop_not_confirmed")
         for path in (folder, folder / "config", folder / "state", folder / "state" / "slots"):
             private_directory(path)
         private_directory(folder / "home")
@@ -261,16 +271,16 @@ class Deployer:
         private_directory(self.root / "workspaces" / config["workspace"], 10001)
         atomic_json(folder / "config" / "config.json", config, 0o400)
         # Keep quota counters across explicit redeploys; no silent budget reset.
-        atomic_json(folder / "state" / "runtime.json", {"status": "ready", "reason": "explicit_deploy", "pubkey": pubkey})
+        atomic_json(folder / "state" / "runtime.json", runtime_state if runtime_state is not None else {"status": "ready", "reason": "explicit_deploy", "pubkey": pubkey})
         previous = read_json(self.root / 'compose.yaml', {})
         registry[pubkey] = {**public_record(config), 'runtime_image': self.settings['image']}
         atomic_json(self.root / "registry.json", registry)
         manifest = compose_document(registry, self.settings, previous)
         atomic_json(self.root / "compose.yaml", manifest)
         self.run(["docker", "compose", "-p", "buzz-agents-v2", "-f", str(self.root / "compose.yaml"),
-                  "up", "-d", "--no-deps", "--force-recreate", service_name(pubkey)], timeout=180)
+                  "up", *( ["-d"] if start else ["--no-start"] ), "--no-deps", "--force-recreate", service_name(pubkey)], timeout=180)
         actual = self.inspect(name)
-        if actual is None or not actual.get("State", {}).get("Running"):
+        if actual is None or bool(actual.get("State", {}).get("Running")) != start:
             raise ToolError("deployment_not_running_inspect_host")
         check_ownership(actual, config)
         if actual.get('Image') != self.settings['image_id']:

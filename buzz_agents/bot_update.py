@@ -90,7 +90,7 @@ class ExistingBotUpdater:
                 'target_image': self.deployer.settings['image'],
                 'image_update': not actual or actual.get('Image') != self.deployer.settings['image_id']}
 
-    def apply(self, pubkey, revision, use_defaults):
+    def apply(self, pubkey, revision, use_defaults, preserve_lifecycle=False):
         if not isinstance(revision, str) or not HEX.fullmatch(revision) or type(use_defaults) is not bool:
             raise ToolError('invalid_bot_update_request')
         private_directory(self.root)
@@ -105,6 +105,10 @@ class ExistingBotUpdater:
             from .reauth import require_unheld
             require_unheld(self.root, pubkey)
             old, actual, current = self.inspect(pubkey)
+            saved_state = read_json(self.root / "bots" / pubkey / "state" / "runtime.json", {})
+            was_running = bool(actual and actual.get("State", {}).get("Running"))
+            if preserve_lifecycle and (not actual or was_running or saved_state.get("status") not in ("stopped", "held", "needs_login")):
+                raise ToolError("update_requires_interruption_confirmation")
             if current != revision:
                 raise ToolError('bot_update_preview_changed')
             for name in ('portal-auth.lock', 'auth.lock'):
@@ -141,13 +145,23 @@ class ExistingBotUpdater:
             # The operator explicitly consented to interrupt this one bot. The
             # device deploy-only API still requires a prior native stop.
             if actual:
-                d.run(['docker', 'stop', '--time', '70', container_name(pubkey)], timeout=80)
+                before = d.inspect(container_name(pubkey))
+                if not before or before.get('Id') != actual.get('Id'):
+                    raise ToolError('bot_update_container_changed')
+                if preserve_lifecycle and before.get('State', {}).get('Running'):
+                    raise ToolError('update_requires_interruption_confirmation')
+                d.run(['docker', 'stop', '--time', '70', actual['Id']], timeout=80)
                 stopped = d.inspect(container_name(pubkey))
                 if stopped:
                     check_ownership(stopped, config)
-                    if stopped.get('State', {}).get('Running'):
+                    if (stopped.get('Id') != actual.get('Id') or stopped.get('State', {}).get('Running')
+                            or stopped.get('State', {}).get('Restarting') or stopped.get('State', {}).get('Pid', 0) != 0):
                         raise ToolError('bot_update_stop_unconfirmed')
-            return d._deploy_locked(config)
+                else:
+                    raise ToolError('bot_update_container_changed')
+            return d._deploy_locked(config, runtime_state=saved_state if preserve_lifecycle else None,
+                                    start=was_running if preserve_lifecycle else True,
+                                    expected_container_id=actual['Id'] if actual else None)
         finally:
             for auth_fd in auth_locks:
                 os.close(auth_fd)

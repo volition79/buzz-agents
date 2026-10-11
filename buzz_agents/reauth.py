@@ -109,10 +109,12 @@ class Reauthentication:
         if not actual or (actual.get('Config', {}).get('Labels') or {}).get(CAPABILITY) != '1':
             raise ToolError('reauth_runtime_update_required')
         folder = d.root / 'bots' / pubkey / 'state'
-        # No active auth may be interrupted by a new request. A durable marker
-        # from our own interrupted operation is recoverable by stopping the same
-        # container (which kills its auth process too), then checking both locks.
-        if (folder / 'portal-auth.json').exists() and not (folder / HOLD).exists():
+        # A file alone is not proof of a live login: container recreation can
+        # leave it behind. A fresh request must first own BOTH authentication
+        # locks; an interrupted request is already fenced by its durable hold.
+        # Never inspect a container PID in the host namespace or unlink stale
+        # metadata until the exact container is stopped and cleanup is proven.
+        if not (folder / HOLD).exists() and not auth_locked:
             raise ToolError('authentication_already_in_progress')
         atomic_json(folder / HOLD, {'request_id': job['id']})
         d.run(['docker', 'stop', '--time', '70', actual['Id']], timeout=80)

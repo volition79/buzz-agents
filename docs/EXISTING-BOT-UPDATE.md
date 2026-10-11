@@ -1,5 +1,51 @@
 # 기존 봇 업데이트 / Update existing bots
 
+## 업데이트 전 주의 / Before updating
+
+**진행 중인 작업과 대기 메시지는 자동 재개를 보장하지 않습니다.** 로그인 정보와
+작업 파일 보존은 실행 중인 작업의 연속성을 의미하지 않습니다.
+
+1. Buzz에서 작업 완료와 결과 저장을 확인합니다. 팀원에게 새 요청을 보내지 않도록
+   알리고, 예약 작업이 업데이트 시간과 겹치지 않는지 확인합니다.
+2. **통합 업데이트로 전환된 설치에 한해** Docker Manager → **buzz-agents → ⋯ → 업데이트**를
+   사용합니다. 아래 검증된 릴리스처럼 이미지가 digest로 고정된 기존 설치는 버튼만으로
+   새 릴리스로 바뀌지 않습니다. 해당 릴리스의 이미지 참조 변경 안내를 따르세요.
+3. 완료 후 **열기** → 봇별 상태를 확인합니다. 실행 중인 봇은 자동 교체하지 않습니다.
+   적용이 필요한 봇마다 **업데이트·다시 시작**을 한 번씩 누르고 완료를 기다립니다.
+   작업 중이라면 버튼을 누르기 전에 마무리하세요. 중지 상태로 유지된 봇은 별도로 시작합니다.
+4. 로그인 상태와 실제 답변을 확인한 뒤 작업을 재개합니다. 중단된 작업은 결과와
+   파일을 확인한 후 필요한 부분만 다시 지시합니다.
+
+프로젝트·봇을 삭제하거나 신규 설치로 대체하지 마세요. **buzz-agents-v2**는 별도로
+업데이트할 필요가 없습니다. 오류가 나거나 완료 여부가 불분명하면 현재 상태부터 확인합니다.
+설정 화면의 **업데이트 적용 재시도**는 실패한 적용을 다시 시도합니다. 중지된 봇에는 서버에 설치된 릴리스의 실행 버전을 적용할 수 있으며, 실행 중인 봇은 계속 사용자 확인을 기다립니다. 새 릴리스를 검색하는 버튼은 아닙니다.
+
+통합 업데이트는 현재 미공개 후보 기능입니다. [후보 상태와 전환 조건](UNIFIED-UPDATE.md)을
+참고하세요. 공개·검증 전에는 아래 기존 설치 절차를 사용합니다.
+
+**Pending messages and active work are not guaranteed to resume automatically.**
+Retaining sign-in data and work files does not preserve an in-progress task.
+
+1. Confirm completion and saved results in Buzz. Ask teammates to pause new requests
+   and check that scheduled tasks will not overlap maintenance.
+2. **Only after migration to unified updates**, use Docker Manager → **buzz-agents → ⋯ → Update**.
+   Existing installations pinned to image digests, including the verified release
+   below, need the documented image-reference changes to select a newer release.
+3. Return through **Open** and check each bot. Running bots are not replaced automatically.
+   Use **Update / restart** for each bot needing the installed runtime, one at a time.
+   Finish its work first. Bots kept stopped need to be started separately.
+4. Verify sign-in state and an actual reply before resuming work. Review results and
+   files before requesting only the unfinished parts of an interrupted task.
+
+Do not delete projects or bots, or replace them with a new installation.
+**buzz-agents-v2** needs no separate update. After an error or uncertain completion,
+check the current state first. **Retry update application** retries failed application of the installed release.
+Stopped bots may receive its runtime; running bots still wait for explicit confirmation.
+It does not discover newly published releases.
+
+Unified updates are an unpublished candidate. See [candidate and migration status](UNIFIED-UPDATE.md).
+Until publication and verification, use the existing-installation procedure below.
+
 ## Verified release references / 검증된 릴리스 참조
 
 Release: `portal-candidate-d530454dd7c9-47-1` · [CI verification](https://github.com/volition79/buzz-agents/actions/runs/38101464868).

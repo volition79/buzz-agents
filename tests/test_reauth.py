@@ -95,10 +95,49 @@ class ReauthTests(unittest.TestCase):
             with self.assertRaisesRegex(ToolError,'reauthentication_pending'):action()
         self.assertEqual(self.fixture.commands,[])
 
-    def test_normal_auth_record_refuses_interrupt(self):
+    def test_stale_normal_auth_record_recovers_only_after_confirmed_stop(self):
+        atomic_json(self.folder/'portal-auth.json',{'pid':123,'start':'old','session':'c'*32})
+        atomic_json(self.folder/'portal-auth-cancel.json',{'session':'c'*32})
+        self.assertEqual(self.r.prepare(self.d,self.job)['session'],'test-session')
+        self.assertFalse((self.folder/'portal-auth.json').exists())
+        self.assertFalse((self.folder/'portal-auth-cancel.json').exists())
+        self.assertTrue((self.folder/HOLD).exists())
+        for path in self.fixture.kept:self.assertEqual(path.read_text(),'private-sentinel')
+
+    def test_live_normal_auth_lock_refuses_before_any_container_mutation(self):
+        for name in ('portal-auth.lock','auth.lock'):
+            with self.subTest(lock=name),open(self.folder/name,'w') as fd:
+                atomic_json(self.folder/'portal-auth.json',{'pid':123})
+                fcntl.flock(fd,fcntl.LOCK_EX)
+                with self.assertRaisesRegex(ToolError,'authentication_already'):
+                    self.r.prepare(self.d,self.job)
+                self.assertEqual(self.fixture.commands,[])
+                self.assertFalse((self.folder/HOLD).exists())
+                self.assertTrue((self.folder/'portal-auth.json').exists())
+                self.login.start.assert_not_called()
+
+    def test_stale_auth_metadata_survives_unconfirmed_stop(self):
         atomic_json(self.folder/'portal-auth.json',{'pid':123})
-        with self.assertRaisesRegex(ToolError,'authentication_already'):self.r.prepare(self.d,self.job)
-        self.assertEqual(self.fixture.commands,[])
+        self.fixture.fail='unconfirmed'
+        with self.assertRaisesRegex(ToolError,'stop_unconfirmed'):
+            self.r.prepare(self.d,self.job)
+        self.assertTrue((self.folder/'portal-auth.json').exists())
+        self.assertTrue((self.folder/HOLD).exists())
+        self.login.start.assert_not_called()
+
+    def test_stale_auth_metadata_survives_external_container_replacement(self):
+        atomic_json(self.folder/'portal-auth.json',{'pid':123})
+        original=self.d.run
+        def replace_after_stop(argv,*args,**kwargs):
+            result=original(argv,*args,**kwargs)
+            if argv[:2]==['docker','stop']:
+                self.fixture.current={**self.fixture.current,'Id':'different-generation'}
+            return result
+        self.d.run=replace_after_stop
+        with self.assertRaisesRegex(ToolError,'stop_unconfirmed'):
+            self.r.prepare(self.d,self.job)
+        self.assertTrue((self.folder/'portal-auth.json').exists())
+        self.login.start.assert_not_called()
 
     def test_supervisor_hold_blocks_stale_ready_and_login_marker(self):
         atomic_json(self.folder/HOLD,{'request_id':self.job['id']})

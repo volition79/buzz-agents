@@ -22,6 +22,8 @@ from .bridge import bot_records
 from .bot_update import ExistingBotUpdater
 from .reauth import Reauthentication, pending
 from .policy import atomic_json, read_json
+from . import release_contract
+from .rollout import Rollout
 from . import easy_schedule, portal_bootstrap, portal_compose, mobile_pairing
 
 LIMIT = 512 * 1024
@@ -186,14 +188,16 @@ class LoginSessions:
 
 
 class Broker:
-    def __init__(self, image, root=STATE, control=CONTROL):
+    def __init__(self, image, root=STATE, control=CONTROL, contract=None):
         if not re.fullmatch(r'[a-zA-Z0-9][a-zA-Z0-9._/:@-]{1,250}', image):
             raise ToolError('invalid_runtime_image')
-        self.image, self.root, self.control = image, Path(root), Path(control)
+        self.contract = release_contract.validate(contract) if contract else None
+        self.image, self.root, self.control = self.contract["runtime"] if self.contract else image, Path(root), Path(control)
         self.lock = threading.RLock()
         self.logins = LoginSessions()
         self.update_running = False
         self.reauth = Reauthentication(self.control, self.logins, self.root)
+        self.rollout = Rollout(self, self.contract)
 
     def update_job(self):
         job = read_json(self.control / 'bot-update.json', {})
@@ -307,6 +311,7 @@ class Broker:
             raise ToolError('invalid_request')
         op = request.get('op')
         fields = {'bootstrap-plan': set(), 'bootstrap-activate': {'fingerprint'}, 'status': set(), 'discover': set(), 'configure': {'owner', 'relay'},
+                  'release-status': set(), 'release-retry': set(),
                   'bot-update-preview': {'pubkey'},
                   'bot-update': {'pubkey', 'revision', 'use_defaults', 'request_id'},
                   'reauth-start': {'pubkey', 'request_id'}, 'reauth-status': set(),
@@ -348,13 +353,26 @@ class Broker:
             if op == 'auth-poll': return self.logins.poll(request['session'])
             if op == 'auth-input': return self.logins.send(request['session'], request['text'])
             return self.logins.cancel(request['session'])
+        if op == 'status':
+            settings = read_json(self.control / 'settings.json', {})
+            return {'ok': True, 'configured': bool(settings),
+                    'relay': settings.get('relay'), 'owner': settings.get('owner'),
+                    'mobile_pairing': read_json(self.control / 'mobile-pairing.json', {'state': 'not_configured'}),
+                    'update': self.update_job(),
+                    'bots': bot_records(settings) if settings else []}
+        if op == 'release-status':
+            return {'ok': True, 'release_update': self.rollout.status()}
+        if op == 'release-retry':
+            return self.rollout.retry()
+        if op == 'reauth-status':
+            return self.reauth.status()
         with self.lock:
-            if op == 'reauth-status':
-                return self.reauth.status()
             if self.reauth.running and op not in ('status', 'reauth-start'):
                 raise ToolError('authentication_already_in_progress')
             if self.update_running and op not in ('status', 'bot-update'):
                 raise ToolError('bot_update_busy')
+            if self.contract and op in ('configure','deploy','bot-update','reauth-start'):
+                self.rollout.verify_management()
             if op == 'configure':
                 owner = request['owner']
                 if not isinstance(owner, str) or not HEX.fullmatch(owner):
@@ -365,7 +383,7 @@ class Broker:
                     raise ToolError('existing_relay_configuration_preserved')
                 if read_json(self.root / 'registry.json', {}) and not old:
                     raise ToolError('existing_installation_requires_migration')
-                image = json.loads(execute(['docker', 'image', 'inspect', self.image]))[0]
+                image = release_contract.image(execute, self.image, pull=True) if self.contract else json.loads(execute(['docker', 'image', 'inspect', self.image]))[0]
                 labels = image.get('Config', {}).get('Labels') or {}
                 if labels.get('org.opencontainers.image.title') != 'buzz-agents':
                     raise ToolError('runtime_image_identity_mismatch')
@@ -388,13 +406,6 @@ class Broker:
                 atomic_json(self.control / 'settings.json', settings)
                 self.reconcile_mobile_pairing()
                 return {'ok': True}
-            if op == 'status':
-                settings = read_json(self.control / 'settings.json', {})
-                return {'ok': True, 'configured': bool(settings),
-                        'relay': settings.get('relay'), 'owner': settings.get('owner'),
-                        'mobile_pairing': read_json(self.control / 'mobile-pairing.json', {'state': 'not_configured'}),
-                        'update': self.update_job(),
-                        'bots': bot_records(settings) if settings else []}
             settings = self.settings()
             if op == 'bot-update-preview':
                 return ExistingBotUpdater(Deployer(settings)).preview(request['pubkey'])
@@ -445,7 +456,8 @@ def main():
     with socketserver.UnixStreamServer(SOCKET, Handler) as server:
         os.chown(SOCKET, 0, 10002)
         os.chmod(SOCKET, 0o660)
-        server.broker = Broker(os.environ['BUZZ_RUNTIME_IMAGE'])
+        server.broker = Broker(os.environ.get('BUZZ_RUNTIME_IMAGE', 'legacy:unset'), contract=release_contract.load())
+        threading.Thread(target=server.broker.rollout.serve, daemon=True).start()
         threading.Thread(target=server.broker.reconcile_saved_route, daemon=True).start()
         server.serve_forever()
 

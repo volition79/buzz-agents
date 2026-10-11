@@ -62,6 +62,17 @@ def main():
                     other=bots[1][0]
                     assert inspect_container(container_name(other))['Image']==old_id
                     assert read_json(root/'compose.yaml')['services'][service_name(other)]['image']==prior
+            # Automatic reconciliation may replace stopped bots, but must not start them.
+            for pubkey, _ in bots:
+                current=inspect_container(container_name(pubkey))
+                execute(['docker','stop','--time','70',current['Id']],timeout=80)
+                saved={'status':'held','reason':'fixture-preserved','startup_consumed':True}
+                atomic_json(root/'bots'/pubkey/'state/runtime.json',saved)
+                u.apply(pubkey,u.preview(pubkey)['revision'],False,preserve_lifecycle=True)
+                current=inspect_container(container_name(pubkey))
+                assert current['Image']==image_id and not current['State']['Running']
+                assert read_json(root/'bots'/pubkey/'state/runtime.json')==saved
+                assert (root/'workspaces/team/page.txt').read_text()=='webtoon'
             print(json.dumps({'ok':True,'providers':['codex','claude'],'actual_image_readback':True,'preserved':['identity','role','model','credential-files','quota','workspace','other-runtime']}))
         finally:
             for name in names:subprocess.run(['docker','rm','-f',name],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)

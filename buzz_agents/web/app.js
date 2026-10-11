@@ -148,6 +148,8 @@ function botHealth(bot){
     runtime_process_limit_near_capacity:t('프로세스·스레드 사용량이 한도에 가깝습니다. 동시 실행 수를 확인하세요.')
   };
   const resources=bot.resources||{};
+  const recoveryReasons={unexpected_container_restart:'예기치 않은 재시작으로 봇을 보류했습니다. 작업 상태를 확인한 뒤 업데이트·다시 시작으로 복구하세요.',external_stop_incomplete:'이전 작업의 정상 종료를 확인하지 못했습니다. 작업 상태를 확인한 뒤 업데이트·다시 시작으로 복구하세요.'};
+  if(recoveryReasons[bot.reason])return t(recoveryReasons[bot.reason]);
   const code=bot.reason==='worker_cleanup_timeout'?'runtime_adapter_cleanup_failed':bot.diagnostic||resources.health_warning;
   const parts=[];
   if(messages[code])parts.push(messages[code]);
@@ -155,9 +157,35 @@ function botHealth(bot){
   if(Number.isSafeInteger(resources.pids_current)&&Number.isSafeInteger(resources.pids_max))parts.push(t('최근 프로세스·스레드 사용량')+': '+resources.pids_current+' / '+resources.pids_max);
   return parts.join(' ');
 }
+function releaseMessage(code){
+  const copy={
+    update_requires_interruption_confirmation:'현재 실행기는 작업을 잃지 않는 자동 교체를 지원하지 않습니다. 작업을 마친 뒤 이 봇의 업데이트·다시 시작을 눌러 적용하세요.',
+    release_management_mismatch:'관리 서비스의 버전이 서로 다릅니다. Docker Manager에서 buzz-agents를 다시 업데이트하세요. 기존 봇은 유지됩니다.',
+    authentication_already_in_progress:'인증이 진행 중이거나 이전 인증 기록이 남았습니다. 인증을 마치거나 이 봇의 재로그인으로 복구하세요.',
+    bot_reauthentication_pending:'이 봇의 재로그인을 완료한 뒤 업데이트할 수 있습니다.',
+    release_update_interrupted:'업데이트 도중 재시작되어 완료 여부를 확인해야 합니다. 봇 상태를 확인한 뒤 업데이트 적용 재시도을 누르세요.'
+  };
+  return copy[code]?t(copy[code]):code||'';
+}
+async function refreshRelease(){
+  const box=$('releaseUpdate');if(!box)return;
+  try{
+    const reply=await api('release/status');const job=reply.release_update;
+    if(!job)return;
+    box.replaceChildren();
+    const title=document.createElement('p');title.textContent=t(job.state==='current'?'업데이트 적용 완료':job.state==='legacy'?'기존 설치 방식입니다. 통합 업데이트로 전환하려면 업데이트 안내를 확인하세요.':'업데이트 상태')+(job.target?' · '+job.target.slice(0,12):'');box.append(title);
+    if(job.error){const p=document.createElement('p');p.textContent=releaseMessage(job.error);box.append(p);}
+    for(const item of Object.values(job.bots||{})){
+      const p=document.createElement('p');p.textContent=(item.name||'AI')+' · '+t(({current:'적용 완료',pending:'대기 중',waiting:'확인 필요',applying:'적용 중',failed:'실패',interrupted:'확인 필요'})[item.state]||'확인 필요')+(item.error?' — '+releaseMessage(item.error):'');box.append(p);
+    }
+    $('releaseRetry').hidden=!['attention','interrupted','waiting'].includes(job.state);
+  }catch(e){box.textContent=t('업데이트 상태를 확인하지 못했습니다. 잠시 후 다시 확인하세요.');}
+}
+if($('releaseRetry'))$('releaseRetry').onclick=async()=>{const b=$('releaseRetry');b.disabled=true;try{await api('release/retry',{});await refreshRelease();}catch(e){message(e.message,true);}finally{b.disabled=false;}};
 async function refresh(){
   const data=await api('status');configured=data.configured;
   await refreshReauth();
+  await refreshRelease();
   $('download').disabled=!configured;$('relayBadge').textContent=configured?t('연결됨'):t('연결 대기');$('step1').classList.toggle('done',configured);
   if(configured){$('relay').value=data.relay;$('owner').value=data.owner;}
   $('communityRelay').value=configured?data.relay:'';

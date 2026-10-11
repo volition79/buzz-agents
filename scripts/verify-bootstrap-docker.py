@@ -17,6 +17,7 @@ def main():
     parser=argparse.ArgumentParser()
     parser.add_argument('--compose',required=True)
     parser.add_argument('--host-proxy',action='store_true')
+    parser.add_argument('--contract',action='store_true')
     parser.add_argument('--legacy-upgrade',action='store_true')
     parser.add_argument('--portal-upgrade',action='store_true')
     args=parser.parse_args()
@@ -149,7 +150,8 @@ request_code()
             # Compose config serializes literal dollars escaped; verify the real
             # container value and equivalence of config output across rewrite.
             assert 'BUZZ_FIXTURE_LITERAL=a$b' in portal_before['Config']['Env']
-            assert (resolved['services']['setup-route']['image']==resolved['services']['portal']['image']) != args.portal_upgrade
+            if not target_portal.endswith(':stable'):
+                assert (resolved['services']['setup-route']['image']==resolved['services']['portal']['image']) != args.portal_upgrade
             assert '@sha256:' in resolved['services']['setup-route']['image']
             assert resolved['services']['portal']['environment']['BUZZ_FIXTURE_LITERAL']==normalized_before['services']['portal']['environment']['BUZZ_FIXTURE_LITERAL']
             assert json.loads(actual.read_text())['services']['portal']['environment']['BUZZ_FIXTURE_LITERAL']=='a$$b'
@@ -171,6 +173,21 @@ request_code()
             run(cmd+['restart','portal'],env=env)
             ready()
             assert json.loads(run(['docker','inspect',route]))[0]['Id']==route_state['Id']
+            if args.contract:
+                # Real embedded contract, actual Docker inspection/pull and cold configure.
+                probe = """from buzz_agents.portal_broker import Broker
+from buzz_agents import release_contract
+c=release_contract.load()
+assert c is not None
+b=Broker('deliberately-stale:unused',contract=c)
+b.rollout.verify_management()
+b.dispatch({'op':'configure','owner':'a'*64,'relay':'wss://buzz.srv12345.hstgr.cloud'})
+assert b.settings()['image']==c['runtime']
+b.rollout.tick()
+assert b.rollout.status()['state']=='current', b.rollout.status()
+print('embedded release contract Docker verification passed')
+"""
+                run(cmd+['exec','-T','broker','python','-c',probe],env=env)
             after=json.loads(run(['docker','inspect',relay]))[0]
             assert before['Id']==after['Id'] and before['Config']==after['Config'] and after['State']['Running']
             proxy_after=json.loads(run(['docker','inspect',proxy]))[0]

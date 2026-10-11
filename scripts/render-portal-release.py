@@ -50,13 +50,20 @@ def checksum_text(files):
     return "".join(record["sha256"] + "  " + name + "\n" for name, record in sorted(files.items()))
 
 
-def write_release(images, output):
+def write_release(images, output, unified=False):
     # Verify prior artifacts before adding the final Compose; never bless a
     # corrupted executable merely by regenerating all hashes from current bytes.
     manifest_path = output.parent / "manifest.json"
     manifest = json.loads(manifest_path.read_text())
     prior = {k: v for k, v in manifest["files"].items() if k != output.name}
     check_files(output.parent, prior)
+    if unified:
+        import importlib.util
+        spec = importlib.util.spec_from_file_location('unified', ROOT/'scripts/render-unified-release.py')
+        module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
+        stable = module.compose('ghcr.io/volition79/buzz-agents-broker:stable').encode()
+        atomic_text(output.parent/'compose.stable.yaml', stable.decode())
+        prior['compose.stable.yaml'] = {'sha256': hashlib.sha256(stable).hexdigest(), 'size': len(stable)}
     text = render(images)
     raw = text.encode("utf8")
     atomic_text(output, text)
@@ -87,6 +94,7 @@ if __name__=='__main__':
     for role in ('runtime','broker','portal'):parser.add_argument('--'+role)
     parser.add_argument('--output',required=True,type=Path)
     parser.add_argument('--verify',action='store_true')
+    parser.add_argument('--unified',action='store_true')
     parser.add_argument('--list-assets',action='store_true')
     args=parser.parse_args()
     if args.list_assets:
@@ -96,4 +104,4 @@ if __name__=='__main__':
     else:
         if not all(getattr(args, role) for role in ('runtime','broker','portal')):
             parser.error('all three image digests are required')
-        write_release({k:getattr(args,k) for k in ('runtime','broker','portal')}, args.output)
+        write_release({k:getattr(args,k) for k in ('runtime','broker','portal')}, args.output, args.unified)

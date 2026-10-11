@@ -109,9 +109,16 @@ def reconcile(containers, self_id, data):
     path = project_file(containers, self_id, data['project'])
     portal = next(c for c in containers if c.get('Name', '').lstrip('/') == data['upstream'])
     image_ref = portal.get('Config', {}).get('Image', '')
+    portal_ref = image_ref
+    if image_ref == 'ghcr.io/volition79/buzz-agents-portal:stable':
+        record = json.loads(execute(['docker', 'image', 'inspect', portal['Image']]))[0]
+        refs = [v for v in record.get('RepoDigests', []) if re.fullmatch(
+            r'ghcr.io/volition79/buzz-agents-portal@sha256:[a-f0-9]{64}', v)]
+        if record.get('Id') != portal['Image'] or len(refs) != 1:
+            raise ToolError('bootstrap_portal_digest_required')
+        image_ref = refs[0]
     if not re.fullmatch(r'[a-z0-9][a-z0-9._/-]+@sha256:[a-f0-9]{64}', image_ref):
         raise ToolError('bootstrap_portal_digest_required')
-    portal_ref = image_ref
     if portal.get('Image') != data['image']:
         existing = inspect_container(data['route_name'])
         if not existing:

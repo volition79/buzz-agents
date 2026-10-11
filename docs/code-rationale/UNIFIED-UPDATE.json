@@ -1,0 +1,247 @@
+{
+  "id": "UNIFIED-UPDATE",
+  "reason": "One management update entrypoint must select exact reviewed images, preserve bot lifecycle and credentials, and refuse unproven lossless handoff. Candidate only; user selected explicit interruption with bilingual maintenance guidance instead of durable live drain. Promotion remains unresolved.",
+  "invariants": [
+    "No mutable image refs in bot runtime manifests",
+    "Never restart active work automatically without proven delivery handoff",
+    "Preserve stopped state, identity, credentials and persistent work",
+    "Explicit reauth may clean only stale metadata after verified same-container shutdown",
+    "No uncertain mutation automatic retry; administrator-only controls"
+  ],
+  "evidence_level": "documented",
+  "evidence": [
+    "docs/UNIFIED-UPDATE.md",
+    "tests/test_release_update.py",
+    "tests/test_reauth.py",
+    "scripts/verify-bot-update-browser.py"
+  ],
+  "status": "active",
+  "importance_score": 850,
+  "importance_reason": "Privileged lifecycle and persistent data across mixed release and external restart",
+  "anchors": [
+    {
+      "path": "buzz_agents/release_contract.py",
+      "module": "release_contract",
+      "role": "helper",
+      "start_line": 1,
+      "end_line": 15,
+      "code": "\"\"\"A management image selects a reviewed, immutable release, never a task URL.\"\"\"\nimport json\nfrom pathlib import Path\nimport re\nfrom .common import ToolError\n\nPATH = Path('/app/buzz-release.json')\nPREFIX = 'ghcr.io/volition79/buzz-agents-'\n\ndef validate(value):\n    if not isinstance(value, dict) or set(value) != {'schema', 'release', 'runtime', 'portal', 'api'}:\n        raise ToolError('invalid_release_contract')\n    if value['schema'] != 1 or value['api'] != 1 or not re.fullmatch('[0-9a-f]{40}', str(value['release'])):\n        raise ToolError('invalid_release_contract')\n    for role in ('runtime', 'portal'):\n",
+      "code_sha256": "accac78c2bd64392c0f413120b8845e630d893051e8277ad1e27a335a11bfff5",
+      "file_sha256": "eeac3111f9f1c2c5a3400eb42c4f9a70b311c613d941f70502223a675b41c40b"
+    },
+    {
+      "path": "buzz_agents/rollout.py",
+      "module": "rollout",
+      "role": "helper",
+      "start_line": 1,
+      "end_line": 15,
+      "code": "\"\"\"Durable per-bot release reconciliation. Uncertain work is never replayed.\"\"\"\nimport json\nimport os\nimport re\nimport threading\nimport time\nfrom pathlib import Path\nfrom .common import ToolError\nfrom .host import Deployer, execute, container_name\nfrom .bot_update import ExistingBotUpdater\nfrom .policy import atomic_json, read_json\nfrom . import release_contract\n\nclass Rollout:\n    def __init__(self, broker, contract=None, runner=execute):\n",
+      "code_sha256": "f5b14ba021beb5320851117904487d562f3131373871018c9e7ecb82d9a0268a",
+      "file_sha256": "bba2d3778c6fc5de50106006ea8a31002531f32eb759137c9f87d85a8dc03b50"
+    },
+    {
+      "path": "buzz_agents/bot_update.py",
+      "module": "bot_update",
+      "role": "helper",
+      "start_line": 1,
+      "end_line": 15,
+      "code": "\"\"\"Administrator-requested updates of existing identities, never a new bot.\"\"\"\nimport fcntl\nimport hashlib\nimport json\nimport os\nfrom pathlib import Path\nimport stat\n\nfrom .common import ToolError\nfrom .config import ENV_ALLOWED, HEX\nfrom .host import (Deployer, check_ownership, container_name, public_record,\n                   private_directory, check_resources, host_capacity)\nfrom .policy import read_json\n\n\n",
+      "code_sha256": "780b1ad9bfe01793bfc9ba1263dae5d66fd8df930b972a3ebc9d5182f39c2afd",
+      "file_sha256": "9bdfbada02c3a6b1de36f27987fe9a3fca46d51e9f7c05d5c72fe2ffcf591aae"
+    },
+    {
+      "path": "buzz_agents/host.py",
+      "module": "host",
+      "role": "helper",
+      "start_line": 1,
+      "end_line": 15,
+      "code": "\"\"\"Restricted SSH receiver on the VPS host. It alone uses Docker, never the AI.\"\"\"\nimport fcntl\nimport json\nimport os\nfrom pathlib import Path\nimport re\nimport stat\nimport subprocess\nimport sys\nimport time\nfrom .common import ToolError\nfrom .config import HEX, normalize\nfrom .diagnostics import validation_error\nfrom .policy import atomic_json, read_json\n\n",
+      "code_sha256": "20a761f2f92b4798223046e9d5f7cdce7fd251b78aca8dbf99be2f1baf3ba8f2",
+      "file_sha256": "bd4561494070876238c3ba895dceb395dfee301c231d0754405f024d69d7fae0"
+    },
+    {
+      "path": "buzz_agents/reauth.py",
+      "module": "reauth",
+      "role": "helper",
+      "start_line": 1,
+      "end_line": 15,
+      "code": "\"\"\"One-bot, admin-consented reauthentication; persisted hold survives broker loss.\"\"\"\nimport fcntl\nimport os\nfrom pathlib import Path\nimport re\nimport threading\nimport time\n\nfrom .bot_update import ExistingBotUpdater\nfrom .common import ToolError\nfrom .host import container_name, check_ownership\nfrom .policy import atomic_json, read_json\n\nHOLD = 'reauth-hold.json'\nCAPABILITY = 'io.buzz-agents.reauth'\n",
+      "code_sha256": "97b547dd51ab2f2c0fb612ca340de3ca7eba39f45dfda8e789eb0fee48bdf808",
+      "file_sha256": "5db8b7f09962c538a3f8d059cf313d1a6a1ccce8f143fb80963b5457ee2ea489"
+    },
+    {
+      "path": "buzz_agents/portal_compose.py",
+      "module": "portal_compose",
+      "role": "helper",
+      "start_line": 1,
+      "end_line": 15,
+      "code": "\"\"\"Reconcile only this install's route through genuine Compose lifecycle metadata.\"\"\"\nimport copy\nimport fcntl\nimport hashlib\nimport json\nimport os\nimport re\nfrom pathlib import Path\nimport stat\nimport tempfile\nfrom .common import ToolError\nfrom . import portal_bootstrap as boot\nfrom .host import execute, inspect_container\nfrom .policy import atomic_json, read_json\n\n",
+      "code_sha256": "e73f8a9aa99893cbd4a8670e4d5ad158dd53d03fe0aada40cf2b91a603a2d169",
+      "file_sha256": "d5ea1df829f3da4f792cae6df78d68c26ccdd6102d2bd0005cd3697b854e28fc"
+    },
+    {
+      "path": "buzz_agents/portal_broker.py",
+      "module": "portal_broker",
+      "role": "helper",
+      "start_line": 1,
+      "end_line": 15,
+      "code": "\"\"\"Network-disabled broker. Only this role gets the Docker socket.\n\nFixed RPC vocabulary; untrusted callers cannot supply Docker commands, paths,\nimage references, container names, ports, mounts, or arbitrary terminal commands.\n\"\"\"\nimport json\nimport os\nfrom pathlib import Path\nimport pty\nimport re\nimport secrets\nimport select\nimport socketserver\nimport subprocess\nimport termios\n",
+      "code_sha256": "704efe25f5c5a6ec41507a18102694c5a7ebb9a40bb02c76fb9768e94abe7109",
+      "file_sha256": "e5387ab81a0d5387cd22e73a3b91b8af4b10cb245d8c1143f30976f94aa18858"
+    },
+    {
+      "path": "buzz_agents/portal.py",
+      "module": "portal",
+      "role": "helper",
+      "start_line": 1,
+      "end_line": 15,
+      "code": "\"\"\"HTTPS-terminated first-run portal. No Docker socket, root password or human nsec.\n\nBrowser administrator and Windows deploy credentials are distinct. Only the\nadministrator can see interactive official-login output or configure schedules.\n\"\"\"\nfrom collections import deque\nimport hashlib\nimport hmac\nfrom http.cookies import SimpleCookie\nfrom http.server import BaseHTTPRequestHandler, ThreadingHTTPServer\nimport io\nimport json\nimport os\nfrom pathlib import Path\nimport re\n",
+      "code_sha256": "25c83a9a16453eb3a81956e2627150c4e0265e114c09df7081c90a2936b7bc97",
+      "file_sha256": "0e422097d7a8e6eb1bb5cdea971cab93fe13f687b1dd38059da301aa265b34ca"
+    },
+    {
+      "path": "buzz_agents/web/app.js",
+      "module": "app",
+      "role": "helper",
+      "start_line": 1,
+      "end_line": 4,
+      "code": "'use strict';\nconst {t} = window.BuzzI18n;\nwindow.BuzzI18n.translatePage();\nconst $ = id => document.getElementById(id);\n",
+      "code_sha256": "5594a332808b85077941dbd3725df0356b668c234aa30638c202eaec491c6de9",
+      "file_sha256": "fadfe208dca0bdb5d9a2882ad85aca3c8e327d436c3b0de132d0ccc062d604e5"
+    },
+    {
+      "path": "Dockerfile.portal",
+      "module": "Dockerfile",
+      "role": "helper",
+      "start_line": 1,
+      "end_line": 4,
+      "code": "# syntax=docker/dockerfile:1.7\nARG PYTHON_IMAGE=python:3.12.15-slim-bookworm@sha256:34386ef0cb081344d7ec1c103ba398e6e9f64e9ab3a1509accc92a4e24a07258\nFROM docker:28.5.1-cli@sha256:9190b0613792e658a7783cf14b2d5ace5941bb68ede7276922ea36ee457d76ad AS docker-cli\nFROM ${PYTHON_IMAGE} AS base\n",
+      "code_sha256": "55fb1bbc0e871175d7b14032edddb4545f6ddd78d7bfe3ffbff4729ddac7db3d",
+      "file_sha256": "3de42d2c1fe1b71f24019c8138d2163ce44a0d6f59cf221a049b5c6bf5773be8"
+    },
+    {
+      "path": "scripts/render-unified-release.py",
+      "module": "render_unified_release",
+      "role": "helper",
+      "start_line": 1,
+      "end_line": 15,
+      "code": "\"\"\"Prepare a unified candidate from reviewed immutable images; never publish tags.\"\"\"\nimport argparse\nimport json\nfrom pathlib import Path\nimport sys\nsys.path.insert(0,str(Path(__file__).resolve().parents[1]))\nfrom buzz_agents.release_contract import validate, PREFIX\n\n\ndef compose(broker):\n    # Bootstrap has no variable or domain discovery requirements. The broker\n    # pulls its embedded immutable runtime via Docker, not via container network.\n    source=(Path(__file__).resolve().parents[1]/'compose.portal.yaml').read_text()\n    a=source.index('  runtime-image:');b=source.index('  broker:',a)\n    source=source[:a]+source[b:]\n",
+      "code_sha256": "323ed315c6e5b45c00c5a801c9db634320557f4b0d6f06634f431e3fa5f710a7",
+      "file_sha256": "e926c0f96e4db7160e0f0db4e3298461f32e77cc6185547e62fc0659514340e3"
+    }
+  ],
+  "decision_context": {
+    "schema": "sonol.code-rationale-context.v1",
+    "authoring_environment": {
+      "os": "Linux WSL",
+      "provider": "Codex",
+      "execution_environment": "local repository"
+    },
+    "targets": [
+      {
+        "os": "linux",
+        "provider": "Claude and Codex fixtures",
+        "execution_environment": "local Python and Chrome",
+        "applicability": "affected",
+        "reason": "Fixture verification; actual Docker and provider acceptance remain separate"
+      }
+    ],
+    "conditions": [
+      {
+        "condition": "Existing owned installation with optional embedded release contract",
+        "relevance": "applies",
+        "reason": "Legacy immutable installs stay explicit; candidate not promoted"
+      }
+    ],
+    "boundaries": [
+      {
+        "path": "buzz_agents/release_contract.py",
+        "logical_owner": "release_contract",
+        "role": "helper",
+        "review": "Reviewed existing reauth/update invariants; new pinned release coordination. Live running-bot drain unresolved."
+      },
+      {
+        "path": "buzz_agents/rollout.py",
+        "logical_owner": "rollout",
+        "role": "helper",
+        "review": "Reviewed existing reauth/update invariants; new pinned release coordination. Live running-bot drain unresolved."
+      },
+      {
+        "path": "buzz_agents/bot_update.py",
+        "logical_owner": "bot_update",
+        "role": "helper",
+        "review": "Reviewed existing reauth/update invariants; new pinned release coordination. Live running-bot drain unresolved."
+      },
+      {
+        "path": "buzz_agents/host.py",
+        "logical_owner": "host",
+        "role": "helper",
+        "review": "Reviewed existing reauth/update invariants; new pinned release coordination. Live running-bot drain unresolved."
+      },
+      {
+        "path": "buzz_agents/reauth.py",
+        "logical_owner": "reauth",
+        "role": "helper",
+        "review": "Reviewed existing reauth/update invariants; new pinned release coordination. Live running-bot drain unresolved."
+      },
+      {
+        "path": "buzz_agents/portal_compose.py",
+        "logical_owner": "portal_compose",
+        "role": "helper",
+        "review": "Reviewed existing reauth/update invariants; new pinned release coordination. Live running-bot drain unresolved."
+      },
+      {
+        "path": "buzz_agents/portal_broker.py",
+        "logical_owner": "portal_broker",
+        "role": "helper",
+        "review": "Reviewed existing reauth/update invariants; new pinned release coordination. Live running-bot drain unresolved."
+      },
+      {
+        "path": "buzz_agents/portal.py",
+        "logical_owner": "portal",
+        "role": "helper",
+        "review": "Reviewed existing reauth/update invariants; new pinned release coordination. Live running-bot drain unresolved."
+      },
+      {
+        "path": "buzz_agents/web/app.js",
+        "logical_owner": "app",
+        "role": "helper",
+        "review": "Reviewed existing reauth/update invariants; new pinned release coordination. Live running-bot drain unresolved."
+      },
+      {
+        "path": "Dockerfile.portal",
+        "logical_owner": "Dockerfile",
+        "role": "helper",
+        "review": "Reviewed existing reauth/update invariants; new pinned release coordination. Live running-bot drain unresolved."
+      },
+      {
+        "path": "scripts/render-unified-release.py",
+        "logical_owner": "render_unified_release",
+        "role": "helper",
+        "review": "Reviewed existing reauth/update invariants; new pinned release coordination. Live running-bot drain unresolved."
+      }
+    ],
+    "verification": [
+      {
+        "assertion_id": "unified-fixtures",
+        "test_reference": "tests/test_release_update.py",
+        "environment": {
+          "os": "linux",
+          "provider": "Claude and Codex fixtures",
+          "execution_environment": "local Python and Chrome"
+        },
+        "status": "passed",
+        "evidence_kind": "fixture",
+        "evidence": [
+          "TASK.md"
+        ]
+      }
+    ]
+  },
+  "schema": "sonol.code-rationale.v1",
+  "source": {
+    "commit": "0ab22509ed144d9e79dff2e560c3e63fcf7e79f3",
+    "dirty": true
+  },
+  "assessment_status": "assessed"
+}
