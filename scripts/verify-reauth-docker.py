@@ -53,7 +53,7 @@ time.sleep(300)
                     'name':'reauth-fixture-'+provider,'relay_url':settings['relay'],'private_key_nsec':key,
                     'auth_tag':['auth',settings['owner'],'','b'*128],'respond_to':'owner-only','parallelism':1,
                     'launch':{'command':command,'args':[],'owner_pubkey':settings['owner'],'env':{},'policy_env':{}}}})
-                folder=root/'bots'/pubkey;state=folder/'state';home=folder/'home';work=root/'workspaces'/provider
+                folder=root/'bots'/pubkey;state=folder/'state';home=folder/'home'/provider;work=root/'workspaces'/provider
                 wait_for(lambda:read_json(state/'runtime.json',{}).get('status')=='needs_login')
                 baseline={p:p.read_bytes() for p in (folder/'config/config.json',root/'registry.json')}
                 (work/'sentinel').write_text('preserve work');(home/'credential-sentinel').write_text('preserve auth home')
