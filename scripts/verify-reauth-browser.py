@@ -73,6 +73,12 @@ def main():
                 broker.job['state']='succeeded';cdp.js('refresh()');cdp.until('!reauthBusy')
                 assert ('다시 실행' if lang.startswith('ko') else 'starting again') in cdp.js("$('authStatus').textContent")
                 cdp.js("$('authPanel').scrollIntoView({block:'center'})");cdp.shot(out/(lang+'.png'))
+                # A later ordinary sign-in must not be overwritten by the last reauth job.
+                cdp.js("startLogin({pubkey:'"+'c'*64+"',name:'Other bot'})")
+                cdp.until("authSession==='fixture-session'")
+                cdp.js("authSession=null;$('authStatus').textContent='ordinary-sign-in-result';refresh()")
+                cdp.until("document.querySelector('.reauth-bot')!==null")
+                assert cdp.js("$('authStatus').textContent")=='ordinary-sign-in-result'
                 assert not cdp.errors,cdp.errors
                 print(lang,'running-bot confirmation, refresh, cancellation, retry and completion passed')
         finally:

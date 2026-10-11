@@ -3,7 +3,7 @@ const {t} = window.BuzzI18n;
 window.BuzzI18n.translatePage();
 const $ = id => document.getElementById(id);
 let configured = false, authSession = null, pollBusy = false, tick = 0;
-let reauthBusy = false;
+let reauthBusy = false, showReauthResult = true;
 let updatePlan = null, updateBusy = false;
 let pendingPairing = null, knownDevices = new Set();
 let requestQueue = Promise.resolve(), initializing = false;
@@ -185,13 +185,14 @@ function showLogin(bot, session){
 }
 async function startLogin(bot){
   if(authSession||reauthBusy)throw new Error(t('현재 로그인 세션을 먼저 마치거나 중지해 주세요.'));
+  showReauthResult=false;
   const result=await api('auth/start',{pubkey:bot.pubkey});showLogin(bot,result.session);
   $('authPanel').scrollIntoView({behavior:'smooth',block:'center'});
 }
 async function startReauth(bot){
   if(authSession||reauthBusy)return;
   if(!confirm(bot.name+'\n\n'+t('이 봇의 진행 중인 작업을 중단하고 다시 로그인할까요? 역할·모델·작업 파일은 유지됩니다. 로그인 성공 후 같은 봇이 자동으로 실행됩니다. 중단한 요청은 Buzz에서 다시 보내세요.')))return;
-  reauthBusy=true;
+  reauthBusy=true;showReauthResult=true;
   // One request ID per explicit consent. Network loss is resolved by status,
   // never by automatically submitting a second destructive operation.
   const request_id=crypto.randomUUID().replaceAll('-','');
@@ -202,6 +203,7 @@ async function refreshReauth(){
   const data=await api('auth/reauth/status'),job=data.reauth||{};
   reauthBusy=['preparing','authenticating'].includes(job.state);
   if(reauthBusy){
+    showReauthResult=true;
     $('authPanel').hidden=false;
     if(data.session&&!authSession)showLogin(job,data.session);
     else if(!authSession){
@@ -209,7 +211,7 @@ async function refreshReauth(){
       $('authForm').hidden=true;$('cancelAuth').hidden=true;
       $('authStatus').textContent=t('이 봇을 안전하게 중지하고 로그인을 준비하고 있습니다. 새로고침해도 진행 상태를 확인할 수 있습니다.');
     }
-  }else if(job.id){
+  }else if(job.id && showReauthResult){
     $('authPanel').hidden=false;
     if(!authSession)$('authStatus').textContent=job.state==='succeeded'
       ?t('재로그인이 완료되어 같은 봇을 다시 실행합니다. Buzz에서 요청을 다시 보내고 실제 답변을 확인하세요.')
