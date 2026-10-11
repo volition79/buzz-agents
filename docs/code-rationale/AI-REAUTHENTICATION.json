@@ -84,6 +84,13 @@
         "execution_environment": "local Python and Chrome",
         "applicability": "affected",
         "reason": "Focused lifecycle and browser fixtures; real Docker release checks separate"
+      },
+      {
+        "os": "linux",
+        "provider": "Claude and Codex synthetic CLI/AI",
+        "execution_environment": "GitHub Actions Docker",
+        "applicability": "affected",
+        "reason": "Actual container lifecycle, synthetic providers; real account authentication not claimed"
       }
     ],
     "conditions": [
@@ -139,6 +146,21 @@
         "evidence": [
           "TASK.md",
           "docs/AI-REAUTHENTICATION.md"
+        ]
+      },
+      {
+        "assertion_id": "reauth-docker",
+        "test_reference": "scripts/verify-reauth-docker.py",
+        "environment": {
+          "os": "linux",
+          "provider": "Claude and Codex synthetic CLI/AI",
+          "execution_environment": "GitHub Actions Docker"
+        },
+        "status": "passed",
+        "evidence_kind": "fixture",
+        "evidence": [
+          "https://github.com/volition79/buzz-agents/actions/runs/38101464868",
+          "docs/PORTAL-VERIFICATION.md"
         ]
       }
     ]

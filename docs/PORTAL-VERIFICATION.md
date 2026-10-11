@@ -4,7 +4,7 @@ Release `portal-candidate-d530454dd7c9-47-1`, source `d530454dd7c9c9cc4a2104ea0f
 
 Passed270 Python tests, Go race/vet, Korean/English browser checks, two Rust notice-helper tests and optimized build of the exact patched official source, four Docker bootstrap/upgrade scenarios, existing-bot updates and both-provider reauthentication lifecycle. Real Docker with explicitly synthetic CLI/AI programs verified same-container success/automatic start, failure hold, restart hold, cancellation/retry and identity/files retention. No real subscription login or user VPS mutation.
 
-Anonymous readback verified7 manifest assets,49 build-context members,135 public source files and both Windows EXEs against reviewed local bytes. Canonical Compose promotes only the four verified image references. [Existing install update](EXISTING-BOT-UPDATE.md) · [Re-login guide](AI-REAUTHENTICATION.md). Exact immutable Raw URL startup is checked separately before final handoff.
+Anonymous readback verified7 manifest assets,49 build-context members,135 public source files and both Windows EXEs against reviewed local bytes. Canonical Compose promotes only the four verified image references. [Existing install update](EXISTING-BOT-UPDATE.md) · [Re-login guide](AI-REAUTHENTICATION.md). Exact anonymous Raw URL startup passed [CI38102160607](https://github.com/volition79/buzz-agents/actions/runs/38102160607). [Immutable installation URL](https://raw.githubusercontent.com/volition79/buzz-agents/a2d6f42a1b424324d1aa111cad510fc3826498cf/docker-compose.yml); independently verified SHA256 `909bc9aa3c07b0d52681b45d8f95184fcd5968d29b859b09cbd18a05ae5a4721`. hPanel import and live account replies remain user acceptance checks.
 
 ## Historical verification
 
