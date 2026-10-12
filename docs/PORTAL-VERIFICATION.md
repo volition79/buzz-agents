@@ -1,3 +1,13 @@
+# Per-bot RAM settings verified — 2026-10-12
+
+Published release [portal-candidate-e812bd1f12c3-54-1](https://github.com/volition79/buzz-agents/releases/tag/portal-candidate-e812bd1f12c3-54-1), source `e812bd1f12c3c56ad73e380ef34b4810041c2b7d`. [CI38219399512](https://github.com/volition79/buzz-agents/actions/runs/38219399512) passed303 Python tests, Go race/vet, Korean/English browser flows, pinned runtime build, real Docker bootstrap/legacy upgrade, per-bot RAM staging/application, stopped lifecycle and reauthentication. Both providers preserved identity and account/work files while Memory and MemorySwap changed from512 to768MiB. AI/auth fixtures are synthetic; live subscriptions and user VPS were not modified.
+
+Anonymous readback matched10 assets,52 build-context members,143 source files and both Windows binaries. Public immutable image manifests and broker/portal stable tags matched the reviewed release digests. Canonical Compose copies the verified release bytes. Exact Raw URL startup is verified separately after this publication commit.
+
+For existing installations: finish/save work, Shutdown VPS bots, use **buzz-agents → ⋯ → Update**, then Open. Select a bot's **RAM limit** and apply with **Update / restart**. Check the applied limit and an actual reply. Keep projects, bot identities and volumes. [Full instructions](EXISTING-BOT-UPDATE.md).
+
+## Previous evidence
+
 # Per-bot RAM settings candidate — 2026-10-12
 
 Adds a Korean/English RAM selector to each bot on the setup page. Selection saves a pending value; existing **Update / restart** applies it after confirmation. Preserve identity, account/work files, CPU and concurrency. Windows deployments keep the last approved RAM. Automatic rollout does not apply pending RAM changes.
