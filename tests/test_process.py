@@ -112,8 +112,11 @@ class RealProxyTests(unittest.TestCase):
             self.assertIsNone(sibling.poll(),'another worker group was killed')
             status=Path('/proc')/str(pid)/'stat'
             for _ in range(20):
-                if not status.exists() or status.read_text().split()[2]=='Z':
-                    break
+                try:
+                    state=status.read_text().split()[2]
+                except FileNotFoundError:
+                    break  # Reaped between polling iterations.
+                if state=='Z':break
                 time.sleep(.05)
             else:self.fail('adapter descendant still running after ticket release')
         finally:
@@ -138,7 +141,11 @@ class RealProxyTests(unittest.TestCase):
             self.process.wait(timeout=4)
             status=Path('/proc')/str(pid)/'stat'
             for _ in range(40):
-                if not status.exists() or status.read_text().split()[2]=='Z':break
+                try:
+                    state=status.read_text().split()[2]
+                except FileNotFoundError:
+                    break  # Successful exit can remove /proc before this read.
+                if state=='Z':break
                 time.sleep(.025)
             else:self.fail('AI descendant survived upstream guard-group SIGKILL')
         finally:

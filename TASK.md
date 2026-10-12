@@ -451,3 +451,5 @@ Real local temporary64MiB mkswap/blkid verified lost-save recovery with one form
 swapon mocked. Docker/VPS activation and deployment remain not performed.
 Only swap_pool, regression tests, ko/en manual and rationale/task notes changed
 in this follow-up; same approved scope and platform targets.
+
+Release CI follow-up: provider history refreshed from verified public manifests (22 releases,10 unique binaries). CI331 tests exposed a /proc exists/read race in test_process descendant-exit assertions. Read directly and accept FileNotFoundError as the already-defined reaped-success condition; retained zombie check, deadline and surviving-process failure. Product process code unchanged.
