@@ -13,6 +13,19 @@ def run(argv, **kwargs):
     return subprocess.check_output(argv, **kwargs)
 
 
+def wait_compose_route(inspect, sleep=time.sleep, attempts=40):
+    # Docker writes Compose labels at create time, before the container starts.
+    # CI38218457605 observed that intermediate state during legacy migration.
+    for _ in range(attempts):
+        state = inspect()
+        if (state and state.get('Config', {}).get('Labels', {}).get('com.docker.compose.config-hash')
+                and state.get('State', {}).get('Running')
+                and not state.get('State', {}).get('Restarting')):
+            return state
+        sleep(2)
+    raise AssertionError('genuine Compose route did not reach running state')
+
+
 def main():
     parser=argparse.ArgumentParser()
     parser.add_argument('--compose',required=True)
@@ -132,14 +145,10 @@ request_code()
                 actual.unlink()
                 actual.write_text(json.dumps(config))
                 run(cmd+['up','-d','--no-deps','broker'],env=env)
-            for _ in range(40):
+            def inspect_route():
                 found=subprocess.run(['docker','inspect',route],capture_output=True)
-                if found.returncode:
-                    time.sleep(2)
-                    continue
-                route_state=json.loads(found.stdout)[0]
-                if route_state['Config']['Labels'].get('com.docker.compose.config-hash'): break
-                time.sleep(2)
+                return json.loads(found.stdout)[0] if found.returncode == 0 else None
+            route_state=wait_compose_route(inspect_route)
             assert route_state['Config']['Labels'].get('com.docker.compose.config-hash'), 'route absent from genuine Compose metadata'
             project_ids=run(cmd+['ps','-a','-q'],env=env).decode().split()
             assert route_state['Id'] in project_ids, 'route not in Compose ps'
