@@ -2,7 +2,7 @@
 # Existing Hostinger Traefik and Buzz Relay are prerequisites; neither is replaced.
 services:
   runtime-image:
-    image: ghcr.io/volition79/buzz-agents-runtime@sha256:afc7583bb40321a85c898ed25173e6206c2904a22530899db6bc712ccbf13eff
+    image: ghcr.io/volition79/buzz-agents-runtime@sha256:0f50d422ba8992cd23461a4901c73d52580a6801ea2e50177fd1f0d95465871b
     entrypoint: ["python", "-c", "print('Runtime image ready')"]
     network_mode: none
     user: "10001:10001"
@@ -13,12 +13,12 @@ services:
     mem_limit: 64m
     pids_limit: 16
   broker:
-    image: ghcr.io/volition79/buzz-agents-broker@sha256:e08b8f733a61f95b6c0c6f5b41da4f147fbf5a17e00494c565d12b7ea6b80159
+    image: ghcr.io/volition79/buzz-agents-broker@sha256:3fc46afdcd7f190aedc4ea7f92b378fe444eded79fe62a45cc80aec7e673c44c
     depends_on:
       runtime-image:
         condition: service_completed_successfully
     environment:
-      BUZZ_RUNTIME_IMAGE: ghcr.io/volition79/buzz-agents-runtime@sha256:afc7583bb40321a85c898ed25173e6206c2904a22530899db6bc712ccbf13eff
+      BUZZ_RUNTIME_IMAGE: ghcr.io/volition79/buzz-agents-runtime@sha256:0f50d422ba8992cd23461a4901c73d52580a6801ea2e50177fd1f0d95465871b
     network_mode: none
     user: "0:0"
     init: true
@@ -42,7 +42,7 @@ services:
       driver: json-file
       options: {max-size: 5m, max-file: "2"}
   portal:
-    image: ghcr.io/volition79/buzz-agents-portal@sha256:b9193fb4e3afc951a7de8f90028f3d90ffd88977e89924cdf5c025d063a73b42
+    image: ghcr.io/volition79/buzz-agents-portal@sha256:f2e8d9441a1522368bec98322545e6ba7e03e2ee3ce8dd93b1be28d80d819d2f
     depends_on: [broker]
     user: "10002:10002"
     init: true

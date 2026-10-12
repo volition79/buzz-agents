@@ -1,3 +1,26 @@
+# Bounded shared swap published — 2026-10-12
+
+Release [portal-candidate-e0b542dc9d9f-59-2](https://github.com/volition79/buzz-agents/releases/tag/portal-candidate-e0b542dc9d9f-59-2), source `e0b542dc9d9fee0b6af306f700bbdef719bd4b17`.
+[CI38237420486 attempt2](https://github.com/volition79/buzz-agents/actions/runs/38237420486)
+passed331 Python tests, Go race/vet, ko/en browser flows, actual Docker swap
+activation/idempotence/reactivation, bootstrap/upgrade, bot-update preservation
+and reauthentication fixtures. Actual host boot order and customer VPS acceptance
+remain unverified; no user VPS was changed.
+
+Anonymous readback verified8 manifest-listed assets,56 build-context members,
+150 public source members, both Windows executables against local Go1.26.5 builds,
+and immutable runtime plus broker/portal stable manifest digests. Canonical
+`docker-compose.yml` copies the published immutable install bytes. Stable Compose
+is byte-identical to the existing b99a1aab installation URL. Exact public Raw URL
+startup is checked separately after this publication commit.
+
+Finish/save work and Shutdown bots before updating **buzz-agents** in Docker
+Manager. Open the setup page, apply **Update / restart** to each bot, then verify
+shared swap active capacity and an actual reply. Keep projects and volumes.
+[Update instructions and limitations](EXISTING-BOT-UPDATE.md).
+
+## Previous evidence
+
 # Bounded shared swap candidate — 2026-10-12
 
 Adds per-bot swap ceiling3x RAM, bounded shared host swap, Korean/English status,
