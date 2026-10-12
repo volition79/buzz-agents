@@ -356,3 +356,98 @@ RAM-SETTINGS-01 publication authorized: user requested deployment. Existing scop
 RAM release CI38218457605 blocked before publication at legacy route fixture: source8a9b705 polling exited on config-hash presence while Docker was still creating container (Running=false). Production route transaction itself requires Running before commit. Fixed fixture to await both genuine Compose metadata and running/non-restarting state within same80-second bound; added deterministic create/start and persistent-failure regressions. Existing security, identity, TLS and persistence assertions retained. No image publication or stable change occurred.
 
 RAM release e812bd1 passed CI38219399512:303 Python, Go race/vet, ko/en browsers, real Docker bootstrap/legacy upgrade, staged RAM512->768MiB with exact Memory/MemorySwap for both providers, preserved identity/auth/work files, stopped lifecycle and safe reauth. Anonymous10 assets,52 build files,143 source files, both Windows EXEs (Go1.26.5) matched local; immutable manifests and stable broker/portal digests verified independently. Canonical immutable and stable Compose copied from downloaded checked assets; no regeneration. New exact Raw startup CI follows. User VPS/Windows unchanged.
+
+SWAP-SUPPORT-01 (2026-10-12): user approves local implementation with exactly one
+read-only auditor. CodeMap off (bounded direct source review), Sonol Test focused
+direct fallback, validator off (no pack). No publication/live VPS mutation.
+Linux authoring; Ubuntu rootful Docker ext4/XFS target; ko/en portal clients.
+New reason: per-bot swap-only ceiling 3R (Docker combined limit4R), shared pool
+bounded by a persisted initial30%-free budget and a current reserve of
+max(5GiB,10% filesystem capacity). Existing host swap counts toward target and
+is never modified. Helper gets only private swap directory and SYS_ADMIN, no
+socket/network/host PID/root bind; blocked host security is visible, not bypassed.
+Root-owned numbered shards never resized/reformatted after initialization;
+creation is journalled, recovery preserves uncertain files. Broker restart and
+helper restart reconcile activation without fstab edits; reboot ordering gap
+remains an explicit acceptance obligation. RAM aggregate admission preserved.
+Reviewed RAM-SETTINGS and UNIFIED-UPDATE: legacy1R is an allowed migration state,
+not arbitrary limits; final new deployment requires4R and policy label. Other
+bots' generated limits/images and all identity/auth/workspace fields preserved.
+New tests: budget idempotence, filesystem/permission/failure recovery, immutable
+active shards, helper ownership/authority, legacy upgrade with pending RAM,
+actual readback, bilingual status. No global scheduling or automatic task replay.
+
+SWAP-SUPPORT-01 final local review: single independent auditor found broker
+self-ID lookup, helper replacement during allocation and startup lock-contention
+issues. Fixed direct self inspect, pool-lock ownership through replacement and
+non-error busy retry. Added rejected-directory write protection and management
+contract fence. Preserve legacy1R only when unmarked; new deployment4R readback
+now covers bots without RAM sidecars. Other bots retain Compose policy/images.
+Official Docker default seccomp denies swapon, so vendor Apache-2.0 Moby profiles
+seccomp/v0.1.0 at c936cc7b4074219137bc0bee45670f5e4618d462 (Docker28.5.1 vendor)
+with only swapon added, SYS_ADMIN broad syscall group removed and ordinary clone
+rules preserved. Profile/license included in both source and build archives.
+Pool uses at most8 managed shards; small repeated increases may exhaust slots
+before budget. Allocation interruptions remain preserved/attention, not claimed
+automatically recoverable. No fstab/swappiness/boot-order guarantee.
+Verification: whole320-test Python regression passed; final controller safety
+changes passed19 focused swap tests. Existing RAM8 tests, ko/en real Chrome
+RAM/update/shared-swap UI and existing reauthentication journeys passed.
+Windows helpers cross-built unchanged; JavaScript/Python syntax and diff checks
+passed. Actual Docker absent locally. Added mandatory disposable GitHub-hosted
+real64MiB swapon/reactivation/identity/security gate before publication; NOT RUN.
+Host reboot ordering and actual customer VPS behavior remain unverified. No push,
+release, stable-tag promotion, user VPS mutation or installed Windows change.
+
+## Swap recovery follow-up — 2026-10-12
+
+User requested fixing the two reviewed retry failures; actual Docker verification
+is reserved for the user. Same repository-only scope, CodeMap off/direct source,
+Sonol Test focused direct fallback, no policy pack, no publication or VPS changes.
+Rationale default ON: SWAP-SUPPORT remains historical intent; SWAP-RECOVERY adds
+current recovery producer/store/assertion boundaries. Manual ko/en retry guidance
+was updated; clients, AI capabilities, RAM policy, authentication and task dispatch
+are unchanged. Authoring Linux/Codex; product Linux rootful Docker ext4/XFS.
+
+Sanitized incident provenance: HEAD23d49290faf58d42f6698dd205444e93432916d9,
+dirty swap-support source, review reproduction: create succeeds then helper.json
+ID save fails -> repeated swap_helper_name_collision; fallocate ENOSPC -> repeated
+swap_allocation_interrupted even after free space returns. Corrected transitions:
+- Persist private creation token and immutable image before create; retain both
+  across delayed Docker completion and management image updates; recover only
+  matching token/image/owner/mount. Foreign containers remain untouched.
+- Persist reserving/formatting stages plus UUID. Allocation retries reuse recorded
+  inode and recheck current disk reserve. Matching swap signature completes a lost
+  ready save without reformat. Different signature/identity/active unknown file
+  stays protected. Legacy ambiguous allocating and pre-inode-save crashes remain
+  explicit administrator-review cases, not silently adopted.
+- Existing auditor re-reviewed only recovery boundaries and identified delayed
+  create intent rotation; corrected and covered by a delayed-completion test.
+
+Verification: PYTHONPATH=.:tests python3 -m unittest test_swap_support
+ test_memory_settings test_bot_update test_host_native -q — 82 passed.
+Temporary64MiB local file with actual mkswap/blkid, failed ready save and retry:
+matching UUID recovered with exactly one mkswap. swapon was mocked; no host swap
+activated. Real Docker/kernel activation remains NOT RUN for user verification.
+No new packaging, publication, installed Windows changes or live VPS operations.
+
+## Swap probe safety — 2026-10-12
+
+Reviewed SWAP-RECOVERY and added SWAP-PROBE-SAFETY: blkid exit2 can mean
+unreadable content, not just absent signature. Earlier sanitized fault injection
+(formatted + lost ready save + exit2 EIO) increased mkswap calls1->2 and reported
+ready. The command wrapper now rejects nonzero probe exits and stderr. Only the
+reserving->formatting transition invokes mkswap; all formatting-stage recovery
+requires a positive matching UUID and cannot invoke mkswap even with empty output.
+A failed/uncertain mkswap with no matching signature now stays protected instead
+of retrying formatting; disk allocation retries still work before that boundary.
+
+Focused regressions: 83 tests passed using PYTHONPATH=.:tests python3 -m unittest
+test_swap_support test_memory_settings test_bot_update test_host_native -q.
+New fault cases cover exit2 with/without stderr, exits4/8, empty or malformed
+success, foreign UUID, OSError and timeout; journal remains formatting, no
+activation or additional format, then recovery succeeds when UUID returns.
+Real local temporary64MiB mkswap/blkid verified lost-save recovery with one format;
+swapon mocked. Docker/VPS activation and deployment remain not performed.
+Only swap_pool, regression tests, ko/en manual and rationale/task notes changed
+in this follow-up; same approved scope and platform targets.

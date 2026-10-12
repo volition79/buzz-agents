@@ -1,0 +1,179 @@
+{
+  "status": "active",
+  "importance_score": 800,
+  "evidence_level": "documented",
+  "assessment_status": "assessed",
+  "id": "SWAP-RECOVERY",
+  "reason": "Recover interrupted helper creation and owned swap allocation without adopting foreign resources or reformatting a completed swap file.",
+  "invariants": [
+    "Durable private token and immutable image retained through delayed create responses and updates",
+    "Only known recorded inode is resumed; original budget and current free-disk reserve remain enforced",
+    "Matching UUID recovers completed format; unknown signatures, legacy ambiguity and unrecorded inodes remain protected",
+    "No existing bot, authentication, RAM admission or AI privilege changes"
+  ],
+  "importance_reason": "Privileged host storage and bot lifecycle changes require explicit boundaries.",
+  "evidence": [
+    "tests/test_swap_support.py",
+    "docs/EXISTING-BOT-UPDATE.md",
+    "TASK.md"
+  ],
+  "anchors": [
+    {
+      "path": "buzz_agents/swap_manager.py",
+      "function": "reconcile",
+      "role": "producer",
+      "start_line": 81,
+      "end_line": 154,
+      "code": "def reconcile(run, inspect, self_name):\n    checked_directory(ROOT)\n    fd = os.open(ROOT/'controller.lock', os.O_CREAT|os.O_RDWR|os.O_NOFOLLOW, 0o600)\n    pool_fd = None\n    try:\n        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)\n        info = json.loads(run(['docker','info','--format','{{json .}}'], timeout=20))\n        if (info.get('OSType') != 'linux' or info.get('SwapLimit') is not True\n                or any('rootless' in str(x) or 'userns' in str(x) for x in info.get('SecurityOptions',[]))):\n            raise ToolError('swap_host_unsupported')\n        if not isinstance(self_name,str) or not re.fullmatch(r'[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}', self_name):\n            raise ToolError('swap_broker_identity_unavailable')\n        candidates = json.loads(run(['docker','inspect','--type','container',self_name], timeout=20))\n        broker = candidates[0] if len(candidates) == 1 else None\n        if (not broker or (broker.get('Config',{}).get('Labels') or {}).get('com.docker.compose.service') != 'broker'\n                or not re.fullmatch(r'sha256:[0-9a-f]{64}', broker.get('Image',''))\n                or not any(m.get('Source') == str(ROOT.parent) and m.get('Destination') == str(ROOT.parent)\n                           and m.get('Type') == 'bind' for m in broker.get('Mounts',[]))):\n            raise ToolError('swap_broker_identity_unavailable')\n        image = broker['Image']\n        saved = private_json(ROOT/'helper.json', {})\n        if not isinstance(saved, dict):\n            raise ToolError('swap_invalid_state')\n        current = inspect(NAME)\n        # Intent is durable BEFORE Docker create. Recover a lost create response\n        # or ID-save failure only when the exact private creation token matches.\n        intent = saved.get('creating', {})\n        if 'creating' in saved and (not isinstance(intent, dict)\n                or not re.fullmatch(r'[0-9a-f]{64}', str(intent.get('token', '')))\n                or not re.fullmatch(r'sha256:[0-9a-f]{64}', str(intent.get('image', '')))):\n            raise ToolError('swap_invalid_state')\n        if current and not owned(current, saved.get('id')):\n            if (not isinstance(intent, dict)\n                    or not re.fullmatch(r'[0-9a-f]{64}', str(intent.get('token', '')))\n                    or current.get('Image') != intent.get('image')\n                    or (current.get('Config', {}).get('Labels') or {}).get(INTENT) != intent['token']\n                    or not owned(current, current.get('Id'))):\n                raise ToolError('swap_helper_name_collision')\n            saved = {'id': current['Id']}\n            atomic_json(ROOT/'helper.json', saved)\n        if current is None or current.get('Image') != image:\n            pool_fd = os.open(ROOT/'pool.lock',os.O_CREAT|os.O_RDWR|os.O_NOFOLLOW,0o600)\n            fcntl.flock(pool_fd,fcntl.LOCK_EX|fcntl.LOCK_NB)\n        if current:\n            if not owned(current, saved.get('id')):\n                raise ToolError('swap_helper_name_collision')\n            if current.get('Image') != image:\n                # Stopping helper does NOT deactivate swap. Never swapoff/unlink.\n                run(['docker','stop','--time','45',current['Id']], timeout=55)\n                run(['docker','rm',current['Id']], timeout=20)\n                current = None\n        if current is None:\n            # Docker may still be completing a timed-out create. Keep its token\n            # AND image until that intent completes, including across upgrades.\n            if not intent or saved.get('id'):\n                intent = {'token': secrets.token_hex(32), 'image': image}\n                atomic_json(ROOT/'helper.json', {'creating': intent})\n            ident = run(create_args(intent['image'], intent['token']), timeout=30).decode().strip()\n            if not re.fullmatch(r'[0-9a-f]{64}', ident):\n                raise ToolError('swap_helper_create_unconfirmed')\n            atomic_json(ROOT/'helper.json', {'id':ident})\n            current = inspect(NAME)\n            if (not current or not owned(current, ident)\n                    or current.get('Image') != intent['image']\n                    or (current.get('Config',{}).get('Labels') or {}).get(INTENT) != intent['token']):\n                raise ToolError('swap_helper_create_unconfirmed')\n        if current.get('Image') != image:\n            return  # Next tick replaces this recovered predecessor under pool.lock.\n        if not current.get('State',{}).get('Running'):\n            run(['docker','start',current['Id']], timeout=20)\n    finally:\n        if pool_fd is not None:\n            os.close(pool_fd)\n        os.close(fd)\n",
+      "code_sha256": "e6bd1dcd33406594dbc75fda8fcd98f8c5247411c84e257a1e5e6065c1a5fc7f",
+      "file_sha256": "684f2107802aad7498e6ab8929cfcae75cbce0b812c2cd27b78700ffb90dc22f"
+    },
+    {
+      "path": "buzz_agents/swap_pool.py",
+      "function": "Pool.resume",
+      "role": "store",
+      "start_line": 162,
+      "end_line": 206,
+      "code": "    def resume(self, state, shard):\n        path = self.root / shard['name']\n        if shard['phase'] == 'reserving':\n            if str(path) in self.inventory():\n                raise ToolError('swap_file_unexpectedly_active')\n            if shard['inode'] == 0:\n                # Missing file is safe to create. An existing unrecorded inode\n                # is never adopted, even when it has our intended filename.\n                fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY | os.O_NOFOLLOW, 0o600)\n                try:\n                    st = os.fstat(fd)\n                    shard.update(inode=st.st_ino, device=st.st_dev)\n                    self.save(state)\n                finally:\n                    os.close(fd)\n            self.verify(shard, partial=True)\n            fd = os.open(path, os.O_WRONLY | os.O_NOFOLLOW)\n            try:\n                st = os.fstat(fd)\n                if (st.st_ino, st.st_dev) != (shard['inode'], shard['device']):\n                    raise ToolError('swap_file_changed')\n                free, total = self.space(self.root)\n                needed = max(0, shard['size'] - st.st_blocks * 512)\n                if free - max(5 * 1024**3, total // 10) < needed:\n                    raise ToolError('swap_disk_reserve')\n                # Repeating allocation is safe only BEFORE any mkswap call.\n                os.posix_fallocate(fd, 0, shard['size'])\n                os.fsync(fd)\n            finally:\n                os.close(fd)\n            shard['phase'] = 'formatting'\n            self.save(state)\n        self.verify(shard)\n        signature = self.run(['blkid', '-p', '-o', 'export', '--', str(path)])\n        fields = dict(line.split('=', 1) for line in signature.splitlines() if '=' in line)\n        if fields.get('TYPE') == 'swap' and fields.get('UUID') == shard['uuid']:\n            # mkswap completed before a crash/save failure: do NOT format again.\n            pass\n        elif not fields and str(path) not in self.inventory():\n            self.run(['mkswap', '--uuid', shard['uuid'], '--', str(path)])\n            # Activation remains contingent on mkswap success, as before.\n        else:\n            raise ToolError('swap_signature_changed')\n        shard['phase'] = 'ready'\n        self.save(state)\n",
+      "code_sha256": "cb36ea562f47e8b1663efd7803463aac044564234e2943066b67e8417dcfd62f",
+      "file_sha256": "1235fd3530eeafb37b5de1272492d61c0834bea9277db7739b97cc0221202539"
+    },
+    {
+      "path": "tests/test_swap_support.py",
+      "function": "ManagerTests.test_delayed_create_keeps_intent_across_upgrade",
+      "role": "assertion",
+      "start_line": 246,
+      "end_line": 266,
+      "code": "    def test_delayed_create_keeps_intent_across_upgrade(self):\n        run=self.run\n        calls=[]\n        def delayed(argv,**kw):\n            if argv[:2]==['docker','create']:\n                calls.append(argv)\n                raise ToolError('timeout')\n            return run(argv,**kw)\n        self.run=delayed\n        with self.assertRaises(ToolError):self.reconcile()\n        first=read_json(self.root/'helper.json')['creating']\n        self.broker['Image']='sha256:'+'e'*64\n        with self.assertRaises(ToolError):self.reconcile()\n        self.assertEqual(read_json(self.root/'helper.json')['creating'],first)\n        self.assertEqual(calls[0],calls[1])\n        # Original daemon request becomes visible only after the retry.\n        run(calls[0])\n        self.run=run\n        self.reconcile()\n        self.assertTrue(self.current['State']['Running'])\n        self.assertEqual(self.current['Image'],self.broker['Image'])\n",
+      "code_sha256": "4d0f83276a11ef75fb8395753bbc699e904989e9bfb05d8a0ef5c59bd299de84",
+      "file_sha256": "edfa425667b089b06a1f16df85316eae53d5b246ae3a18a383676aa8d3f26feb"
+    },
+    {
+      "path": "tests/test_swap_support.py",
+      "function": "PoolTests.test_disk_full_retry_finishes_same_inode",
+      "role": "assertion",
+      "start_line": 96,
+      "end_line": 106,
+      "code": "    def test_disk_full_retry_finishes_same_inode(self):\n        with patch('buzz_agents.swap_pool.os.posix_fallocate',side_effect=OSError(28,'disk full')):\n            with self.assertRaises(OSError):self.pool.tick(512)\n        before=(self.root/'chunk-0000').stat()\n        self.free=5*1024*MIB\n        with self.assertRaisesRegex(ToolError,'disk_reserve'):self.pool.tick(512)\n        self.free=40*1024*MIB\n        self.assertEqual(self.pool.tick(512)['state'],'ready')\n        self.assertEqual((self.root/'chunk-0000').stat().st_ino,before.st_ino)\n        self.assertEqual(sum(a[0]=='mkswap' for a in self.commands),1)\n        self.assertEqual(len(list(self.root.glob('chunk-*'))),1)\n",
+      "code_sha256": "4b36babd920a883751632ca3d1d0e429811b5070f6e3ce5598a8687e8073ef26",
+      "file_sha256": "edfa425667b089b06a1f16df85316eae53d5b246ae3a18a383676aa8d3f26feb"
+    },
+    {
+      "path": "tests/test_swap_support.py",
+      "function": "PoolTests.test_format_success_lost_journal_save_never_reformats",
+      "role": "assertion",
+      "start_line": 108,
+      "end_line": 116,
+      "code": "    def test_format_success_lost_journal_save_never_reformats(self):\n        save=self.pool.save\n        def fail_ready(state):\n            if state['shards'] and state['shards'][-1]['phase']=='ready':raise OSError('save failed')\n            save(state)\n        with patch.object(self.pool,'save',side_effect=fail_ready):\n            with self.assertRaises(OSError):self.pool.tick(512)\n        self.assertEqual(self.pool.tick(512)['state'],'ready')\n        self.assertEqual(sum(a[0]=='mkswap' for a in self.commands),1)\n",
+      "code_sha256": "0fd830b77695052b4acd6698c98fe2e2914597c49e3bc85d746191f293d4d6de",
+      "file_sha256": "edfa425667b089b06a1f16df85316eae53d5b246ae3a18a383676aa8d3f26feb"
+    }
+  ],
+  "decision_context": {
+    "schema": "sonol.code-rationale-context.v1",
+    "authoring_environment": {
+      "os": "Linux",
+      "provider": "Codex",
+      "execution_environment": "local repository"
+    },
+    "targets": [
+      {
+        "os": "Linux",
+        "provider": "Codex and Claude",
+        "execution_environment": "Docker VPS",
+        "applicability": "affected",
+        "reason": "Resource selection, persistent intent, update/restart and Docker readback"
+      },
+      {
+        "os": "Windows/Android",
+        "provider": "Buzz",
+        "execution_environment": "desktop/mobile client",
+        "applicability": "unaffected",
+        "reason": "No client changes; existing deployment API retains committed admin memory"
+      }
+    ],
+    "conditions": [
+      {
+        "condition": "New and existing rootful Linux Docker hosts with ext4/XFS and swap limit support",
+        "relevance": "applies",
+        "reason": "Helper has fixed private mount and SYS_ADMIN with restricted seccomp; unsupported hosts report attention"
+      },
+      {
+        "condition": "Existing active swap and pending RAM updates",
+        "relevance": "applies",
+        "reason": "External swap untouched, desired RAM not allocated until committed; prior containers migrate explicitly"
+      },
+      {
+        "condition": "Actual customer host reboot ordering",
+        "relevance": "unknown",
+        "reason": "Reactivation logic exists but no live reboot tested; bots can start first"
+      }
+    ],
+    "boundaries": [
+      {
+        "path": "buzz_agents/swap_manager.py",
+        "logical_owner": "reconcile",
+        "role": "producer",
+        "review": "Recover interrupted helper creation and owned swap allocation without adopting foreign resources or reformatting a completed swap file."
+      },
+      {
+        "path": "buzz_agents/swap_pool.py",
+        "logical_owner": "Pool.resume",
+        "role": "store",
+        "review": "Recover interrupted helper creation and owned swap allocation without adopting foreign resources or reformatting a completed swap file."
+      },
+      {
+        "path": "tests/test_swap_support.py",
+        "logical_owner": "ManagerTests.test_delayed_create_keeps_intent_across_upgrade",
+        "role": "assertion",
+        "review": "Recover interrupted helper creation and owned swap allocation without adopting foreign resources or reformatting a completed swap file."
+      },
+      {
+        "path": "tests/test_swap_support.py",
+        "logical_owner": "PoolTests.test_disk_full_retry_finishes_same_inode",
+        "role": "assertion",
+        "review": "Recover interrupted helper creation and owned swap allocation without adopting foreign resources or reformatting a completed swap file."
+      },
+      {
+        "path": "tests/test_swap_support.py",
+        "logical_owner": "PoolTests.test_format_success_lost_journal_save_never_reformats",
+        "role": "assertion",
+        "review": "Recover interrupted helper creation and owned swap allocation without adopting foreign resources or reformatting a completed swap file."
+      }
+    ],
+    "verification": [
+      {
+        "assertion_id": "swap-recovery-and-preservation",
+        "test_reference": "tests/test_swap_support.py",
+        "environment": {
+          "os": "Linux",
+          "provider": "Codex and Claude",
+          "execution_environment": "Docker VPS"
+        },
+        "status": "passed",
+        "evidence_kind": "fixture",
+        "evidence": [
+          "tests/test_swap_support.py",
+          "TASK.md"
+        ]
+      },
+      {
+        "assertion_id": "real-kernel-swap",
+        "test_reference": "scripts/verify-swap-docker.py",
+        "environment": {
+          "os": "Linux",
+          "provider": "Codex and Claude",
+          "execution_environment": "Docker VPS"
+        },
+        "status": "not_run",
+        "evidence_kind": "native_execution",
+        "evidence": []
+      }
+    ]
+  },
+  "schema": "sonol.code-rationale.v1",
+  "source": {
+    "commit": "23d49290faf58d42f6698dd205444e93432916d9",
+    "dirty": true
+  }
+}

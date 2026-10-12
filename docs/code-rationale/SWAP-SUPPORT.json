@@ -1,0 +1,193 @@
+{
+  "status": "active",
+  "importance_score": 800,
+  "evidence_level": "documented",
+  "assessment_status": "assessed",
+  "id": "SWAP-SUPPORT",
+  "reason": "Cushion per-bot RAM spikes with bounded shared host swap while preserving existing identities, RAM admission and explicit lifecycle.",
+  "invariants": [
+    "No new capabilities or host mounts in AI containers",
+    "Fixed30%-free allocation budget and current max5GiB/10% disk reserve; existing host swap untouched",
+    "Never resize/reformat/swapoff an active shard; uncertain creation is preserved",
+    "Only known unmarked1R predecessor migrates; postdeploy exact4R required",
+    "No scheduling, replay, overcommit or interrupted-work-resume promise"
+  ],
+  "importance_reason": "Privileged host storage and bot lifecycle changes require explicit boundaries.",
+  "evidence": [
+    "docs/EXISTING-BOT-UPDATE.md",
+    "tests/test_swap_support.py",
+    "scripts/verify-swap-docker.py"
+  ],
+  "anchors": [
+    {
+      "path": "buzz_agents/swap_pool.py",
+      "function": "Pool.tick",
+      "role": "helper",
+      "start_line": 165,
+      "end_line": 201,
+      "code": "    def tick(self, target_mb):\n        if type(target_mb) is not int or not 0 <= target_mb <= 2**31:\n            raise ToolError('swap_invalid_target')\n        checked_directory(self.root)\n        fd = os.open(self.root / 'pool.lock', os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)\n        try:\n            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)\n            if self.run(['stat', '-f', '-c', '%T', str(self.root)]) not in ('ext2/ext3', 'ext4', 'xfs'):\n                raise ToolError('swap_filesystem_unsupported')\n            # Do not freeze the budget before the first bot actually exists.\n            state = self.load() if target_mb or (self.root/'pool.json').exists() else {'budget': 0, 'shards': []}\n            active = self.activate(state)\n            managed = sum(s['size'] for s in state['shards'])\n            total_active = sum(s['bytes'] for s in active.values())\n            free, total = self.space(self.root)\n            amount = allocation(state['budget'], managed, free, total, target_mb*MIB, total_active)\n            # Use at most eight managed swap areas. Larger shards avoid exhausting\n            # the kernel's finite area table; external areas also consume slots.\n            slots = max(0, 8-len(state['shards']))\n            area_limited = not slots or len(active) >= 24\n            if amount >= 64*MIB and not area_limited:\n                chunk = max(1024*MIB, ((amount+slots-1)//slots+MIB-1)//MIB*MIB)\n                self.add(state, min(amount, chunk))\n                active = self.inventory()\n                managed = sum(s['size'] for s in state['shards'])\n                total_active = sum(s['bytes'] for s in active.values())\n                free, total = self.space(self.root)\n            remaining = allocation(state['budget'], managed, free, total, target_mb*MIB, total_active)\n            # One swap-header page per file is not a capacity shortage.\n            sufficient = total_active + len(active)*os.sysconf('SC_PAGE_SIZE') >= target_mb*MIB\n            return {'state': 'ready' if sufficient else ('preparing' if remaining >= 64*MIB and len(state['shards']) < 8 and len(active) < 24 else 'limited'),\n                    'target_mb': target_mb, 'total_mb': total_active//MIB,\n                    'used_mb': sum(s['used'] for s in active.values())//MIB,\n                    'managed_mb': managed//MIB, 'budget_mb': state['budget']//MIB,\n                    'free_mb': free//MIB, 'checked_at': int(time.time())}\n        finally:\n            os.close(fd)\n",
+      "code_sha256": "90f166328f617648d44e947089cceb57bb64c0721b8abed9737395d043ec7207",
+      "file_sha256": "497a9bc87711169843e36b737e3f80314280f27e37e9ddde85a236d5f49796cd"
+    },
+    {
+      "path": "buzz_agents/swap_pool.py",
+      "function": "Pool.add",
+      "role": "store",
+      "start_line": 140,
+      "end_line": 163,
+      "code": "    def add(self, state, size):\n        if len(state['shards']) >= 8:\n            raise ToolError('swap_shard_limit')\n        name = 'chunk-%04d' % len(state['shards'])\n        path = self.root / name\n        # Journal intent before creating: any interruption remains visible.\n        shard = dict(name=name, size=size, phase='allocating', inode=0, device=0)\n        state['shards'].append(shard)\n        self.save(state)\n        fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY | os.O_NOFOLLOW, 0o600)\n        try:\n            st = os.fstat(fd)\n            shard.update(inode=st.st_ino, device=st.st_dev)\n            self.save(state)\n            # posix_fallocate reserves real blocks; supported ext4/XFS only.\n            os.posix_fallocate(fd, 0, size)\n            os.fsync(fd)\n        finally:\n            os.close(fd)\n        self.verify(shard)\n        self.run(['mkswap', '--', str(path)])\n        shard['phase'] = 'ready'\n        self.save(state)\n        self.activate(state)\n",
+      "code_sha256": "835fb17415575bbb7229c868abb5e85d281811be5edaac04aa50c18b95f86abe",
+      "file_sha256": "497a9bc87711169843e36b737e3f80314280f27e37e9ddde85a236d5f49796cd"
+    },
+    {
+      "path": "buzz_agents/swap_manager.py",
+      "function": "reconcile",
+      "role": "producer",
+      "start_line": 79,
+      "end_line": 125,
+      "code": "def reconcile(run, inspect, self_name):\n    checked_directory(ROOT)\n    fd = os.open(ROOT/'controller.lock', os.O_CREAT|os.O_RDWR|os.O_NOFOLLOW, 0o600)\n    pool_fd = None\n    try:\n        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)\n        info = json.loads(run(['docker','info','--format','{{json .}}'], timeout=20))\n        if (info.get('OSType') != 'linux' or info.get('SwapLimit') is not True\n                or any('rootless' in str(x) or 'userns' in str(x) for x in info.get('SecurityOptions',[]))):\n            raise ToolError('swap_host_unsupported')\n        if not isinstance(self_name,str) or not re.fullmatch(r'[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}', self_name):\n            raise ToolError('swap_broker_identity_unavailable')\n        candidates = json.loads(run(['docker','inspect','--type','container',self_name], timeout=20))\n        broker = candidates[0] if len(candidates) == 1 else None\n        if (not broker or (broker.get('Config',{}).get('Labels') or {}).get('com.docker.compose.service') != 'broker'\n                or not re.fullmatch(r'sha256:[0-9a-f]{64}', broker.get('Image',''))\n                or not any(m.get('Source') == str(ROOT.parent) and m.get('Destination') == str(ROOT.parent)\n                           and m.get('Type') == 'bind' for m in broker.get('Mounts',[]))):\n            raise ToolError('swap_broker_identity_unavailable')\n        image = broker['Image']\n        saved = private_json(ROOT/'helper.json', {})\n        current = inspect(NAME)\n        if current is None or current.get('Image') != image:\n            pool_fd = os.open(ROOT/'pool.lock',os.O_CREAT|os.O_RDWR|os.O_NOFOLLOW,0o600)\n            fcntl.flock(pool_fd,fcntl.LOCK_EX|fcntl.LOCK_NB)\n        if current:\n            if not owned(current, saved.get('id')):\n                raise ToolError('swap_helper_name_collision')\n            if current.get('Image') != image:\n                # Stopping helper does NOT deactivate swap. Never swapoff/unlink.\n                run(['docker','stop','--time','45',current['Id']], timeout=55)\n                run(['docker','rm',current['Id']], timeout=20)\n                current = None\n        if current is None:\n            ident = run(create_args(image), timeout=30).decode().strip()\n            if not re.fullmatch(r'[0-9a-f]{64}', ident):\n                raise ToolError('swap_helper_create_unconfirmed')\n            atomic_json(ROOT/'helper.json', {'id':ident})\n            current = inspect(NAME)\n            if not current or not owned(current, ident):\n                raise ToolError('swap_helper_create_unconfirmed')\n        if not current.get('State',{}).get('Running'):\n            run(['docker','start',current['Id']], timeout=20)\n    finally:\n        if pool_fd is not None:\n            os.close(pool_fd)\n        os.close(fd)\n",
+      "code_sha256": "0b7a9f902a610791a019f986ae14617d09693d844be6f2a4e3c94c81749c9c71",
+      "file_sha256": "db826d0c4cf8df8f7d9f8ad2d85cc93caa17fa97ce8bb9c2a8b7ca0e7f876115"
+    },
+    {
+      "path": "buzz_agents/memory_settings.py",
+      "function": "compatible_limits",
+      "role": "consumer",
+      "start_line": 62,
+      "end_line": 69,
+      "code": "def compatible_limits(actual, mb):\n    \"\"\"Allow only the known unmarked no-swap predecessor during migration.\"\"\"\n    if limits_match(actual, mb):\n        return True\n    limits = (actual or {}).get('HostConfig', {})\n    labels = ((actual or {}).get('Config', {}).get('Labels') or {})\n    expected = mb * 1024 * 1024\n    return LABEL not in labels and limits.get('Memory') == expected and limits.get('MemorySwap') == expected\n",
+      "code_sha256": "9799432f76bea2092e9649f7fb94ad33a85b2f48c4864a87c000d9bf56f8dcd9",
+      "file_sha256": "8c4ae6ef9c10d259e042f1e7756b365fa195d87cafe97b4a669ebafd924770f6"
+    },
+    {
+      "path": "tests/test_swap_support.py",
+      "function": "MigrationTests.test_unmarked_legacy_migrates_but_bad_marked_limits_do_not",
+      "role": "assertion",
+      "start_line": 197,
+      "end_line": 210,
+      "code": "    def test_unmarked_legacy_migrates_but_bad_marked_limits_do_not(self):\n        self.current['Config']['Labels'].pop(LABEL)\n        self.current['HostConfig']['MemorySwap']=self.old['memory_mb']*MIB\n        self.assertTrue(memory_settings.compatible_limits(self.current,self.old['memory_mb']))\n        status=self.u.preview(PUBKEY)['memory']\n        self.assertFalse(status['recovery_required']);self.assertTrue(status['swap_pending'])\n        self.u.save_memory(PUBKEY,self.u.preview(PUBKEY)['revision'],2048)\n        self.apply()\n        self.assertEqual(self.current['HostConfig']['MemorySwap'],8192*MIB)\n        self.assertEqual(self.current['Config']['Labels'][LABEL],POLICY)\n        self.current['HostConfig']['MemorySwap']=2048*MIB\n        with self.assertRaisesRegex(ToolError,'memory_apply_recovery_required'):\n            self.u.save_memory(PUBKEY,self.u.preview(PUBKEY)['revision'],3072)\n        for p in self.kept:self.assertEqual(p.read_text(),'private-sentinel')\n",
+      "code_sha256": "6d277d8f50f9c0b1901104ed8d4c436abf9d2df7433c7dcd590e6293b4ce38aa",
+      "file_sha256": "469532690ba45e17f14a2ba88b1f66de0eb52989b7d1096b7e7a5ce0a3c61e4d"
+    }
+  ],
+  "decision_context": {
+    "schema": "sonol.code-rationale-context.v1",
+    "authoring_environment": {
+      "os": "Linux",
+      "provider": "Codex",
+      "execution_environment": "local repository"
+    },
+    "targets": [
+      {
+        "os": "Linux",
+        "provider": "Codex and Claude",
+        "execution_environment": "Docker VPS",
+        "applicability": "affected",
+        "reason": "Resource selection, persistent intent, update/restart and Docker readback"
+      },
+      {
+        "os": "Windows/Android",
+        "provider": "Buzz",
+        "execution_environment": "desktop/mobile client",
+        "applicability": "unaffected",
+        "reason": "No client changes; existing deployment API retains committed admin memory"
+      }
+    ],
+    "conditions": [
+      {
+        "condition": "New and existing rootful Linux Docker hosts with ext4/XFS and swap limit support",
+        "relevance": "applies",
+        "reason": "Helper has fixed private mount and SYS_ADMIN with restricted seccomp; unsupported hosts report attention"
+      },
+      {
+        "condition": "Existing active swap and pending RAM updates",
+        "relevance": "applies",
+        "reason": "External swap untouched, desired RAM not allocated until committed; prior containers migrate explicitly"
+      },
+      {
+        "condition": "Actual customer host reboot ordering",
+        "relevance": "unknown",
+        "reason": "Reactivation logic exists but no live reboot tested; bots can start first"
+      }
+    ],
+    "boundaries": [
+      {
+        "path": "buzz_agents/swap_pool.py",
+        "logical_owner": "Pool.tick",
+        "role": "helper",
+        "review": "Reviewed bounded disk budget, private helper authority, migration and lifecycle preservation; actual kernel execution remains release-gated."
+      },
+      {
+        "path": "buzz_agents/swap_pool.py",
+        "logical_owner": "Pool.add",
+        "role": "store",
+        "review": "Reviewed bounded disk budget, private helper authority, migration and lifecycle preservation; actual kernel execution remains release-gated."
+      },
+      {
+        "path": "buzz_agents/swap_manager.py",
+        "logical_owner": "reconcile",
+        "role": "producer",
+        "review": "Reviewed bounded disk budget, private helper authority, migration and lifecycle preservation; actual kernel execution remains release-gated."
+      },
+      {
+        "path": "buzz_agents/memory_settings.py",
+        "logical_owner": "compatible_limits",
+        "role": "consumer",
+        "review": "Reviewed bounded disk budget, private helper authority, migration and lifecycle preservation; actual kernel execution remains release-gated."
+      },
+      {
+        "path": "tests/test_swap_support.py",
+        "logical_owner": "MigrationTests.test_unmarked_legacy_migrates_but_bad_marked_limits_do_not",
+        "role": "assertion",
+        "review": "Reviewed bounded disk budget, private helper authority, migration and lifecycle preservation; actual kernel execution remains release-gated."
+      }
+    ],
+    "verification": [
+      {
+        "assertion_id": "swap-pool-and-migration",
+        "test_reference": "tests/test_swap_support.py",
+        "environment": {
+          "os": "Linux",
+          "provider": "Codex and Claude",
+          "execution_environment": "Docker VPS"
+        },
+        "status": "passed",
+        "evidence_kind": "fixture",
+        "evidence": [
+          "tests/test_swap_support.py"
+        ]
+      },
+      {
+        "assertion_id": "ko-en-resource-status",
+        "test_reference": "scripts/verify-bot-update-browser.py",
+        "environment": {
+          "os": "Linux",
+          "provider": "Codex and Claude",
+          "execution_environment": "Docker VPS"
+        },
+        "status": "passed",
+        "evidence_kind": "fixture",
+        "evidence": [
+          "scripts/verify-bot-update-browser.py"
+        ]
+      },
+      {
+        "assertion_id": "real-kernel-swap",
+        "test_reference": "scripts/verify-swap-docker.py",
+        "environment": {
+          "os": "Linux",
+          "provider": "Codex and Claude",
+          "execution_environment": "Docker VPS"
+        },
+        "status": "not_run",
+        "evidence_kind": "native_execution",
+        "evidence": []
+      }
+    ]
+  },
+  "schema": "sonol.code-rationale.v1",
+  "source": {
+    "commit": "23d49290faf58d42f6698dd205444e93432916d9",
+    "dirty": true
+  }
+}

@@ -22,13 +22,13 @@ class MemoryTests(unittest.TestCase):
     apply = fixtures.UpdateTests.apply
     def setUp(self):
         fixtures.UpdateTests.setUp(self)
-        self.current['HostConfig'].update(Memory=1536*1024**2, MemorySwap=1536*1024**2)
+        self.current['HostConfig'].update(Memory=1536*1024**2, MemorySwap=1536*4*1024**2)
         run = self.d.run
         def runner(argv, *args, **kwargs):
             result = run(argv, *args, **kwargs)
             if 'up' in argv:
                 mb = read_json(self.root/'bots'/PUBKEY/'config/config.json')['memory_mb']
-                self.current['HostConfig'].update(Memory=mb*1024**2, MemorySwap=mb*1024**2)
+                self.current['HostConfig'].update(Memory=mb*1024**2, MemorySwap=mb*4*1024**2)
             return result
         self.d.run = runner
     def choose(self, value):
@@ -46,7 +46,7 @@ class MemoryTests(unittest.TestCase):
         self.choose(3072);self.apply()
         after=read_json(self.root/'bots'/PUBKEY/'config/config.json')
         self.assertEqual(after,memory_settings.with_memory(self.old,3072))
-        self.assertEqual(self.current['HostConfig']['MemorySwap'],3072*1024**2)
+        self.assertEqual(self.current['HostConfig']['MemorySwap'],3072*4*1024**2)
         self.choose(4096)
         # Old desktop value must not revert 3072 or consume the unapproved 4096.
         self.current['State']['Running']=False

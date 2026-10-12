@@ -88,3 +88,18 @@ storage faults remain explicit; successful semantic loops are not inferred.
 ## Existing-bot administrator update
 
 The setup administrator can explicitly interrupt and update one existing bot from its root-owned normalized configuration. Revalidation in the broker-selected runtime must preserve identity, owner, relay, provider, model, role, workspace and resources. Count budgets remain unchanged unless explicitly opting into current defaults. The global deployment lock and both authentication locks fence concurrent mutation. Device deployment permissions are unchanged. Job identifiers deduplicate immediate request retries; persisted status does not auto-resume an interrupted update. Other bots retain their image references. Actual image, ownership and PID-limit readback precede success. See docs/EXISTING-BOT-UPDATE.md for failure and acceptance boundaries.
+
+## Bounded shared swap (SWAP-SUPPORT-01)
+
+New bot deployments retain physical RAM ceilings and permit at most3R additional
+swap (Docker combined ceiling4R). Known unmarked1R predecessors remain valid for
+explicit migration; new deployments require exact4R readback even without a RAM
+sidecar. Other bot Compose limits and images remain unchanged until their update.
+Host RAM aggregate admission remains physical-only. No global prompt queue added.
+The broker's restricted helper manages only its private root-owned swap directory,
+with bounded fixed disk budget, current free-space reserve and immutable active
+shards. No host root/PID/socket is mounted into the helper and no agent gets new
+capabilities. Existing external swap is read-only inventory. Preparation/status
+failure never authorizes bot termination or credential deletion. Actual kernel
+activation and restart verification on disposable Docker are release obligations;
+fixture success is not proof of a production VPS or reboot startup ordering.

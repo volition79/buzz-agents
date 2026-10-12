@@ -9,6 +9,7 @@ COPY buzz_agents /app/buzz_agents
 RUN chmod -R a+rX,go-w /app
 
 FROM base AS broker
+RUN apt-get update && apt-get install -y --no-install-recommends util-linux && rm -rf /var/lib/apt/lists/*
 ARG BUZZ_RELEASE
 ARG BUZZ_RELEASE_RUNTIME
 ARG BUZZ_RELEASE_PORTAL

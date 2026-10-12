@@ -183,3 +183,93 @@ RAM은 예약된 실사용량이 아니라 **봇별 최대 한도**입니다. �
 Do not delete or reinstall the bot/project. RAM changes preserve identity, account files, work files, CPU and concurrency. The separate existing restore-default-rules option still changes execution rules only when explicitly selected. Later Windows deployments retain the last approved RAM; pending selections are not applied by Windows deployment or automatic release updates.
 
 RAM is a per-bot maximum, not reserved actual usage. Capacity checks account for other bots' current/pending limits and server headroom. Pending decreases do not free capacity until applied. Other bots are never automatically downsized.
+
+## 공유 스왑 / Shared swap (SWAP-SUPPORT-01)
+
+봇별 RAM 설정은 그대로 사용합니다. 새 실행 정책은 봇당 RAM 상한의 3배까지
+스왑을 허용합니다(RAM과 스왑 합산 Docker 한도는 4배). 이는 예약 용량이
+아닙니다. 모든 봇과 서버 프로그램이 실제 활성화된 공유 스왑을 나눠 씁니다.
+기존 봇은 작업 완료 후 기존 **업데이트·다시 시작**으로 적용합니다.
+정상 구버전의 스왑 차단 설정은 업데이트 대상으로 인정하며, 로그인·역할·모델·
+작업 파일을 바꾸지 않습니다. RAM 합계 용량 검사는 유지됩니다.
+
+설정된 Relay가 있는 새 broker는 제한된 `buzz-agents-swap-v1` 관리 컨테이너를
+준비합니다. root 비밀번호 입력은 필요하지 않습니다. 이 컨테이너는 AI가 아니며,
+네트워크·Docker 소켓·호스트 PID·다른 봇 파일에 접근하지 않습니다. 스왑 활성화에
+필요한 SYS_ADMIN과 전용 seccomp 정책을 사용합니다. rootful Linux Docker의
+스왑 한도 지원과 ext4/XFS 파일시스템이 필요합니다. 보안 정책에 막히면 이를
+우회하지 않고 **공유 스왑 확인 필요**로 표시합니다.
+
+- 목표는 등록된 봇의 적용된 RAM 합계 ×3이며 기존 서버 스왑도 포함합니다.
+  아직 저장만 한 RAM 변경은 목표에 포함하지 않습니다.
+- 처음 봇이 등록된 시점의 가용 디스크 30%를 추가 관리 스왑 예산으로 고정합니다.
+  반복 실행으로 예산이 늘지 않습니다. 기존 외부 스왑은 변경하거나 줄이지 않습니다.
+- 매 확장 시 현재 디스크 여유를 다시 확인하고 최소 **5GiB 또는 파일시스템 전체의
+  10% 중 큰 값**을 남깁니다. 다른 프로그램의 디스크 쓰기까지 막는 보장은 아닙니다.
+- 준비는 백그라운드에서 진행됩니다. 봇이 시작되기 전에 목표 용량 전체가 준비된다는
+  보장은 없습니다. 열기 화면의 **활성 용량**으로 실제 확보량을 확인하세요.
+- 활성 파일은 자동으로 줄이거나 재초기화하지 않습니다. 커널의 스왑 영역 개수 제한을
+  고려해 관리 파일은 최대8개입니다. 여러 차례 작은 증설로 이를 소진하거나 디스크가
+  부족하면 **공유 스왑 용량 제한**으로 표시하고 현재 확보량을 유지합니다.
+- 스왑 준비 실패는 기존 봇을 중지하거나 로그인 정보를 삭제하지 않습니다.
+  생성 응답이나 식별 정보 저장이 실패해도, 생성 전 저장한 고유 식별값이 맞으면
+  같은 도우미를 찾아 재시도합니다. 디스크 공간 확보 중 실패하면 여유 공간을 다시
+  확인하여 같은 파일에서 재시도합니다. 포맷 후 상태 저장 실패는 파일 UUID를 확인해
+  재포맷 없이 이어갑니다. 이 재시도는 백그라운드에서 이루어집니다.
+  포맷을 한 번이라도 시도한 뒤에는 복구 과정에서 다시 포맷하지 않습니다. 파일 검사
+  오류나 빈 응답은 미포맷으로 간주하지 않으며, UUID 확인 전까지 준비를 멈춥니다.
+  구형 `allocating` 기록, inode 기록 전 중단, 파일 신원·서명 불일치는 여전히
+  불확실한 파일을 보존하고 관리자 검토를 요구합니다. 무조건 복구되는 것은 아닙니다.
+- helper는 Docker 재시작 정책으로 다시 실행하여 기존 스왑을 재활성화합니다.
+  호스트 fstab·swappiness는 수정하지 않습니다. 서버 부팅 직후 봇이 스왑보다 먼저
+  시작할 가능성이 있으므로 재부팅 후 활성 용량을 확인하세요.
+- swap 디렉터리나 관리 파일을 수동 삭제하지 마세요. 프로젝트 제거로 이미 활성화된
+  호스트 스왑이 해제되는 것은 아닙니다. 호스트 수준 제거는 별도 관리자 작업입니다.
+
+스왑은 순간적인 RAM 부족을 완화하지만 성능 저하·시간 초과·메모리 부족 종료를
+완전히 막지 않습니다. 자동 작업 대기·재개나 RAM 과다 할당 기능은 이번 범위에 없습니다.
+
+### English
+
+The existing RAM selector remains unchanged. Each updated bot permits swap up to
+3× its RAM limit (Docker's combined RAM+swap ceiling is 4× RAM). This is a limit,
+not reserved capacity. Bots and other server processes share actual host swap.
+Finish work and use **Update / restart** for existing bots. Known legacy no-swap
+containers can migrate without changing identity, role, model, credentials or
+files. Aggregate physical-RAM admission checks remain in place.
+
+After Relay configuration, the broker prepares a restricted `buzz-agents-swap-v1`
+helper: no network, Docker socket, host PID namespace or bot-data mount. It uses
+SYS_ADMIN plus a dedicated seccomp profile, never privileged mode. Supported hosts
+are rootful Linux Docker with swap-limit support and ext4/XFS. Host security denial
+is reported as **Shared swap needs attention**, not silently bypassed.
+
+The target is 3× registered, committed RAM, counting existing host swap. Pending
+RAM selections do not allocate swap. The initial free-disk 30% budget is persisted
+at the first registered bot; retries never increase that budget. Every allocation
+also retains at least max(5GiB,10% filesystem capacity) of current free disk.
+Concurrent writes by other applications can still reduce available disk space.
+
+Preparation is asynchronous; bot startup is not a promise that the full swap target
+is ready. Check **Active capacity** in the setup page. Existing external swap is
+never modified. Active managed files are never resized, reformatted or shrunk.
+At most eight managed files are created to avoid exhausting kernel swap areas;
+repeated small increases may exhaust these slots before the disk budget. Capacity
+shortfalls show **Shared swap capacity limited**, not a false success.
+
+Activation failures preserve bots and credentials. A durable creation token allows
+recovery of lost helper-create responses or ID-save failures without duplicates.
+Allocation retries recheck free space and reuse the same recorded inode. A matching
+swap UUID recovers a lost post-format save without formatting again. These retries
+run in the background. After any formatting attempt, recovery never invokes formatting
+again: probe errors or empty output stop preparation until the matching UUID can
+be positively verified. Legacy ambiguous `allocating` records, interruption before
+inode recording, or changed file identities/signatures still require administrator
+review; uncertain files are preserved. Recovery is not unconditional. The helper restarts with Docker
+and reactivates retained swap files without editing host fstab or swappiness.
+Bots may start before swap after a host reboot; verify active capacity afterward.
+Never manually delete active swap files. Removing the Docker project does not
+necessarily deactivate host swap; host-level removal is a separate admin task.
+
+Swap cushions RAM spikes but does not guarantee uninterrupted work. Automatic
+work queues/resumption and physical-RAM overcommit are not part of this feature.

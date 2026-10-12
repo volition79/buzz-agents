@@ -20,7 +20,7 @@ class HostTests(unittest.TestCase):
             if argv[:3]==['docker','image','inspect']:return json.dumps([{'Id':self.settings['image_id']}]).encode()
             if argv[:2]==['docker','info']:return json.dumps({'NCPU':16,'MemTotal':64*1024**3}).encode()
             if 'up' in argv:
-                self.actual={'HostConfig':{'PidsLimit':process_limit(self.config)},'State':{'Running':True},'Image':self.settings['image_id'],'Config':{'Labels':labels(self.config)}}
+                self.actual={'HostConfig':{'PidsLimit':process_limit(self.config),'Memory':self.config['memory_mb']*1024**2,'MemorySwap':self.config['memory_mb']*4*1024**2},'State':{'Running':True},'Image':self.settings['image_id'],'Config':{'Labels':labels(self.config)}}
             return b''
         self.deploy=Deployer(self.settings,runner,lambda n:self.actual,lambda request:self.config)
     def tearDown(self):self.tmp.cleanup()

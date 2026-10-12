@@ -22,7 +22,7 @@ from .bridge import bot_records
 from .bot_update import ExistingBotUpdater
 from .reauth import Reauthentication, pending
 from .policy import atomic_json, read_json
-from . import release_contract
+from . import release_contract, swap_manager
 from .rollout import Rollout
 from . import easy_schedule, portal_bootstrap, portal_compose, mobile_pairing
 
@@ -357,6 +357,7 @@ class Broker:
             settings = read_json(self.control / 'settings.json', {})
             return {'ok': True, 'configured': bool(settings),
                     'relay': settings.get('relay'), 'owner': settings.get('owner'),
+                    'swap': swap_manager.public(self.root),
                     'mobile_pairing': read_json(self.control / 'mobile-pairing.json', {'state': 'not_configured'}),
                     'update': self.update_job(),
                     'bots': bot_records(settings) if settings else []}
@@ -463,6 +464,7 @@ def main():
         os.chown(SOCKET, 0, 10002)
         os.chmod(SOCKET, 0o660)
         server.broker = Broker(os.environ.get('BUZZ_RUNTIME_IMAGE', 'legacy:unset'), contract=release_contract.load())
+        threading.Thread(target=swap_manager.loop, args=(server.broker, execute, inspect_container), daemon=True).start()
         threading.Thread(target=server.broker.rollout.serve, daemon=True).start()
         threading.Thread(target=server.broker.reconcile_saved_route, daemon=True).start()
         server.serve_forever()

@@ -1,0 +1,146 @@
+{
+  "status": "active",
+  "importance_score": 800,
+  "evidence_level": "documented",
+  "assessment_status": "assessed",
+  "id": "SWAP-PROBE-SAFETY",
+  "reason": "Never infer an unformatted file from failed or empty signature probing; formatting-stage recovery is read-only until UUID is positively verified.",
+  "invariants": [
+    "Only reserving to formatting invokes mkswap; never replay mkswap from formatting state",
+    "Probe nonzero exits, stderr, missing or foreign UUID stop recovery without activation",
+    "Disk reservation retry and successful UUID-based recovery remain supported"
+  ],
+  "importance_reason": "Privileged host storage and bot lifecycle changes require explicit boundaries.",
+  "evidence": [
+    "tests/test_swap_support.py",
+    "docs/EXISTING-BOT-UPDATE.md",
+    "TASK.md"
+  ],
+  "anchors": [
+    {
+      "path": "buzz_agents/swap_pool.py",
+      "function": "command",
+      "role": "helper",
+      "start_line": 49,
+      "end_line": 59,
+      "code": "def command(argv):\n    try:\n        p = subprocess.run(argv, capture_output=True, timeout=45, check=False)\n    except (OSError, subprocess.TimeoutExpired):\n        raise ToolError('swap_command_failed') from None\n    if argv[0] == 'blkid' and (p.returncode or p.stderr.strip()):\n        # Exit 2 also means unreadable content, not proof of an empty file.\n        raise ToolError('swap_probe_failed')\n    if p.returncode:\n        raise ToolError('swap_activation_or_filesystem_denied')\n    return p.stdout.decode().strip()\n",
+      "code_sha256": "3daa29fdc30f73b2f9c0ca22f2031b056716b22ea2bb82412a6877820b493f05",
+      "file_sha256": "4384e3c231090ab6fed578f82c092c32c19f99079edc19f2f1d8672ea88ab292"
+    },
+    {
+      "path": "buzz_agents/swap_pool.py",
+      "function": "Pool.resume",
+      "role": "store",
+      "start_line": 163,
+      "end_line": 212,
+      "code": "    def resume(self, state, shard):\n        path = self.root / shard['name']\n        if shard['phase'] == 'reserving':\n            if str(path) in self.inventory():\n                raise ToolError('swap_file_unexpectedly_active')\n            if shard['inode'] == 0:\n                # Missing file is safe to create. An existing unrecorded inode\n                # is never adopted, even when it has our intended filename.\n                fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY | os.O_NOFOLLOW, 0o600)\n                try:\n                    st = os.fstat(fd)\n                    shard.update(inode=st.st_ino, device=st.st_dev)\n                    self.save(state)\n                finally:\n                    os.close(fd)\n            self.verify(shard, partial=True)\n            fd = os.open(path, os.O_WRONLY | os.O_NOFOLLOW)\n            try:\n                st = os.fstat(fd)\n                if (st.st_ino, st.st_dev) != (shard['inode'], shard['device']):\n                    raise ToolError('swap_file_changed')\n                free, total = self.space(self.root)\n                needed = max(0, shard['size'] - st.st_blocks * 512)\n                if free - max(5 * 1024**3, total // 10) < needed:\n                    raise ToolError('swap_disk_reserve')\n                # Repeating allocation is safe only BEFORE any mkswap call.\n                os.posix_fallocate(fd, 0, shard['size'])\n                os.fsync(fd)\n            finally:\n                os.close(fd)\n            self.verify(shard)\n            # Only this transition proves we have never attempted formatting.\n            # Persist before invoking mkswap; after any interruption recovery is\n            # read-only and must positively identify our completed signature.\n            shard['phase'] = 'formatting'\n            self.save(state)\n            self.run(['mkswap', '--uuid', shard['uuid'], '--', str(path)])\n            shard['phase'] = 'ready'\n            self.save(state)\n            return\n        self.verify(shard)\n        signature = self.run(['blkid', '-p', '-o', 'export', '--', str(path)])\n        fields = dict(line.split('=', 1) for line in signature.splitlines() if '=' in line)\n        if fields.get('TYPE') == 'swap' and fields.get('UUID') == shard['uuid']:\n            # mkswap completed before a crash/save failure: do NOT format again.\n            pass\n        else:\n            raise ToolError('swap_signature_changed')\n        shard['phase'] = 'ready'\n        self.save(state)\n",
+      "code_sha256": "71016416692a8f845e2b92c13d01ce8ab1e92719abd702218866022e5397e850",
+      "file_sha256": "4384e3c231090ab6fed578f82c092c32c19f99079edc19f2f1d8672ea88ab292"
+    },
+    {
+      "path": "tests/test_swap_support.py",
+      "function": "PoolTests.test_probe_failure_after_lost_save_never_reformats",
+      "role": "assertion",
+      "start_line": 118,
+      "end_line": 147,
+      "code": "    def test_probe_failure_after_lost_save_never_reformats(self):\n        # Incident: formatted file + lost ready save + blkid exit 2/read error\n        # formerly executed mkswap again and reported ready (dirty 23d49290).\n        from subprocess import CompletedProcess, TimeoutExpired\n        save=self.pool.save\n        def fail_ready(state):\n            if state['shards'] and state['shards'][-1]['phase']=='ready':raise OSError('save failed')\n            save(state)\n        with patch.object(self.pool,'save',side_effect=fail_ready):\n            with self.assertRaises(OSError):self.pool.tick(512)\n        original=self.pool.run\n        def run(argv):\n            return swap_pool.command(argv) if argv[0]=='blkid' else original(argv)\n        self.pool.run=run\n        cases=[(2,b'',b'Input/output error'),(2,b'',b''),(4,b'',b''),\n               (8,b'',b''),(0,b'',b''),(0,b'garbage',b''),\n               (0,b'TYPE=swap\\nUUID=foreign',b'')]\n        for code,out,err in cases:\n            with self.subTest(code=code,out=out,err=err):\n                with patch.object(swap_pool.subprocess,'run',return_value=CompletedProcess([],code,out,err)):\n                    with self.assertRaises(ToolError):self.pool.tick(512)\n                self.assertEqual(sum(a[0]=='mkswap' for a in self.commands),1)\n                self.assertFalse(self.active)\n                self.assertEqual(read_json(self.root/'pool.json')['shards'][0]['phase'],'formatting')\n        for exc in (OSError('read failure'),TimeoutExpired('blkid',45)):\n            with patch.object(swap_pool.subprocess,'run',side_effect=exc):\n                with self.assertRaises(ToolError):self.pool.tick(512)\n        self.pool.run=original\n        self.assertEqual(self.pool.tick(512)['state'],'ready')\n        self.assertEqual(sum(a[0]=='mkswap' for a in self.commands),1)\n",
+      "code_sha256": "98443edfbe8fa954b2af360925c89bde811fa9e34bc4eb9e5de41788c4de8e37",
+      "file_sha256": "9c9aa98f6037744f980dfcce0a07694d56ae407f681723f47a17c66d6ac8885e"
+    }
+  ],
+  "decision_context": {
+    "schema": "sonol.code-rationale-context.v1",
+    "authoring_environment": {
+      "os": "Linux",
+      "provider": "Codex",
+      "execution_environment": "local repository"
+    },
+    "targets": [
+      {
+        "os": "Linux",
+        "provider": "Codex and Claude",
+        "execution_environment": "Docker VPS",
+        "applicability": "affected",
+        "reason": "Resource selection, persistent intent, update/restart and Docker readback"
+      },
+      {
+        "os": "Windows/Android",
+        "provider": "Buzz",
+        "execution_environment": "desktop/mobile client",
+        "applicability": "unaffected",
+        "reason": "No client changes; existing deployment API retains committed admin memory"
+      }
+    ],
+    "conditions": [
+      {
+        "condition": "New and existing rootful Linux Docker hosts with ext4/XFS and swap limit support",
+        "relevance": "applies",
+        "reason": "Helper has fixed private mount and SYS_ADMIN with restricted seccomp; unsupported hosts report attention"
+      },
+      {
+        "condition": "Existing active swap and pending RAM updates",
+        "relevance": "applies",
+        "reason": "External swap untouched, desired RAM not allocated until committed; prior containers migrate explicitly"
+      },
+      {
+        "condition": "Actual customer host reboot ordering",
+        "relevance": "unknown",
+        "reason": "Reactivation logic exists but no live reboot tested; bots can start first"
+      }
+    ],
+    "boundaries": [
+      {
+        "path": "buzz_agents/swap_pool.py",
+        "logical_owner": "command",
+        "role": "helper",
+        "review": "Never infer an unformatted file from failed or empty signature probing; formatting-stage recovery is read-only until UUID is positively verified."
+      },
+      {
+        "path": "buzz_agents/swap_pool.py",
+        "logical_owner": "Pool.resume",
+        "role": "store",
+        "review": "Never infer an unformatted file from failed or empty signature probing; formatting-stage recovery is read-only until UUID is positively verified."
+      },
+      {
+        "path": "tests/test_swap_support.py",
+        "logical_owner": "PoolTests.test_probe_failure_after_lost_save_never_reformats",
+        "role": "assertion",
+        "review": "Never infer an unformatted file from failed or empty signature probing; formatting-stage recovery is read-only until UUID is positively verified."
+      }
+    ],
+    "verification": [
+      {
+        "assertion_id": "failed-probe-no-format-replay",
+        "test_reference": "tests/test_swap_support.py",
+        "environment": {
+          "os": "Linux",
+          "provider": "Codex and Claude",
+          "execution_environment": "Docker VPS"
+        },
+        "status": "passed",
+        "evidence_kind": "fixture",
+        "evidence": [
+          "tests/test_swap_support.py",
+          "TASK.md"
+        ]
+      },
+      {
+        "assertion_id": "real-kernel-swap",
+        "test_reference": "scripts/verify-swap-docker.py",
+        "environment": {
+          "os": "Linux",
+          "provider": "Codex and Claude",
+          "execution_environment": "Docker VPS"
+        },
+        "status": "not_run",
+        "evidence_kind": "native_execution",
+        "evidence": []
+      }
+    ]
+  },
+  "schema": "sonol.code-rationale.v1",
+  "source": {
+    "commit": "23d49290faf58d42f6698dd205444e93432916d9",
+    "dirty": true
+  }
+}

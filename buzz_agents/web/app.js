@@ -205,6 +205,7 @@ function memoryControl(bot, disabled){
   const hint=document.createElement('small');hint.className='memory-status';
   hint.textContent=t('현재 적용')+': '+(m.applied_mb===null?t('확인 불가'):(m.applied_mb/1024)+' GiB')+
     (m.pending?' · '+t('변경 대기'):'');box.append(hint);
+  const swapHint=document.createElement('small');swapHint.textContent=t('스왑 상한: RAM의 3배. 서버 공유 용량 내에서 사용합니다.')+(m.swap_pending?' '+t('업데이트·다시 시작으로 스왑 정책을 적용하세요.'):'');box.append(swapHint);
   if(m.recovery_required){const note=document.createElement('small');note.textContent=t('이전 RAM 적용을 확인해야 합니다. 업데이트·다시 시작으로 재시도하세요.');box.append(note);}
   select.onchange=async()=>{
     if(memoryBusy){select.value=m.desired_mb;return;}
@@ -219,9 +220,20 @@ function memoryControl(bot, disabled){
   };
   return box;
 }
+function renderSwap(s){
+  const box=$('swapStatus');if(!box)return;
+  const states={ready:'공유 스왑 사용 가능',preparing:'공유 스왑 준비 중',limited:'공유 스왑 용량 제한',attention:'공유 스왑 확인 필요',pending:'공유 스왑 상태 확인 중'};
+  const label=states[s?.state]||states.pending;
+  box.textContent=t(label);
+  if(Number.isInteger(s?.total_mb))box.textContent+=' · '+t('활성 용량')+': '+(s.total_mb/1024).toFixed(2)+' GiB';
+  if(Number.isInteger(s?.used_mb))box.textContent+=' · '+t('사용 중')+': '+(s.used_mb/1024).toFixed(2)+' GiB';
+  if(s?.state==='limited')box.textContent+=' · '+t('디스크 예산 또는 스왑 파일 수 제한으로 목표보다 적게 확보했습니다.');
+  if(s?.state==='attention')box.textContent+=' · '+t('스왑 준비를 완료하지 못했습니다. 기존 봇과 로그인 정보는 유지됩니다.');
+  if(s?.reason)box.textContent+=' ('+s.reason+')';
+}
 async function refresh(){
   if(memoryBusy||document.activeElement?.classList.contains('memory-select'))return;
-  const data=await api('status');configured=data.configured;
+  const data=await api('status');configured=data.configured;renderSwap(data.swap);
   await refreshReauth();
   await refreshRelease();
   $('download').disabled=!configured;$('relayBadge').textContent=configured?t('연결됨'):t('연결 대기');$('step1').classList.toggle('done',configured);

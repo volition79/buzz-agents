@@ -42,7 +42,7 @@ class UpdateTests(unittest.TestCase):
                 c=read_json(self.root/'bots'/PUBKEY/'config/config.json')
                 self.current={'Id':'container-new','Image':self.readback_image or self.settings['image_id'],
                               'State':{'Running':True},'Config':{'Labels':labels(c)},
-                              'HostConfig':{'PidsLimit':process_limit(c)}}
+                              'HostConfig':{'PidsLimit':process_limit(c),'Memory':c['memory_mb']*1024**2,'MemorySwap':c['memory_mb']*4*1024**2}}
             return b''
         self.d = Deployer(self.settings, runner, lambda _:self.current, self.normalizer)
         self.d.deploy({'agent':agent(),'provider_config':self.old['policy']})

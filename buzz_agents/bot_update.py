@@ -109,7 +109,7 @@ class ExistingBotUpdater:
             config, actual, current = self.inspect(pubkey)
             if current != revision:
                 raise ToolError('bot_update_preview_changed')
-            if not memory_settings.limits_match(actual, config['memory_mb']):
+            if not memory_settings.compatible_limits(actual, config['memory_mb']):
                 raise ToolError('memory_apply_recovery_required')
             choice = memory_settings.load(self.root).get(pubkey, {})
             committed = choice.get('committed_mb', config['memory_mb'])

@@ -2,6 +2,19 @@
 // Korean source copy is the message key. Add another catalog to support another locale.
 (() => {
   const catalogs = {en: {
+"공유 스왑 사용 가능": "Shared swap available",
+"공유 스왑 준비 중": "Preparing shared swap",
+"공유 스왑 용량 제한": "Shared swap capacity limited",
+"공유 스왑 확인 필요": "Shared swap needs attention",
+"공유 스왑 상태 확인 중": "Checking shared swap status",
+"활성 용량": "Active capacity",
+"사용 중": "In use",
+"디스크 예산 또는 스왑 파일 수 제한으로 목표보다 적게 확보했습니다.": "Available capacity is below target due to the disk budget or swap file count limit.",
+"스왑 준비를 완료하지 못했습니다. 기존 봇과 로그인 정보는 유지됩니다.": "Swap preparation could not finish. Existing bots and credentials are preserved.",
+"스왑 상한: RAM의 3배. 서버 공유 용량 내에서 사용합니다.": "Swap limit: 3 times RAM, subject to shared server capacity.",
+"업데이트·다시 시작으로 스왑 정책을 적용하세요.": "Apply the swap policy using Update / restart.",
+"스왑은 RAM 부족을 완화하지만 속도가 느릴 수 있습니다. 자동 작업 대기·재개 기능은 제공하지 않습니다.": "Swap can cushion RAM shortages but may be slow. Automatic task queuing and resumption are not provided.",
+
 "다른 봇과 서버에 필요한 RAM을 제외하면 용량이 부족합니다. 더 작은 값을 선택하세요.": "There is not enough RAM after allowing for other bots and the server. Choose a smaller limit.",
 "선택 후 작업을 마치고 업데이트·다시 시작을 누르세요.": "After selecting, finish your work and use Update / restart.",
 "RAM 한도": "RAM limit",

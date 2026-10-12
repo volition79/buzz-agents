@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 import stat
 from .common import ToolError
+from .swap_pool import LABEL
 from .config import HEX
 from .policy import atomic_json, read_json
 
@@ -54,7 +55,18 @@ def actual_mb(actual):
 
 def limits_match(actual, mb):
     expected = mb * 1024 * 1024
-    return all((actual or {}).get('HostConfig', {}).get(k) == expected for k in ('Memory', 'MemorySwap'))
+    limits = (actual or {}).get('HostConfig', {})
+    return limits.get('Memory') == expected and limits.get('MemorySwap') == expected*4
+
+
+def compatible_limits(actual, mb):
+    """Allow only the known unmarked no-swap predecessor during migration."""
+    if limits_match(actual, mb):
+        return True
+    limits = (actual or {}).get('HostConfig', {})
+    labels = ((actual or {}).get('Config', {}).get('Labels') or {})
+    expected = mb * 1024 * 1024
+    return LABEL not in labels and limits.get('Memory') == expected and limits.get('MemorySwap') == expected
 
 
 def public(config, actual, choice):
@@ -62,6 +74,8 @@ def public(config, actual, choice):
     desired = choice.get('desired_mb', config['memory_mb'])
     committed = choice.get('committed_mb', config['memory_mb'])
     return {'desired_mb': desired, 'configured_mb': config['memory_mb'], 'applied_mb': applied,
-            'pending': not limits_match(actual, desired) or committed != applied,
+            'swap_limit_mb': desired*3,
+            'swap_pending': not limits_match(actual, config['memory_mb']),
+            'pending': not compatible_limits(actual, desired) or committed != applied,
             'recovery_required': committed != config['memory_mb'] or
-                (bool(choice) and not limits_match(actual, config['memory_mb']))}
+                (bool(choice) and not compatible_limits(actual, config['memory_mb']))}

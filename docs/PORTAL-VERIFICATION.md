@@ -1,3 +1,23 @@
+# Bounded shared swap candidate — 2026-10-12
+
+Adds per-bot swap ceiling3x RAM, bounded shared host swap, Korean/English status,
+and safe recovery from interrupted helper creation/allocation. Disk budget is
+fixed at30% initial available space with a current max(5GiB,10% filesystem) reserve.
+Existing external swap and bot identities/auth/work files are preserved. Signature
+probe errors never authorize reformatting; ambiguous state remains protected.
+
+Local recovery/resource regression83 tests passed. Temporary-file mkswap/blkid
+verified lost-save recovery without reformat; no host swapon or user VPS changes.
+Publication CI must pass the disposable-runner swap gate and all existing release
+checks before stable promotion. Real customer VPS acceptance remains with the user.
+
+Existing installs: finish/save work, Shutdown bots, update **buzz-agents** in Docker
+Manager, then Open. Apply **Update / restart** to each bot and verify shared swap
+active capacity and a real reply. Preserve all projects, identities and volumes.
+[Full update and limitations](EXISTING-BOT-UPDATE.md).
+
+## Previous evidence
+
 # Per-bot RAM settings verified — 2026-10-12
 
 Published release [portal-candidate-e812bd1f12c3-54-1](https://github.com/volition79/buzz-agents/releases/tag/portal-candidate-e812bd1f12c3-54-1), source `e812bd1f12c3c56ad73e380ef34b4810041c2b7d`. [CI38219399512](https://github.com/volition79/buzz-agents/actions/runs/38219399512) passed303 Python tests, Go race/vet, Korean/English browser flows, pinned runtime build, real Docker bootstrap/legacy upgrade, per-bot RAM staging/application, stopped lifecycle and reauthentication. Both providers preserved identity and account/work files while Memory and MemorySwap changed from512 to768MiB. AI/auth fixtures are synthetic; live subscriptions and user VPS were not modified.

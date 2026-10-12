@@ -80,6 +80,8 @@ jobs:
         run: |
           docker pull "$BUZZ_RUNTIME_IMAGE"
           docker pull "$BUZZ_PORTAL_IMAGE"
+      - name: Bounded shared swap on disposable runner
+        run: sudo env "PATH=$PATH" "GITHUB_ACTIONS=$GITHUB_ACTIONS" "RUNNER_ENVIRONMENT=$RUNNER_ENVIRONMENT" "BUZZ_BROKER_IMAGE=$IMAGE_PREFIX-broker:$GITHUB_SHA" python3 scripts/verify-swap-docker.py
       - name: Automatic startup without domain environment
         shell: bash
         run: |

@@ -30,7 +30,9 @@ class Broker(f.FixtureBroker):
             self.starts.append(r);self.update={'id':r['request_id'],'pubkey':r['pubkey'],'state':'running'}
             return {'ok':True,'update':self.update}
         answer=super().__call__(r)
-        if r['op']=='status':answer['update']=self.update
+        if r['op']=='status':
+            answer['update']=self.update
+            answer['swap']={'state':'limited','total_mb':4096,'used_mb':256}
         return answer
 
 def main():
@@ -87,6 +89,10 @@ def main():
                 cdp.js("var s=document.querySelector('.memory-select');s.value='3072';s.dispatchEvent(new Event('change'))")
                 cdp.until("!memoryBusy && document.querySelector('.memory-status').textContent.includes("+json.dumps('Pending change' if lang=='en-US' else '변경 대기')+")")
                 assert len(broker.starts)==before and broker.memory['applied_mb']==1536
+                swap=cdp.js("$('swapStatus').textContent")
+                assert '4.00 GiB' in swap and '0.25 GiB' in swap
+                assert ('capacity limited' in swap) if lang=='en-US' else ('용량 제한' in swap)
+                if lang=='en-US':assert not re.search('[가-힣]',swap)
                 assert broker.saves[-1]['memory_mb']==3072
                 cdp.js("var s=document.querySelector('.memory-select');s.value='8192';s.dispatchEvent(new Event('change'))")
                 cdp.until("!memoryBusy && document.querySelector('.memory-select').value==='3072'")
@@ -119,7 +125,7 @@ def main():
                     expected=('완료하지 못했습니다' if state=='failed' else '완료 여부를 확인할 수 없습니다') if lang.startswith('ko') else ('did not complete' if state=='failed' else 'completion is unknown')
                     cdp.until("!document.querySelector('.update-bot').disabled && $('updateStatus').textContent.includes("+json.dumps(expected)+")")
                     assert len(broker.starts)==before+1
-            print(json.dumps({'ok':True,'locales':['ko-KR','en-US'],'flows':['ram-stage-no-restart','ram-capacity-refusal','ram-preview','cancel','explicit-defaults','double-click','refresh-running','completion','failure','interrupted']}))
+            print(json.dumps({'ok':True,'locales':['ko-KR','en-US'],'flows':['shared-swap-status', 'ram-stage-no-restart','ram-capacity-refusal','ram-preview','cancel','explicit-defaults','double-click','refresh-running','completion','failure','interrupted']}))
         except Exception:
             if cdp:print(cdp.js('document.body.innerText'))
             raise

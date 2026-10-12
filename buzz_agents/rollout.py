@@ -83,9 +83,9 @@ class Rollout:
                         choice=memory_settings.load(d.root).get(key,{})
                         if choice and (choice['desired_mb'] != config['memory_mb'] or choice['committed_mb'] != config['memory_mb']):
                             item.update(state='waiting',error='memory_change_pending'); continue
-                        if choice and not memory_settings.limits_match(actual,config['memory_mb']):
+                        if choice and not memory_settings.compatible_limits(actual,config['memory_mb']):
                             item.update(state='waiting',error='deployment_memory_limit_mismatch'); continue
-                        if actual and actual.get('Image')==settings['image_id'] and item['state']!='applying':
+                        if actual and actual.get('Image')==settings['image_id'] and memory_settings.limits_match(actual,config['memory_mb']) and item['state']!='applying':
                             item.update(state='current'); item.pop('error',None); continue
                         if item['state']=='applying':
                             item.update(state='interrupted',error='release_update_interrupted'); continue

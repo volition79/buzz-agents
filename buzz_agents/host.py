@@ -11,7 +11,8 @@ import time
 from .common import ToolError
 from .config import HEX, normalize
 from .diagnostics import validation_error
-from . import memory_settings
+from . import memory_settings, swap_manager
+from .swap_pool import LABEL as SWAP_LABEL, POLICY as SWAP_POLICY
 from .policy import atomic_json, read_json
 
 SETTINGS = Path("/opt/buzz-agents/host/settings.json")
@@ -92,7 +93,7 @@ def private_directory(path, uid=0):
 
 def labels(config):
     return {"io.buzz-agents.managed": MANAGED, "io.buzz-agents.pubkey": config["pubkey"],
-            "io.buzz-agents.fingerprint": config["fingerprint"]}
+            "io.buzz-agents.fingerprint": config["fingerprint"], SWAP_LABEL: SWAP_POLICY}
 
 
 def container_name(pubkey):
@@ -141,7 +142,7 @@ def service(config, settings):
         "cap_drop": ["ALL"], "cap_add": ["SETUID", "SETGID", "KILL", "CHOWN", "DAC_OVERRIDE"],
         "security_opt": ["no-new-privileges:true"], "stop_grace_period": "75s",
         "cpus": config["cpus"], "mem_limit": f"{config['memory_mb']}m",
-        "memswap_limit": f"{config['memory_mb']}m", "pids_limit": process_limit(config),
+        "memswap_limit": f"{config['memory_mb']*4}m", "pids_limit": process_limit(config),
         "tmpfs": ["/tmp:size=128m,mode=1777,nosuid,nodev"],
         "environment": {"PYTHONPATH": "/app", "PYTHONDONTWRITEBYTECODE": "1"},
         "volumes": [bind(folder / "config", "/native-config", True),
@@ -153,13 +154,21 @@ def service(config, settings):
     }
 
 
-def compose_document(registry, settings, previous=None):
+def compose_document(registry, settings, previous=None, updating_pubkey=None):
     services = {}
     for config in registry.values():
         name = service_name(config['pubkey'])
         old = (previous or {}).get('services', {}).get(name, {})
         image = config.get('runtime_image', old.get('image', settings['image']))
         services[name] = service(config, {**settings, 'image': image})
+        if config['pubkey'] != updating_pubkey:
+            # Other bots retain the predecessor policy until their own update.
+            services[name]['memswap_limit'] = old.get('memswap_limit', f"{config['memory_mb']}m")
+            old_policy = (old.get('labels') or {}).get(SWAP_LABEL)
+            if old_policy:
+                services[name]['labels'][SWAP_LABEL] = old_policy
+            else:
+                services[name]['labels'].pop(SWAP_LABEL, None)
     return {'name': 'buzz-agents-v2', 'services': services}
 
 
@@ -257,7 +266,7 @@ class Deployer:
                     raise ToolError("stop_native_bot_before_image_upgrade")
                 if not process_limit_matches(actual, config):
                     raise ToolError("stop_native_bot_before_resource_upgrade")
-                if memory_settings.load(self.root).get(pubkey) and not memory_settings.limits_match(actual, config['memory_mb']):
+                if memory_settings.load(self.root).get(pubkey) and not memory_settings.compatible_limits(actual, config['memory_mb']):
                     raise ToolError('deployment_memory_limit_mismatch')
                 if pubkey in registry and registry[pubkey]["fingerprint"] == config["fingerprint"]:
                     return {"ok": True, "agent_id": name, "action": "already_deployed"}
@@ -287,7 +296,12 @@ class Deployer:
         previous = read_json(self.root / 'compose.yaml', {})
         registry[pubkey] = {**public_record(config), 'runtime_image': self.settings['image']}
         atomic_json(self.root / "registry.json", registry)
-        manifest = compose_document(registry, self.settings, previous)
+        try:
+            swap_manager.request_capacity(self.root)
+        except (OSError, ToolError):
+            # Pool preparation failure cannot kill an otherwise healthy bot.
+            print('Swap pool preparation pending; check setup page', file=sys.stderr)
+        manifest = compose_document(registry, self.settings, previous, updating_pubkey=pubkey)
         atomic_json(self.root / "compose.yaml", manifest)
         self.run(["docker", "compose", "-p", "buzz-agents-v2", "-f", str(self.root / "compose.yaml"),
                   "up", *( ["-d"] if start else ["--no-start"] ), "--no-deps", "--force-recreate", service_name(pubkey)], timeout=180)
@@ -299,9 +313,8 @@ class Deployer:
             raise ToolError('deployment_image_mismatch')
         if not process_limit_matches(actual, config):
             raise ToolError("deployment_resource_limit_mismatch")
-        if memory_settings.load(self.root).get(pubkey):
-            if not memory_settings.limits_match(actual, config['memory_mb']):
-                raise ToolError('deployment_memory_limit_mismatch')
+        if not memory_settings.limits_match(actual, config['memory_mb']):
+            raise ToolError('deployment_memory_limit_mismatch')
         return {"ok": True, "agent_id": name, "action": "deployed",
                 "note": "Deployment is not proof of subscription authentication or model health."}
 

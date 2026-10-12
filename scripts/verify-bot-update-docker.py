@@ -56,7 +56,7 @@ def main():
                 current=inspect_container(container_name(pubkey))
                 assert current['Image']==image_id and current['State']['Running']
                 assert current['HostConfig']['Memory']==768*1024**2
-                assert current['HostConfig']['MemorySwap']==768*1024**2
+                assert current['HostConfig']['MemorySwap']==768*4*1024**2
                 assert not u.preview(pubkey)['memory']['pending']
                 after=read_json(root/'bots'/pubkey/'config/config.json')
                 for field in ('pubkey','owner','provider','workspace','name','command'):assert after[field]==before[field]
