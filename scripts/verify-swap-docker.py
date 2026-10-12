@@ -69,7 +69,7 @@ def main():
         current=json.loads(run(['docker','inspect',helper_id]))[0]
         assert current['HostConfig']['Privileged'] is False
         assert current['HostConfig']['NetworkMode']=='none'
-        assert current['HostConfig']['CapAdd']==['SYS_ADMIN']
+        assert [c.removeprefix('CAP_') for c in current['HostConfig']['CapAdd']]==['SYS_ADMIN'],current['HostConfig']['CapAdd']
         assert len(current['Mounts'])==1
         # Repeated controller reconciliation does not replace or grow the pool.
         run(['docker','exec',broker_id,'python','-c',code])
@@ -82,7 +82,7 @@ def main():
         wait_state('ready')
         assert path.stat().st_ino==inode
         with path.open('rb') as f:assert f.read(4096)==header
-        assert str(path) in Path('/proc/swaps').read_text()
+        assert str(path) in run(['docker','exec',helper_id,'cat','/proc/swaps'])
         print(json.dumps({'ok':True,'activation':True,'idempotent':True,'reactivation':True,
                           'boot_order_verified':False}))
     finally:
@@ -95,10 +95,14 @@ def main():
                 assert (candidate.get('Config',{}).get('Labels') or {}).get('io.buzz-agents.swap-helper')=='1'
                 assert len(candidate.get('Mounts',[]))==1 and candidate['Mounts'][0]['Source']==str(ROOT)
                 helper_id=candidate['Id']
-        if helper_id:run(['docker','rm','-f',helper_id])
+        if helper_id:run(['docker','stop','--time','45',helper_id])
+        # /proc/swaps path rendering differs across mount namespaces. Always
+        # address our own fixture inode via its host path, before unmounting it.
         for path in ROOT.glob('chunk-*'):
-            if str(path) in Path('/proc/swaps').read_text():
-                run(['swapoff','--',str(path)])
+            result=subprocess.run(['swapoff','--',str(path)],capture_output=True,text=True)
+            if result.returncode and 'Invalid argument' not in result.stderr:
+                raise RuntimeError('Fixture swap cleanup failed: '+result.stderr.strip())
+        if helper_id:run(['docker','rm','-f',helper_id])
         shutil.rmtree(ROOT)
 
 

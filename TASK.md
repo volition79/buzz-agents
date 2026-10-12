@@ -453,3 +453,5 @@ Only swap_pool, regression tests, ko/en manual and rationale/task notes changed
 in this follow-up; same approved scope and platform targets.
 
 Release CI follow-up: provider history refreshed from verified public manifests (22 releases,10 unique binaries). CI331 tests exposed a /proc exists/read race in test_process descendant-exit assertions. Read directly and accept FileNotFoundError as the already-defined reaped-success condition; retained zombie check, deadline and surviving-process failure. Product process code unchanged.
+
+Real release Docker gate reached activated ready swap. Fixture cap assertion updated to accept Docker CAP_ prefix while requiring exactly SYS_ADMIN. Fixture host cleanup no longer relies on namespace-specific /proc pathname; swapoff its own files before removing helper mount. Kernel gate rerun remains required. No product privileges changed.
