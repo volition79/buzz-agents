@@ -14,13 +14,18 @@ f=importlib.util.module_from_spec(spec);spec.loader.exec_module(f)
 
 class Broker(f.FixtureBroker):
     def __init__(self):
-        super().__init__();self.configured=True;self.update={};self.starts=[];self.retries=0
-        self.bots=[{'name':'Claude VPS','pubkey':'b'*64,'provider':'claude','status':'stopped','container_running':True}]
+        super().__init__();self.configured=True;self.update={};self.starts=[];self.retries=0;self.memory={'desired_mb':1536,'applied_mb':1536,'configured_mb':1536,'pending':False};self.saves=[]
+        self.bots=[{'name':'Claude VPS','pubkey':'b'*64,'provider':'claude','status':'stopped','container_running':True,'memory':self.memory}]
     def __call__(self,r):
         if r['op']=='release-status':return {'ok':True,'release_update':{'state':'attention','target':'a'*40,'bots':{'b'*64:{'name':'Claude VPS','state':'waiting','error':'update_requires_interruption_confirmation'}}}}
         if r['op']=='release-retry':
             self.retries+=1;return {'ok':True}
-        if r['op']=='bot-update-preview':return {'ok':True,'name':'Claude VPS','pubkey':'b'*64,'revision':'a'*64,'policy':{'turn_limit':20,'daily_limit':100,'max_turn_seconds':600,'window_seconds':3600}}
+        if r['op']=='bot-update-preview':return {'ok':True,'name':'Claude VPS','pubkey':'b'*64,'revision':'a'*64,'memory':self.memory,'policy':{'turn_limit':20,'daily_limit':100,'max_turn_seconds':600,'window_seconds':3600}}
+        if r['op']=='bot-memory':
+            self.saves.append(r)
+            if r['memory_mb']>4096:return {'ok':False,'error':'aggregate_memory_budget_exceeded'}
+            self.memory.update(desired_mb=r['memory_mb'],pending=r['memory_mb']!=self.memory['applied_mb'])
+            return {'ok':True,'memory':self.memory}
         if r['op']=='bot-update':
             self.starts.append(r);self.update={'id':r['request_id'],'pubkey':r['pubkey'],'state':'running'}
             return {'ok':True,'update':self.update}
@@ -47,6 +52,7 @@ def main():
             ua=cdp.js('navigator.userAgent')
             for lang,width in [('ko-KR',1440),('en-US',390)]:
                 broker.update={}
+                broker.memory.update(desired_mb=1536,applied_mb=1536,pending=False)
                 cdp.call('Network.setUserAgentOverride',{'userAgent':ua,'acceptLanguage':lang})
                 cdp.call('Emulation.setDeviceMetricsOverride',{'width':width,'height':1000,'deviceScaleFactor':1,'mobile':width<500})
                 cdp.js('window.__previousDocument=true')
@@ -77,9 +83,19 @@ def main():
                 cdp.until("!$('releaseRetry').disabled")
                 assert broker.retries==retry_before+1
                 before=len(broker.starts)
+                cdp.until("document.querySelector('.memory-select') !== null")
+                cdp.js("var s=document.querySelector('.memory-select');s.value='3072';s.dispatchEvent(new Event('change'))")
+                cdp.until("!memoryBusy && document.querySelector('.memory-status').textContent.includes("+json.dumps('Pending change' if lang=='en-US' else '변경 대기')+")")
+                assert len(broker.starts)==before and broker.memory['applied_mb']==1536
+                assert broker.saves[-1]['memory_mb']==3072
+                cdp.js("var s=document.querySelector('.memory-select');s.value='8192';s.dispatchEvent(new Event('change'))")
+                cdp.until("!memoryBusy && document.querySelector('.memory-select').value==='3072'")
+                assert broker.memory['desired_mb']==3072 and len(broker.starts)==before
+                if lang=='en-US':assert not re.search('[가-힣]',cdp.js("document.querySelector('.memory-control').textContent"))
                 cdp.js("document.querySelector('.update-bot').click()")
                 cdp.until("$('updateDialog').open")
                 assert cdp.js("$('updateDefaults').checked") is False
+                assert '1.5 GiB' in cdp.js("$('updateMemory').textContent") and '3 GiB' in cdp.js("$('updateMemory').textContent")
                 if lang=='en-US':assert not re.search('[가-힣]',cdp.js("$('updateDialog').textContent"))
                 cdp.shot(output/(lang+'.png'))
                 cdp.js("$('cancelUpdate').click()")
@@ -90,8 +106,9 @@ def main():
                 cdp.until("!$('updateDialog').open && !updateBusy")
                 assert len(broker.starts)==before+1 and broker.starts[-1]['use_defaults'] is True
                 assert cdp.js("document.querySelector('.update-bot').disabled")
+                cdp.js('window.__previousDocument=true')
                 cdp.call('Page.navigate',{'url':app.url})
-                cdp.until("typeof refresh === 'function' && document.querySelector('.update-bot') && !$('updateStatus').hidden && document.querySelector('.update-bot').disabled")
+                cdp.until("!window.__previousDocument && typeof refresh === 'function' && document.querySelector('.update-bot') && !$('updateStatus').hidden && document.querySelector('.update-bot').disabled")
                 assert len(broker.starts)==before+1, 'page refresh must not retry a mutation'
                 broker.update['state']='succeeded';cdp.js('refresh()')
                 cdp.until("!document.querySelector('.update-bot').disabled")
@@ -102,7 +119,10 @@ def main():
                     expected=('완료하지 못했습니다' if state=='failed' else '완료 여부를 확인할 수 없습니다') if lang.startswith('ko') else ('did not complete' if state=='failed' else 'completion is unknown')
                     cdp.until("!document.querySelector('.update-bot').disabled && $('updateStatus').textContent.includes("+json.dumps(expected)+")")
                     assert len(broker.starts)==before+1
-            print(json.dumps({'ok':True,'locales':['ko-KR','en-US'],'flows':['cancel','explicit-defaults','double-click','refresh-running','completion','failure','interrupted']}))
+            print(json.dumps({'ok':True,'locales':['ko-KR','en-US'],'flows':['ram-stage-no-restart','ram-capacity-refusal','ram-preview','cancel','explicit-defaults','double-click','refresh-running','completion','failure','interrupted']}))
+        except Exception:
+            if cdp:print(cdp.js('document.body.innerText'))
+            raise
         finally:
             if cdp:cdp.ws.close()
             chrome.terminate();chrome.wait(timeout=10);server.shutdown();server.server_close()

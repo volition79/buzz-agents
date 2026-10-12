@@ -170,6 +170,21 @@ class CoordinatorTests(unittest.TestCase):
         self.r.tick()
         self.assertEqual(self.r.status()['bots'][PUBKEY]['state'],'waiting')
         self.assertFalse(any('stop' in a for a in self.f.commands))
+    def test_staged_memory_and_mismatched_swap_never_marked_current_or_applied(self):
+        from buzz_agents import memory_settings
+        self.f.current['Image']=self.f.settings['image_id']
+        self.f.current['State']['Running']=False
+        self.f.current['HostConfig'].update(Memory=1536*1024**2,MemorySwap=1536*1024**2)
+        atomic_json(self.f.root/'bots'/PUBKEY/'state/runtime.json',{'status':'stopped'})
+        memory_settings.save(self.f.root,PUBKEY,3072,1536)
+        self.r.tick()
+        self.assertEqual(self.r.status()['bots'][PUBKEY]['error'],'memory_change_pending')
+        memory_settings.save(self.f.root,PUBKEY,1536,1536)
+        self.f.current['HostConfig']['MemorySwap']=3072*1024**2
+        self.r.tick()
+        self.assertEqual(self.r.status()['bots'][PUBKEY]['error'],'deployment_memory_limit_mismatch')
+        self.assertFalse(any('stop' in a or 'up' in a for a in self.f.commands))
+
     def test_matching_runtime_is_not_recreated(self):
         self.f.current['Image']=self.f.settings['image_id']
         self.r.tick();self.r.tick()

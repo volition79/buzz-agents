@@ -162,3 +162,24 @@ Pinned official Buzz source `326e2301cb4b1edcb8a72d01ac4b19a83545365f`:
 - `AgentRuntimeAvatarControl.tsx`: deployment bookkeeping affects available start controls.
 
 This explains the observed UI route; it does not identify the user's installed binary. Local tests cover both provider configurations, failures, concurrency, administrator authorization and real Korean/English browser controls. CI also exercises real Docker replacement for Claude and Codex with synthetic credentials and no paid inference. Live subscription login, actual replies and Windows-off work remain user acceptance checks.
+
+
+## 봇별 RAM 조정 / Per-bot RAM
+
+1. Docker Manager → **buzz-agents → 열기** → **봇 계정 로그인**에서 해당 봇의 **RAM 한도**를 선택하세요.
+2. 선택값은 저장만 됩니다. **현재 적용**은 실제 컨테이너의 한도이며, 다르면 **변경 대기**로 표시됩니다.
+3. 작업 완료와 결과 저장을 확인한 뒤, 해당 봇의 기존 **업데이트·다시 시작**을 누르세요. 확인창에서 현재값 → 변경값을 확인하고 적용합니다. 실행 중인 작업은 중단됩니다.
+4. 완료 후 **현재 적용**과 실제 답변을 확인하세요. 적용 실패 시 새 값으로 덮어쓰지 말고 같은 버튼으로 재시도하세요.
+
+봇·프로젝트 삭제나 재로그인은 필요하지 않습니다. 계정 파일·작업 파일·봇 신원·CPU·동시 실행 설정은 유지됩니다. 별도로 기본 실행 규칙 복원을 선택한 경우에만 기존 업데이트 기능대로 규칙도 변경됩니다. 이후 Windows에서 재배포해도 마지막으로 적용 승인한 RAM을 유지합니다. 아직 적용하지 않은 선택값은 Windows 재배포나 자동 업데이트로 적용하지 않습니다.
+
+RAM은 예약된 실사용량이 아니라 **봇별 최대 한도**입니다. 다른 봇의 현재/대기 한도와 서버 여유분을 포함해 용량을 검사하므로 너무 큰 값은 저장할 수 없습니다. 대기 중인 감소분은 실제 적용 전에는 여유 용량으로 계산하지 않습니다. 다른 봇의 RAM을 자동으로 줄이지 않습니다.
+
+1. Open **Docker Manager → buzz-agents → Open → Bot account sign-in** and select the bot's **RAM limit**.
+2. Selection only saves a preference. **Currently applied** shows the container limit; a different selection is a **Pending change**.
+3. Finish work and save results, then use the existing **Update / restart** button for that bot. Review the current → desired limit and confirm. Active work is interrupted.
+4. Check **Currently applied** and an actual reply afterward. If application fails, retry with the same button before changing the selection again.
+
+Do not delete or reinstall the bot/project. RAM changes preserve identity, account files, work files, CPU and concurrency. The separate existing restore-default-rules option still changes execution rules only when explicitly selected. Later Windows deployments retain the last approved RAM; pending selections are not applied by Windows deployment or automatic release updates.
+
+RAM is a per-bot maximum, not reserved actual usage. Capacity checks account for other bots' current/pending limits and server headroom. Pending decreases do not free capacity until applied. Other bots are never automatically downsized.

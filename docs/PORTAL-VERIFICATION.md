@@ -1,3 +1,13 @@
+# Per-bot RAM settings candidate — 2026-10-12
+
+Adds a Korean/English RAM selector to each bot on the setup page. Selection saves a pending value; existing **Update / restart** applies it after confirmation. Preserve identity, account/work files, CPU and concurrency. Windows deployments keep the last approved RAM. Automatic rollout does not apply pending RAM changes.
+
+Local verification:301 Python tests, Korean/English update and reauthentication browser flows, Astra read-only review. Release CI must additionally pass real Docker staging/application for both providers, exact Memory/MemorySwap readback, file preservation, bootstrap/upgrade and reauthentication tests before stable promotion. CI uses synthetic AI/auth fixtures, not live subscriptions. No user VPS mutation.
+
+For existing installations: finish/save work, Shutdown VPS bots, update **buzz-agents** in Docker Manager, then Open and select the bot's RAM limit. Apply with that bot's **Update / restart** and confirm the applied value. Do not delete projects or bots. [Full instructions](EXISTING-BOT-UPDATE.md).
+
+## Previous evidence
+
 # Safe AI reauthentication verified — 2026-10-11
 
 Release `portal-candidate-d530454dd7c9-47-1`, source `d530454dd7c9c9cc4a2104ea0f48389796daa962`, [CI38101464868](https://github.com/volition79/buzz-agents/actions/runs/38101464868).

@@ -9,7 +9,7 @@ from .common import ToolError
 from .host import Deployer, execute, container_name
 from .bot_update import ExistingBotUpdater
 from .policy import atomic_json, read_json
-from . import release_contract
+from . import release_contract, memory_settings
 
 class Rollout:
     def __init__(self, broker, contract=None, runner=execute):
@@ -80,6 +80,11 @@ class Rollout:
                     try:
                         config,actual,revision=updater.inspect(key)
                         item['name']=config['name']
+                        choice=memory_settings.load(d.root).get(key,{})
+                        if choice and (choice['desired_mb'] != config['memory_mb'] or choice['committed_mb'] != config['memory_mb']):
+                            item.update(state='waiting',error='memory_change_pending'); continue
+                        if choice and not memory_settings.limits_match(actual,config['memory_mb']):
+                            item.update(state='waiting',error='deployment_memory_limit_mismatch'); continue
                         if actual and actual.get('Image')==settings['image_id'] and item['state']!='applying':
                             item.update(state='current'); item.pop('error',None); continue
                         if item['state']=='applying':

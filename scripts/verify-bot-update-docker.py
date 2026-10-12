@@ -48,9 +48,16 @@ def main():
             settings={**settings,'image':image,'image_id':image_id}
             u=ExistingBotUpdater(Deployer(settings))
             for index,(pubkey,before) in enumerate(bots):
+                initial=inspect_container(container_name(pubkey))
+                u.save_memory(pubkey,u.preview(pubkey)['revision'],768)
+                staged=inspect_container(container_name(pubkey))
+                assert staged['Id']==initial['Id'] and staged['HostConfig']['Memory']==512*1024**2
                 u.apply(pubkey,u.preview(pubkey)['revision'],index==0)
                 current=inspect_container(container_name(pubkey))
                 assert current['Image']==image_id and current['State']['Running']
+                assert current['HostConfig']['Memory']==768*1024**2
+                assert current['HostConfig']['MemorySwap']==768*1024**2
+                assert not u.preview(pubkey)['memory']['pending']
                 after=read_json(root/'bots'/pubkey/'config/config.json')
                 for field in ('pubkey','owner','provider','workspace','name','command'):assert after[field]==before[field]
                 for field in ('BUZZ_PRIVATE_KEY','BUZZ_ACP_MODEL','BUZZ_ACP_SYSTEM_PROMPT'):assert after['env'][field]==before['env'][field]

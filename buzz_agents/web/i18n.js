@@ -2,6 +2,19 @@
 // Korean source copy is the message key. Add another catalog to support another locale.
 (() => {
   const catalogs = {en: {
+"다른 봇과 서버에 필요한 RAM을 제외하면 용량이 부족합니다. 더 작은 값을 선택하세요.": "There is not enough RAM after allowing for other bots and the server. Choose a smaller limit.",
+"선택 후 작업을 마치고 업데이트·다시 시작을 누르세요.": "After selecting, finish your work and use Update / restart.",
+"RAM 한도": "RAM limit",
+"현재 적용": "Currently applied",
+"확인 불가": "Unavailable",
+"변경 대기": "Pending change",
+"RAM 값이 올바르지 않습니다.": "Enter a valid RAM limit.",
+"이전 RAM 적용을 확인해야 합니다. 업데이트·다시 시작으로 재시도하세요.": "The previous RAM application needs verification. Retry using Update / restart.",
+"저장된 RAM 변경이 있습니다. 이 봇의 업데이트·다시 시작을 눌러 적용하세요.": "A RAM change is saved. Select Update / restart for this bot to apply it.",
+"실제 RAM 한도가 저장한 값과 다릅니다. 업데이트·다시 시작으로 재시도하세요.": "The actual RAM limit differs from the saved value. Retry using Update / restart.",
+"저장된 RAM 설정을 확인할 수 없습니다. 설정 파일을 임의로 수정하지 마세요.": "Saved RAM settings could not be verified. Do not manually edit the settings file.",
+"RAM 한도를 저장했습니다. 작업을 마친 뒤 업데이트·다시 시작을 누르면 적용됩니다.": "RAM limit saved. Finish your work, then select Update / restart to apply it.",
+
 "업데이트 적용 재시도는 실패한 적용을 다시 시도합니다. 중지된 봇은 업데이트될 수 있으며 실행 중인 봇은 사용자 확인을 기다립니다. 새 버전을 검색하는 버튼은 아닙니다.": "Retry update application retries failed application of the installed release. Stopped bots may be updated; running bots wait for your confirmation. It does not check for new releases.",
 "작업이 끝나면 Buzz에서 각 VPS 봇의 Shutdown을 누르고, 이 설정 화면에서 중지 상태를 확인한 뒤 다음 단계로 진행하세요. 봇은 삭제하지 마세요. Windows Buzz 창만 닫는 것은 VPS 봇 중지가 아닙니다.": "After work finishes, select Shutdown for each VPS bot in Buzz. Confirm that the bots are stopped on this setup page before continuing. Do not delete the bots. Closing Windows Buzz does not stop VPS bots.",
 "Shutdown도 진행 중인 작업을 중단할 수 있으므로 작업 완료와 결과 저장을 먼저 확인하세요.": "Shutdown can also interrupt active work, so confirm completion and saved results first.",

@@ -11,6 +11,7 @@ from .config import ENV_ALLOWED, HEX
 from .host import (Deployer, check_ownership, container_name, public_record,
                    private_directory, check_resources, host_capacity)
 from .policy import read_json
+from . import memory_settings
 
 
 def saved_config(root, pubkey):
@@ -80,6 +81,9 @@ class ExistingBotUpdater:
             'image_id': self.deployer.settings['image_id'],
             'container': actual.get('Id') if actual else None,
             'current_image': actual.get('Image') if actual else None,
+            'memory': memory_settings.load(self.root).get(pubkey, {}),
+            'actual_memory': (actual or {}).get('HostConfig', {}).get('Memory'),
+            'actual_swap': (actual or {}).get('HostConfig', {}).get('MemorySwap'),
         }, sort_keys=True).encode()).hexdigest()
         return config, actual, revision
 
@@ -87,8 +91,39 @@ class ExistingBotUpdater:
         config, actual, revision = self.inspect(pubkey)
         return {'ok': True, 'pubkey': pubkey, 'name': config['name'], 'revision': revision,
                 'provider': config['provider'], 'policy': config['policy'],
+                'memory': memory_settings.public(config, actual, memory_settings.load(self.root).get(pubkey, {})),
                 'target_image': self.deployer.settings['image'],
                 'image_update': not actual or actual.get('Image') != self.deployer.settings['image_id']}
+
+    def save_memory(self, pubkey, revision, memory_mb):
+        if not memory_settings.valid_mb(memory_mb):
+            raise ToolError('invalid_memory')
+        fd = os.open(self.root / 'deploy.lock', os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
+        try:
+            try:
+                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                raise ToolError('bot_update_busy') from None
+            from .reauth import require_unheld
+            require_unheld(self.root, pubkey)
+            config, actual, current = self.inspect(pubkey)
+            if current != revision:
+                raise ToolError('bot_update_preview_changed')
+            if not memory_settings.limits_match(actual, config['memory_mb']):
+                raise ToolError('memory_apply_recovery_required')
+            choice = memory_settings.load(self.root).get(pubkey, {})
+            committed = choice.get('committed_mb', config['memory_mb'])
+            if committed != config['memory_mb']:
+                raise ToolError('memory_apply_recovery_required')
+            # Reserve both the currently applied and staged limit until application.
+            candidate = {**config, 'memory_mb': max(memory_mb, committed, config['memory_mb'])}
+            check_resources(candidate, read_json(self.root / 'registry.json', {}),
+                            self.deployer.settings, host_capacity(self.deployer.run))
+            memory_settings.save(self.root, pubkey, memory_mb, committed)
+            return {'ok': True, 'memory': memory_settings.public(config, actual,
+                    {'desired_mb': memory_mb, 'committed_mb': committed})}
+        finally:
+            os.close(fd)
 
     def apply(self, pubkey, revision, use_defaults, preserve_lifecycle=False):
         if not isinstance(revision, str) or not HEX.fullmatch(revision) or type(use_defaults) is not bool:
@@ -123,9 +158,17 @@ class ExistingBotUpdater:
             image = json.loads(d.run(['docker', 'image', 'inspect', d.settings['image']]))[0]
             if image['Id'] != d.settings['image_id']:
                 raise ToolError('image_changed_revalidate_before_deploy')
-            config = d.normalizer(request_from_saved(old, d.settings, use_defaults))
+            choice = memory_settings.load(self.root).get(pubkey, {})
+            target_memory = choice.get('desired_mb', old['memory_mb'])
+            if preserve_lifecycle and target_memory != old['memory_mb']:
+                raise ToolError('memory_change_pending')
+            request = request_from_saved(old, d.settings, use_defaults)
+            request['provider_config']['memory_mb'] = target_memory
+            config = d.normalizer(request)
+            if config['memory_mb'] != target_memory:
+                raise ToolError('bot_update_identity_or_settings_changed')
             # Updating must never switch identities, auth homes, files or models.
-            for key in ('pubkey', 'owner', 'provider', 'command', 'workspace', 'memory_mb', 'cpus', 'name'):
+            for key in ('pubkey', 'owner', 'provider', 'command', 'workspace', 'cpus', 'name'):
                 if config.get(key) != old[key]:
                     raise ToolError('bot_update_identity_or_settings_changed')
             changed = {'BUZZ_ACP_MAX_TURN_DURATION'} if use_defaults else set()
@@ -161,7 +204,8 @@ class ExistingBotUpdater:
                     raise ToolError('bot_update_container_changed')
             return d._deploy_locked(config, runtime_state=saved_state if preserve_lifecycle else None,
                                     start=was_running if preserve_lifecycle else True,
-                                    expected_container_id=actual['Id'] if actual else None)
+                                    expected_container_id=actual['Id'] if actual else None,
+                                    commit_memory=bool(choice) and not preserve_lifecycle)
         finally:
             for auth_fd in auth_locks:
                 os.close(auth_fd)

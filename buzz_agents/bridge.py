@@ -10,6 +10,7 @@ from .common import ToolError
 from .host import load_settings, inspect_container, check_ownership, container_name, main as deploy
 from .policy import read_json
 from .runtime_health import public_resources
+from . import memory_settings
 from .diagnostics import DIAGNOSTIC_CODES, REASON_CODES
 
 
@@ -30,6 +31,7 @@ def bot_records(settings):
     root = Path(settings["state_dir"])
     registry = read_json(root / "registry.json", {})
     records = []
+    choices = memory_settings.load(root)
     for pubkey, item in sorted(registry.items()):
         if not re.fullmatch(r"[0-9a-f]{64}", pubkey):
             raise ToolError("invalid_registry")
@@ -39,6 +41,7 @@ def bot_records(settings):
             check_ownership(actual, item)
         records.append({"pubkey": pubkey, "name": item["name"], "provider": item["provider"],
                         "status": state.get("status", "unknown"),
+                        "memory": memory_settings.public(item, actual, choices.get(pubkey, {})),
                         "diagnostic": state.get("diagnostic") if isinstance(state.get("diagnostic"), str) and state["diagnostic"] in DIAGNOSTIC_CODES else "",
                         "reason": state.get("reason") if isinstance(state.get("reason"), str) and state["reason"] in REASON_CODES else "",
                         "resources": public_resources(state.get("resources")),

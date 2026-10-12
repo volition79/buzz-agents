@@ -44,7 +44,7 @@ class RuntimeHealthTests(unittest.TestCase):
         from buzz_agents.bridge import bot_records
         with tempfile.TemporaryDirectory() as d:
             p=Path(d);key='b'*64;state=p/'bots'/key/'state';state.mkdir(parents=True)
-            (p/'registry.json').write_text(json.dumps({key:{'name':'Codex','provider':'codex'}}))
+            (p/'registry.json').write_text(json.dumps({key:{'name':'Codex','provider':'codex','memory_mb':1536}}))
             (state/'runtime.json').write_text(json.dumps({'status':'running','reason':'secret token','diagnostic':'runtime_process_limit','resources':{'pids_current':251,'secret':'token'}}))
             with patch('buzz_agents.bridge.inspect_container',return_value=None):
                 record=bot_records({'state_dir':d})[0]

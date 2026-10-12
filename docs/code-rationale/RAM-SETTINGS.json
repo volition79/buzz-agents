@@ -1,0 +1,192 @@
+{
+  "id": "RAM-SETTINGS",
+  "reason": "OOM recovery needs a simple admin RAM selection, staged separately and applied through existing explicit update/restart without changing bot identity or credentials.",
+  "invariants": [
+    "Selection never changes a running container",
+    "Windows deploy uses committed RAM; rollout never applies pending selection",
+    "Preserve CPU, concurrency, credentials and workspace; verify Memory and MemorySwap",
+    "Fail closed on stale revision, capacity, ownership or incomplete prior apply"
+  ],
+  "evidence_level": "documented",
+  "evidence": [
+    "docs/EXISTING-BOT-UPDATE.md",
+    "tests/test_memory_settings.py",
+    "scripts/verify-bot-update-browser.py"
+  ],
+  "status": "active",
+  "importance_score": 800,
+  "importance_reason": "Privileged resource change must preserve runtime state and consent.",
+  "anchors": [
+    {
+      "path": "buzz_agents/memory_settings.py",
+      "function": "save",
+      "role": "store",
+      "start_line": 34,
+      "end_line": 39,
+      "code": "def save(root, pubkey, desired, committed):\n    if not isinstance(pubkey, str) or not HEX.fullmatch(pubkey) or not valid_mb(desired) or not valid_mb(committed):\n        raise ToolError('invalid_memory')\n    data = load(root)\n    data[pubkey] = {'desired_mb': desired, 'committed_mb': committed}\n    atomic_json(Path(root) / 'memory-settings.json', data)\n",
+      "code_sha256": "21a4a672243ef2412d61dc0ef80d919c7b3bfbaf89f690702c19d4132bfada49",
+      "file_sha256": "61226a95ba18b8a0b1da1a025b09ecce87d092b1f102c526f5efcfcf2bec5461"
+    },
+    {
+      "path": "buzz_agents/host.py",
+      "function": "Deployer.deploy",
+      "role": "consumer",
+      "start_line": 196,
+      "end_line": 212,
+      "code": "    def deploy(self, request):\n        image = json.loads(self.run([\"docker\", \"image\", \"inspect\", self.settings[\"image\"]]))[0]\n        if image[\"Id\"] != self.settings[\"image_id\"]:\n            raise ToolError(\"image_changed_revalidate_before_deploy\")\n        config = self.normalizer(request)\n        if not HEX.fullmatch(config.get(\"pubkey\", \"\")):\n            raise ToolError(\"invalid_normalized_identity\")\n        private_directory(self.root)\n        lock = os.open(self.root / \"deploy.lock\", os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)\n        try:\n            fcntl.flock(lock, fcntl.LOCK_EX)\n            choice = memory_settings.load(self.root).get(config['pubkey'], {})\n            if choice:\n                config = memory_settings.with_memory(config, choice['committed_mb'])\n            return self._deploy_locked(config)\n        finally:\n            os.close(lock)\n",
+      "code_sha256": "079e4f7eb28e22f3a6dfe18741995be5e2db061ddd71ecbac08aa00493e751e5",
+      "file_sha256": "570a8d39d1e3e054bbc86db4d516d13feacde49fcc008f25243f116a141ce51a"
+    },
+    {
+      "path": "buzz_agents/bot_update.py",
+      "function": "ExistingBotUpdater.save_memory",
+      "role": "producer",
+      "start_line": 98,
+      "end_line": 126,
+      "code": "    def save_memory(self, pubkey, revision, memory_mb):\n        if not memory_settings.valid_mb(memory_mb):\n            raise ToolError('invalid_memory')\n        fd = os.open(self.root / 'deploy.lock', os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)\n        try:\n            try:\n                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)\n            except BlockingIOError:\n                raise ToolError('bot_update_busy') from None\n            from .reauth import require_unheld\n            require_unheld(self.root, pubkey)\n            config, actual, current = self.inspect(pubkey)\n            if current != revision:\n                raise ToolError('bot_update_preview_changed')\n            if not memory_settings.limits_match(actual, config['memory_mb']):\n                raise ToolError('memory_apply_recovery_required')\n            choice = memory_settings.load(self.root).get(pubkey, {})\n            committed = choice.get('committed_mb', config['memory_mb'])\n            if committed != config['memory_mb']:\n                raise ToolError('memory_apply_recovery_required')\n            # Reserve both the currently applied and staged limit until application.\n            candidate = {**config, 'memory_mb': max(memory_mb, committed, config['memory_mb'])}\n            check_resources(candidate, read_json(self.root / 'registry.json', {}),\n                            self.deployer.settings, host_capacity(self.deployer.run))\n            memory_settings.save(self.root, pubkey, memory_mb, committed)\n            return {'ok': True, 'memory': memory_settings.public(config, actual,\n                    {'desired_mb': memory_mb, 'committed_mb': committed})}\n        finally:\n            os.close(fd)\n",
+      "code_sha256": "fe7901425c35d5906be57e424a82c75d5784de7440d7f4debebf463670841b59",
+      "file_sha256": "705ef8bff6612a96e7a66a4e51a4de6bb94d2b0534105ab8a23912b0442e890a"
+    },
+    {
+      "path": "buzz_agents/bot_update.py",
+      "function": "ExistingBotUpdater.apply",
+      "role": "helper",
+      "start_line": 128,
+      "end_line": 212,
+      "code": "    def apply(self, pubkey, revision, use_defaults, preserve_lifecycle=False):\n        if not isinstance(revision, str) or not HEX.fullmatch(revision) or type(use_defaults) is not bool:\n            raise ToolError('invalid_bot_update_request')\n        private_directory(self.root)\n        fd = os.open(self.root / 'deploy.lock', os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)\n        try:\n            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)\n        except BlockingIOError:\n            os.close(fd)\n            raise ToolError('bot_update_busy') from None\n        auth_locks = []\n        try:\n            from .reauth import require_unheld\n            require_unheld(self.root, pubkey)\n            old, actual, current = self.inspect(pubkey)\n            saved_state = read_json(self.root / \"bots\" / pubkey / \"state\" / \"runtime.json\", {})\n            was_running = bool(actual and actual.get(\"State\", {}).get(\"Running\"))\n            if preserve_lifecycle and (not actual or was_running or saved_state.get(\"status\") not in (\"stopped\", \"held\", \"needs_login\")):\n                raise ToolError(\"update_requires_interruption_confirmation\")\n            if current != revision:\n                raise ToolError('bot_update_preview_changed')\n            for name in ('portal-auth.lock', 'auth.lock'):\n                auth_fd = os.open(self.root / 'bots' / pubkey / 'state' / name,\n                                  os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)\n                auth_locks.append(auth_fd)\n                try:\n                    fcntl.flock(auth_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)\n                except BlockingIOError:\n                    raise ToolError('authentication_already_in_progress') from None\n            d = self.deployer\n            image = json.loads(d.run(['docker', 'image', 'inspect', d.settings['image']]))[0]\n            if image['Id'] != d.settings['image_id']:\n                raise ToolError('image_changed_revalidate_before_deploy')\n            choice = memory_settings.load(self.root).get(pubkey, {})\n            target_memory = choice.get('desired_mb', old['memory_mb'])\n            if preserve_lifecycle and target_memory != old['memory_mb']:\n                raise ToolError('memory_change_pending')\n            request = request_from_saved(old, d.settings, use_defaults)\n            request['provider_config']['memory_mb'] = target_memory\n            config = d.normalizer(request)\n            if config['memory_mb'] != target_memory:\n                raise ToolError('bot_update_identity_or_settings_changed')\n            # Updating must never switch identities, auth homes, files or models.\n            for key in ('pubkey', 'owner', 'provider', 'command', 'workspace', 'cpus', 'name'):\n                if config.get(key) != old[key]:\n                    raise ToolError('bot_update_identity_or_settings_changed')\n            changed = {'BUZZ_ACP_MAX_TURN_DURATION'} if use_defaults else set()\n            if {k: v for k, v in config['env'].items() if k not in changed} != {k: v for k, v in old['env'].items() if k not in changed}:\n                raise ToolError('bot_update_identity_or_settings_changed')\n            expected_policy = {**old['policy']}\n            if use_defaults:\n                expected_policy.update(turn_limit=0, daily_limit=0, max_turn_seconds=7200)\n            if config['policy'] != expected_policy or config.get('startup_env'):\n                raise ToolError('bot_update_identity_or_settings_changed')\n            registry = read_json(self.root / 'registry.json', {})\n            check_resources(config, registry, d.settings, host_capacity(d.run))\n            # Also fence a login left running across a broker restart. Do not\n            # guess whether its PID belongs to this host or the container.\n            if (self.root / 'bots' / pubkey / 'state' / 'portal-auth.json').exists():\n                raise ToolError('authentication_already_in_progress')\n            # The operator explicitly consented to interrupt this one bot. The\n            # device deploy-only API still requires a prior native stop.\n            if actual:\n                before = d.inspect(container_name(pubkey))\n                if not before or before.get('Id') != actual.get('Id'):\n                    raise ToolError('bot_update_container_changed')\n                if preserve_lifecycle and before.get('State', {}).get('Running'):\n                    raise ToolError('update_requires_interruption_confirmation')\n                d.run(['docker', 'stop', '--time', '70', actual['Id']], timeout=80)\n                stopped = d.inspect(container_name(pubkey))\n                if stopped:\n                    check_ownership(stopped, config)\n                    if (stopped.get('Id') != actual.get('Id') or stopped.get('State', {}).get('Running')\n                            or stopped.get('State', {}).get('Restarting') or stopped.get('State', {}).get('Pid', 0) != 0):\n                        raise ToolError('bot_update_stop_unconfirmed')\n                else:\n                    raise ToolError('bot_update_container_changed')\n            return d._deploy_locked(config, runtime_state=saved_state if preserve_lifecycle else None,\n                                    start=was_running if preserve_lifecycle else True,\n                                    expected_container_id=actual['Id'] if actual else None,\n                                    commit_memory=bool(choice) and not preserve_lifecycle)\n        finally:\n            for auth_fd in auth_locks:\n                os.close(auth_fd)\n            os.close(fd)\n",
+      "code_sha256": "49ce6bcdcc2014151c4a06c918bc056ea2559f64395275e949b9692f5c6e85bf",
+      "file_sha256": "705ef8bff6612a96e7a66a4e51a4de6bb94d2b0534105ab8a23912b0442e890a"
+    },
+    {
+      "path": "tests/test_memory_settings.py",
+      "function": "MemoryTests.test_apply_preserves_fields_and_windows_keeps_committed_not_pending",
+      "role": "assertion",
+      "start_line": 45,
+      "end_line": 56,
+      "code": "    def test_apply_preserves_fields_and_windows_keeps_committed_not_pending(self):\n        self.choose(3072);self.apply()\n        after=read_json(self.root/'bots'/PUBKEY/'config/config.json')\n        self.assertEqual(after,memory_settings.with_memory(self.old,3072))\n        self.assertEqual(self.current['HostConfig']['MemorySwap'],3072*1024**2)\n        self.choose(4096)\n        # Old desktop value must not revert 3072 or consume the unapproved 4096.\n        self.current['State']['Running']=False\n        self.d.deploy({'agent':agent(),'provider_config':self.old['policy']})\n        self.assertEqual(memory_settings.actual_mb(self.current),3072)\n        self.assertEqual(self.u.preview(PUBKEY)['memory']['desired_mb'],4096)\n        for p in self.kept:self.assertEqual(p.read_text(),'private-sentinel')\n",
+      "code_sha256": "e19aa3d7d2815e45491ae2c8e55a850f78568ef42c0df575269af048622c337d",
+      "file_sha256": "4fea7705d40556ca1ec6354eedc3434e45b8253736150d9decdb527b33c660b9"
+    }
+  ],
+  "related_decision_ids": [
+    "EXISTING-BOT-UPDATE",
+    "AI-REAUTHENTICATION",
+    "UNIFIED-UPDATE"
+  ],
+  "decision_context": {
+    "schema": "sonol.code-rationale-context.v1",
+    "authoring_environment": {
+      "os": "Linux",
+      "provider": "Codex",
+      "execution_environment": "local repository"
+    },
+    "targets": [
+      {
+        "os": "Linux",
+        "provider": "Codex and Claude",
+        "execution_environment": "Docker VPS",
+        "applicability": "affected",
+        "reason": "Resource selection, persistent intent, update/restart and Docker readback"
+      },
+      {
+        "os": "Windows/Android",
+        "provider": "Buzz",
+        "execution_environment": "desktop/mobile client",
+        "applicability": "unaffected",
+        "reason": "No client changes; existing deployment API retains committed admin memory"
+      }
+    ],
+    "conditions": [
+      {
+        "condition": "Existing bots without sidecar and staged or failed RAM updates",
+        "relevance": "applies",
+        "reason": "Legacy configuration retained until admin explicitly selects RAM; failed application remains retryable"
+      },
+      {
+        "condition": "Administrator portal versus device deployment token",
+        "relevance": "applies",
+        "reason": "Only administrator same-origin session may save RAM; device redeploy cannot override committed RAM"
+      }
+    ],
+    "boundaries": [
+      {
+        "path": "buzz_agents/memory_settings.py",
+        "logical_owner": "save",
+        "role": "store",
+        "review": "Reviewed staged versus committed RAM, locking, identity preservation and exact Docker readback."
+      },
+      {
+        "path": "buzz_agents/host.py",
+        "logical_owner": "Deployer.deploy",
+        "role": "consumer",
+        "review": "Reviewed staged versus committed RAM, locking, identity preservation and exact Docker readback."
+      },
+      {
+        "path": "buzz_agents/bot_update.py",
+        "logical_owner": "ExistingBotUpdater.save_memory",
+        "role": "producer",
+        "review": "Reviewed staged versus committed RAM, locking, identity preservation and exact Docker readback."
+      },
+      {
+        "path": "buzz_agents/bot_update.py",
+        "logical_owner": "ExistingBotUpdater.apply",
+        "role": "helper",
+        "review": "Reviewed staged versus committed RAM, locking, identity preservation and exact Docker readback."
+      },
+      {
+        "path": "tests/test_memory_settings.py",
+        "logical_owner": "MemoryTests.test_apply_preserves_fields_and_windows_keeps_committed_not_pending",
+        "role": "assertion",
+        "review": "Reviewed staged versus committed RAM, locking, identity preservation and exact Docker readback."
+      }
+    ],
+    "verification": [
+      {
+        "assertion_id": "staged-apply-preservation",
+        "test_reference": "tests/test_memory_settings.py",
+        "environment": {
+          "os": "Linux",
+          "provider": "Codex and Claude",
+          "execution_environment": "Docker VPS"
+        },
+        "status": "passed",
+        "evidence_kind": "fixture",
+        "evidence": [
+          "tests/test_memory_settings.py"
+        ]
+      },
+      {
+        "assertion_id": "ko-en-portal",
+        "test_reference": "scripts/verify-bot-update-browser.py",
+        "environment": {
+          "os": "Linux",
+          "provider": "Codex and Claude",
+          "execution_environment": "Docker VPS"
+        },
+        "status": "passed",
+        "evidence_kind": "fixture",
+        "evidence": [
+          "scripts/verify-bot-update-browser.py"
+        ]
+      },
+      {
+        "assertion_id": "real-docker-limits",
+        "test_reference": "scripts/verify-bot-update-docker.py",
+        "environment": {
+          "os": "Linux",
+          "provider": "Codex and Claude",
+          "execution_environment": "Docker VPS"
+        },
+        "status": "not_run",
+        "evidence_kind": "native_execution",
+        "evidence": []
+      }
+    ]
+  },
+  "schema": "sonol.code-rationale.v1",
+  "source": {
+    "commit": "2a8dd0c7feb98c4f25a730e87ee14c604aad2d1b",
+    "dirty": true
+  },
+  "assessment_status": "assessed"
+}

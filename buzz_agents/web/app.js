@@ -11,6 +11,13 @@ function queuedRequest(fn) {
   const result=requestQueue.then(fn);requestQueue=result.catch(()=>{});return result;
 }
 const errors = {
+  invalid_memory: t('RAM 값이 올바르지 않습니다.'),
+  aggregate_memory_budget_exceeded: t('다른 봇과 서버에 필요한 RAM을 제외하면 용량이 부족합니다. 더 작은 값을 선택하세요.'),
+  memory_apply_recovery_required: t('이전 RAM 적용을 확인해야 합니다. 업데이트·다시 시작으로 재시도하세요.'),
+  memory_change_pending: t('저장된 RAM 변경이 있습니다. 이 봇의 업데이트·다시 시작을 눌러 적용하세요.'),
+  deployment_memory_limit_mismatch: t('실제 RAM 한도가 저장한 값과 다릅니다. 업데이트·다시 시작으로 재시도하세요.'),
+  unsafe_memory_settings: t('저장된 RAM 설정을 확인할 수 없습니다. 설정 파일을 임의로 수정하지 마세요.'),
+  invalid_memory_settings: t('저장된 RAM 설정을 확인할 수 없습니다. 설정 파일을 임의로 수정하지 마세요.'),
   bot_update_busy: t('다른 업데이트나 배포가 진행 중입니다. 완료 후 다시 시도하세요.'),
   bot_update_preview_changed: t('봇 설정이 변경되었습니다. 업데이트 창을 닫고 다시 열어 확인하세요.'),
   bot_reauthentication_pending: t('이 봇은 재로그인을 기다리고 있습니다. 재로그인 버튼으로 다시 시도하세요.'),
@@ -161,6 +168,7 @@ function releaseMessage(code){
   const copy={
     update_requires_interruption_confirmation:'현재 실행기는 작업을 잃지 않는 자동 교체를 지원하지 않습니다. 작업을 마친 뒤 이 봇의 업데이트·다시 시작을 눌러 적용하세요.',
     release_management_mismatch:'관리 서비스의 버전이 서로 다릅니다. Docker Manager에서 buzz-agents를 다시 업데이트하세요. 기존 봇은 유지됩니다.',
+    memory_change_pending:'저장된 RAM 변경이 있습니다. 이 봇의 업데이트·다시 시작을 눌러 적용하세요.',
     authentication_already_in_progress:'인증이 진행 중이거나 이전 인증 기록이 남았습니다. 인증을 마치거나 이 봇의 재로그인으로 복구하세요.',
     bot_reauthentication_pending:'이 봇의 재로그인을 완료한 뒤 업데이트할 수 있습니다.',
     release_update_interrupted:'업데이트 도중 재시작되어 완료 여부를 확인해야 합니다. 봇 상태를 확인한 뒤 업데이트 적용 재시도을 누르세요.'
@@ -182,7 +190,37 @@ async function refreshRelease(){
   }catch(e){box.textContent=t('업데이트 상태를 확인하지 못했습니다. 잠시 후 다시 확인하세요.');}
 }
 if($('releaseRetry'))$('releaseRetry').onclick=async()=>{const b=$('releaseRetry');b.disabled=true;try{await api('release/retry',{});await refreshRelease();}catch(e){message(e.message,true);}finally{b.disabled=false;}};
+let memoryBusy=false;
+function memoryControl(bot, disabled){
+  const m=bot.memory;if(!m)return null;
+  const box=document.createElement('div');box.className='memory-control';
+  const label=document.createElement('label');label.textContent=t('RAM 한도');
+  const select=document.createElement('select');select.className='memory-select';
+  select.setAttribute('aria-label',bot.name+' · '+t('RAM 한도'));
+  const values=[...new Set([512,1024,1536,2048,3072,4096,6144,8192,12288,16384,24576,32768,65536,m.desired_mb])].sort((a,b)=>a-b);
+  for(const value of values){const o=document.createElement('option');o.value=value;o.textContent=(value/1024)+' GiB';select.append(o);}
+  select.value=m.desired_mb;select.disabled=disabled||m.recovery_required;
+  label.append(select);box.append(label);
+  const help=document.createElement('small');help.textContent=t('선택 후 작업을 마치고 업데이트·다시 시작을 누르세요.');box.append(help);
+  const hint=document.createElement('small');hint.className='memory-status';
+  hint.textContent=t('현재 적용')+': '+(m.applied_mb===null?t('확인 불가'):(m.applied_mb/1024)+' GiB')+
+    (m.pending?' · '+t('변경 대기'):'');box.append(hint);
+  if(m.recovery_required){const note=document.createElement('small');note.textContent=t('이전 RAM 적용을 확인해야 합니다. 업데이트·다시 시작으로 재시도하세요.');box.append(note);}
+  select.onchange=async()=>{
+    if(memoryBusy){select.value=m.desired_mb;return;}
+    memoryBusy=true;document.querySelectorAll('.memory-select').forEach(s=>s.disabled=true);
+    try{
+      const preview=await api('bot/update-preview',{pubkey:bot.pubkey});
+      if(preview.memory?.desired_mb!==m.desired_mb)throw new Error(errors.bot_update_preview_changed);
+      await api('bot/memory',{pubkey:bot.pubkey,revision:preview.revision,memory_mb:Number(select.value)});
+      message(t('RAM 한도를 저장했습니다. 작업을 마친 뒤 업데이트·다시 시작을 누르면 적용됩니다.'));
+    }catch(e){select.value=m.desired_mb;message(e.message,true);}
+    finally{select.blur();memoryBusy=false;await refresh();}
+  };
+  return box;
+}
 async function refresh(){
+  if(memoryBusy||document.activeElement?.classList.contains('memory-select'))return;
   const data=await api('status');configured=data.configured;
   await refreshReauth();
   await refreshRelease();
@@ -193,9 +231,10 @@ async function refresh(){
   $('copyCommunityRelay').disabled=!configured;
   for(const id of ['relay','owner'])$(id).readOnly=configured;
   $('saveRelay').hidden=configured;$('discover').hidden=configured;
+  if(memoryBusy||document.activeElement?.classList.contains('memory-select'))return;
   $('bots').replaceChildren();const selected=$('scheduleBot').value;$('scheduleBot').replaceChildren();
   if(!data.bots.length){const p=document.createElement('p');p.className='empty';p.textContent=t('Windows Buzz에서 봇을 만들고 배포하면 여기에 표시됩니다.');$('bots').append(p);}
-  for(const bot of data.bots){const card=document.createElement('div');card.className='bot';const details=document.createElement('div');const name=document.createElement('strong');name.textContent=bot.name;const sub=document.createElement('small');sub.textContent=(bot.provider==='codex'?'Codex':'Claude Code')+' · '+bot.pubkey.slice(0,12)+'…';details.append(name,sub);const health=botHealth(bot);if(health){const info=document.createElement('small');info.textContent=health;details.append(info);}const state=document.createElement('span');state.className='state';state.textContent=statusName(bot.status);const button=document.createElement('button');button.className='secondary';button.textContent=t('계정 로그인');button.disabled=bot.status==='running'||!bot.container_running||Boolean(authSession);button.onclick=async()=>{button.disabled=true;try{await startLogin(bot);}catch(e){message(e.message,true);button.disabled=false;}};const actions=document.createElement('div');actions.className='bot-actions';const updateButton=document.createElement('button');updateButton.className='secondary update-bot';updateButton.textContent=t('업데이트·다시 시작');updateButton.disabled=Boolean(authSession)||data.update?.state==='running';updateButton.onclick=()=>openUpdate(bot).catch(e=>message(e.message,true));button.disabled=button.disabled||data.update?.state==='running';const reauthButton=document.createElement('button');reauthButton.className='secondary reauth-bot';reauthButton.textContent=t('재로그인');reauthButton.disabled=Boolean(authSession)||reauthBusy||data.update?.state==='running';reauthButton.onclick=()=>startReauth(bot).catch(e=>message(e.message,true));button.disabled=button.disabled||reauthBusy;updateButton.disabled=updateButton.disabled||reauthBusy;actions.append(button,reauthButton,updateButton);card.append(details,state,actions);$('bots').append(card);const option=document.createElement('option');option.value=bot.pubkey;option.textContent=bot.name;$('scheduleBot').append(option);}
+  for(const bot of data.bots){const card=document.createElement('div');card.className='bot';const details=document.createElement('div');const name=document.createElement('strong');name.textContent=bot.name;const sub=document.createElement('small');sub.textContent=(bot.provider==='codex'?'Codex':'Claude Code')+' · '+bot.pubkey.slice(0,12)+'…';details.append(name,sub);const health=botHealth(bot);if(health){const info=document.createElement('small');info.textContent=health;details.append(info);}const state=document.createElement('span');state.className='state';state.textContent=statusName(bot.status);const button=document.createElement('button');button.className='secondary';button.textContent=t('계정 로그인');button.disabled=bot.status==='running'||!bot.container_running||Boolean(authSession);button.onclick=async()=>{button.disabled=true;try{await startLogin(bot);}catch(e){message(e.message,true);button.disabled=false;}};const actions=document.createElement('div');actions.className='bot-actions';const updateButton=document.createElement('button');updateButton.className='secondary update-bot';updateButton.textContent=t('업데이트·다시 시작');updateButton.disabled=Boolean(authSession)||data.update?.state==='running';updateButton.onclick=()=>openUpdate(bot).catch(e=>message(e.message,true));button.disabled=button.disabled||data.update?.state==='running';const reauthButton=document.createElement('button');reauthButton.className='secondary reauth-bot';reauthButton.textContent=t('재로그인');reauthButton.disabled=Boolean(authSession)||reauthBusy||data.update?.state==='running';reauthButton.onclick=()=>startReauth(bot).catch(e=>message(e.message,true));button.disabled=button.disabled||reauthBusy;updateButton.disabled=updateButton.disabled||reauthBusy;const ram=memoryControl(bot,Boolean(authSession)||reauthBusy||updateBusy||data.update?.state==='running');if(ram)details.append(ram);actions.append(button,reauthButton,updateButton);card.append(details,state,actions);$('bots').append(card);const option=document.createElement('option');option.value=bot.pubkey;option.textContent=bot.name;$('scheduleBot').append(option);}
   if(selected)$('scheduleBot').value=selected;
   renderUpdateStatus(data.update);
   const devices=await api('devices');$('devices').replaceChildren();$('step2').classList.toggle('done',devices.devices.length>0);
@@ -212,13 +251,13 @@ function showLogin(bot, session){
   $('authStatus').textContent=t('최대 10분 동안 진행됩니다.');$('authLinks').replaceChildren();
 }
 async function startLogin(bot){
-  if(authSession||reauthBusy)throw new Error(t('현재 로그인 세션을 먼저 마치거나 중지해 주세요.'));
+  if(authSession||reauthBusy||memoryBusy)throw new Error(t('현재 로그인 세션을 먼저 마치거나 중지해 주세요.'));
   showReauthResult=false;
   const result=await api('auth/start',{pubkey:bot.pubkey});showLogin(bot,result.session);
   $('authPanel').scrollIntoView({behavior:'smooth',block:'center'});
 }
 async function startReauth(bot){
-  if(authSession||reauthBusy)return;
+  if(authSession||reauthBusy||memoryBusy)return;
   if(!confirm(bot.name+'\n\n'+t('이 봇의 진행 중인 작업을 중단하고 다시 로그인할까요? 역할·모델·작업 파일은 유지됩니다. 로그인 성공 후 같은 봇이 자동으로 실행됩니다. 중단한 요청은 Buzz에서 다시 보내세요.')))return;
   reauthBusy=true;showReauthResult=true;
   // One request ID per explicit consent. Network loss is resolved by status,
@@ -377,10 +416,11 @@ function renderUpdateStatus(job){
   el.textContent=job.pubkey.slice(0,12)+'… · '+(descriptions[job.state]||'')+(job.error?'\n'+(errors[job.error]||job.error):'');
 }
 async function openUpdate(bot){
-  if(authSession||updateBusy)return;
+  if(authSession||updateBusy||memoryBusy)return;
   const plan=await api('bot/update-preview',{pubkey:bot.pubkey});
   updatePlan={...plan,request_id:crypto.randomUUID().replaceAll('-','')};
   $('updateBotName').textContent=plan.name+' · '+plan.pubkey.slice(0,12)+'…';
+  $('updateMemory').textContent=plan.memory?t('RAM 한도')+': '+(plan.memory.applied_mb===null?t('확인 불가'):plan.memory.applied_mb/1024+' GiB')+' → '+plan.memory.desired_mb/1024+' GiB':'';
   $('updatePolicy').textContent=t('현재 실행 제한')+': '+plan.policy.turn_limit+' / '+plan.policy.window_seconds+'s · '+plan.policy.daily_limit+' / 24h · '+plan.policy.max_turn_seconds+'s';
   $('updateDefaults').checked=false;$('updateError').textContent='';$('updateDialog').showModal();
 }

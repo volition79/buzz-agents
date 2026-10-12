@@ -312,7 +312,7 @@ class Broker:
         op = request.get('op')
         fields = {'bootstrap-plan': set(), 'bootstrap-activate': {'fingerprint'}, 'status': set(), 'discover': set(), 'configure': {'owner', 'relay'},
                   'release-status': set(), 'release-retry': set(),
-                  'bot-update-preview': {'pubkey'},
+                  'bot-update-preview': {'pubkey'}, 'bot-memory': {'pubkey', 'revision', 'memory_mb'},
                   'bot-update': {'pubkey', 'revision', 'use_defaults', 'request_id'},
                   'reauth-start': {'pubkey', 'request_id'}, 'reauth-status': set(),
                   'deploy': {'request'}, 'auth-start': {'pubkey'}, 'auth-poll': {'session'},
@@ -371,7 +371,7 @@ class Broker:
                 raise ToolError('authentication_already_in_progress')
             if self.update_running and op not in ('status', 'bot-update'):
                 raise ToolError('bot_update_busy')
-            if self.contract and op in ('configure','deploy','bot-update','reauth-start'):
+            if self.contract and op in ('configure','deploy','bot-update','bot-memory','reauth-start'):
                 self.rollout.verify_management()
             if op == 'configure':
                 owner = request['owner']
@@ -411,6 +411,12 @@ class Broker:
                 return ExistingBotUpdater(Deployer(settings)).preview(request['pubkey'])
             if op == 'bot-update':
                 return self.start_update(settings, request)
+            if op == 'bot-memory':
+                with self.logins.lock:
+                    if any(v['process'].poll() is None for v in self.logins.items.values()):
+                        raise ToolError('authentication_already_in_progress')
+                return ExistingBotUpdater(Deployer(settings)).save_memory(
+                    request['pubkey'], request['revision'], request['memory_mb'])
             if op == 'deploy':
                 payload = request['request']
                 if not isinstance(payload, dict) or payload.get('op') != 'deploy' or 'agent' not in payload:

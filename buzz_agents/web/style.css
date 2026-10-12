@@ -29,3 +29,8 @@ header{gap:14px}header button{white-space:nowrap}
 #updateDialog{border:1px solid #cbd5c9;border-radius:16px;background:#f4f3ec;color:#21382f;max-width:560px;width:calc(100% - 32px);padding:28px}#updateDialog::backdrop{background:#14261db3}.update-option{display:flex;gap:12px;align-items:flex-start}.update-option input{width:auto;margin-top:8px}.update-actions,.bot-actions{display:flex;gap:8px;flex-wrap:wrap}.bot-actions{flex-direction:column}.bot-actions button{font-size:12px}#updateError{color:#a33328}#updateStatus{white-space:pre-line}
 
 .auth-link{margin:12px 0;padding:12px;border:1px solid #cbd3c0;min-width:0}.auth-link .auth-url{display:block;width:100%;margin:8px 0;font-size:12px}.auth-link .hint{display:block;margin:6px 0 0}.auth-link button{font-size:12px;padding:8px 12px}
+
+.memory-control { margin-top: 12px; }
+.memory-control label { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.memory-select { width: auto; max-width: 100%; padding: 6px 10px; }
+.memory-status { display: block; margin-top: 5px; }

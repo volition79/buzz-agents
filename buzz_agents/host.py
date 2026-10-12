@@ -11,6 +11,7 @@ import time
 from .common import ToolError
 from .config import HEX, normalize
 from .diagnostics import validation_error
+from . import memory_settings
 from .policy import atomic_json, read_json
 
 SETTINGS = Path("/opt/buzz-agents/host/settings.json")
@@ -62,7 +63,11 @@ def check_resources(config, registry, settings, capacity):
     # Explicit budgets are preserved, but never promise more than physical RAM
     # minus the documented OS/Relay reserve after a host downgrade.
     budget = min(budget, capacity["budget_mb"])
-    memory = config["memory_mb"] + sum(c["memory_mb"] for k, c in registry.items() if k != config["pubkey"])
+    choices = memory_settings.load(settings['state_dir']) if settings.get('state_dir') else {}
+    memory = config["memory_mb"] + sum(max(c["memory_mb"],
+        choices.get(k, {}).get('desired_mb', c["memory_mb"]),
+        choices.get(k, {}).get('committed_mb', c["memory_mb"]))
+        for k, c in registry.items() if k != config["pubkey"])
     if memory > budget:
         raise ToolError("aggregate_memory_budget_exceeded")
 
@@ -199,6 +204,9 @@ class Deployer:
         lock = os.open(self.root / "deploy.lock", os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
         try:
             fcntl.flock(lock, fcntl.LOCK_EX)
+            choice = memory_settings.load(self.root).get(config['pubkey'], {})
+            if choice:
+                config = memory_settings.with_memory(config, choice['committed_mb'])
             return self._deploy_locked(config)
         finally:
             os.close(lock)
@@ -230,7 +238,7 @@ class Deployer:
         finally:
             os.close(lock)
 
-    def _deploy_locked(self, config, runtime_state=None, start=True, expected_container_id=None):
+    def _deploy_locked(self, config, runtime_state=None, start=True, expected_container_id=None, commit_memory=False):
         from .reauth import require_unheld
         require_unheld(self.root, config["pubkey"])
         registry = read_json(self.root / "registry.json", {})
@@ -249,6 +257,8 @@ class Deployer:
                     raise ToolError("stop_native_bot_before_image_upgrade")
                 if not process_limit_matches(actual, config):
                     raise ToolError("stop_native_bot_before_resource_upgrade")
+                if memory_settings.load(self.root).get(pubkey) and not memory_settings.limits_match(actual, config['memory_mb']):
+                    raise ToolError('deployment_memory_limit_mismatch')
                 if pubkey in registry and registry[pubkey]["fingerprint"] == config["fingerprint"]:
                     return {"ok": True, "agent_id": name, "action": "already_deployed"}
                 raise ToolError("stop_native_bot_before_changing_settings")
@@ -269,6 +279,8 @@ class Deployer:
         private_directory(folder / "home")
         private_directory(folder / "home" / config["provider"], 10001)
         private_directory(self.root / "workspaces" / config["workspace"], 10001)
+        if commit_memory:
+            memory_settings.save(self.root, pubkey, config['memory_mb'], config['memory_mb'])
         atomic_json(folder / "config" / "config.json", config, 0o400)
         # Keep quota counters across explicit redeploys; no silent budget reset.
         atomic_json(folder / "state" / "runtime.json", runtime_state if runtime_state is not None else {"status": "ready", "reason": "explicit_deploy", "pubkey": pubkey})
@@ -287,6 +299,9 @@ class Deployer:
             raise ToolError('deployment_image_mismatch')
         if not process_limit_matches(actual, config):
             raise ToolError("deployment_resource_limit_mismatch")
+        if memory_settings.load(self.root).get(pubkey):
+            if not memory_settings.limits_match(actual, config['memory_mb']):
+                raise ToolError('deployment_memory_limit_mismatch')
         return {"ok": True, "agent_id": name, "action": "deployed",
                 "note": "Deployment is not proof of subscription authentication or model health."}
 
