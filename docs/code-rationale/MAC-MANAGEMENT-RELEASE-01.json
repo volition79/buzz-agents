@@ -1,0 +1,98 @@
+{
+  "status": "active",
+  "importance_score": 850,
+  "importance_reason": "Privileged lifecycle and persistent data across mixed release and external restart",
+  "decision_context": {
+    "schema": "sonol.code-rationale-context.v1",
+    "authoring_environment": {
+      "os": "Linux WSL",
+      "provider": "Codex",
+      "execution_environment": "local repository"
+    },
+    "targets": [
+      {
+        "os": "linux",
+        "provider": "local test fixtures",
+        "execution_environment": "Python unittest",
+        "applicability": "affected",
+        "reason": "Local fixtures; native Mac and production acceptance pending"
+      }
+    ],
+    "conditions": [
+      {
+        "condition": "Existing owned installation with optional embedded release contract",
+        "relevance": "applies",
+        "reason": "Legacy immutable installs stay explicit; candidate not promoted"
+      }
+    ],
+    "boundaries": [
+      {
+        "path": ".github/workflows/mac-connection-check.yml",
+        "logical_owner": "mac-connection-check",
+        "role": "helper",
+        "review": "User repeated deployment request after native GUI gaps were disclosed. Publish management-only images only after same-source checks and actual Docker upgrade/rollback, retain runtime and previous digests, disclose native GUI limitations."
+      },
+      {
+        "path": "scripts/verify-bootstrap-docker.py",
+        "logical_owner": "verify-bootstrap-docker",
+        "role": "helper",
+        "review": "User repeated deployment request after native GUI gaps were disclosed. Publish management-only images only after same-source checks and actual Docker upgrade/rollback, retain runtime and previous digests, disclose native GUI limitations."
+      }
+    ],
+    "verification": [
+      {
+        "assertion_id": "mac-connect-preserve-01",
+        "test_reference": "scripts/verify-bootstrap-docker.py",
+        "environment": {
+          "os": "linux",
+          "provider": "local test fixtures",
+          "execution_environment": "Python unittest"
+        },
+        "status": "planned",
+        "evidence_kind": "fixture",
+        "evidence": [
+          "docs/MAC-RELEASE.md"
+        ]
+      }
+    ]
+  },
+  "id": "MAC-MANAGEMENT-RELEASE-01",
+  "reason": "User repeated deployment request after native GUI gaps were disclosed. Publish management-only images only after same-source checks and actual Docker upgrade/rollback, retain runtime and previous digests, disclose native GUI limitations.",
+  "evidence_level": "documented",
+  "evidence": [
+    "docs/MAC-RELEASE.md"
+  ],
+  "invariants": [
+    "Existing Windows credentials and bot identities persist",
+    "No automatic bot update for management_only true",
+    "Native macOS and live deployment are not verified"
+  ],
+  "anchors": [
+    {
+      "path": ".github/workflows/mac-connection-check.yml",
+      "start_line": 1,
+      "end_line": 25,
+      "module": "mac-connection-check",
+      "role": "helper",
+      "code": "name: Mac connection checks and explicit management release\non:\n  workflow_dispatch:\n    inputs:\n      promote:\n        description: Publish management-only stable images after checks and rollback test\n        type: boolean\n        default: false\n  push:\n    branches: [mac-connect-review-20261108]\npermissions:\n  contents: read\nconcurrency:\n  group: portal-candidate-publication\n  cancel-in-progress: false\njobs:\n  package:\n    runs-on: ubuntu-24.04\n    timeout-minutes: 25\n    steps:\n      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262\n      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff\n        with:\n          go-version: '1.26.5'\n          cache: false\n",
+      "code_sha256": "f3666ace70ebaca21cbac9488438ae9526b4ff503bc8ac190bf366235e6cb455",
+      "file_sha256": "118d8a62b718521fd5f3b426ef2bc87e27a75abc3376e412be9b1721a198fa88"
+    },
+    {
+      "path": "scripts/verify-bootstrap-docker.py",
+      "start_line": 1,
+      "end_line": 25,
+      "module": "verify-bootstrap-docker",
+      "role": "helper",
+      "code": "\"\"\"Ephemeral Docker bootstrap fixture. No real Hostinger DNS/Relay/authentication.\"\"\"\nimport argparse\nimport hashlib\nimport json\nimport os\nfrom pathlib import Path\nimport subprocess\nimport tempfile\nimport time\n\n\ndef run(argv, **kwargs):\n    return subprocess.check_output(argv, **kwargs)\n\n\ndef wait_compose_route(inspect, sleep=time.sleep, attempts=40):\n    # Docker writes Compose labels at create time, before the container starts.\n    # CI38218457605 observed that intermediate state during legacy migration.\n    for _ in range(attempts):\n        state = inspect()\n        if (state and state.get('Config', {}).get('Labels', {}).get('com.docker.compose.config-hash')\n                and state.get('State', {}).get('Running')\n                and not state.get('State', {}).get('Restarting')):\n            return state\n        sleep(2)\n",
+      "code_sha256": "c70397d929a18ee83becaf3aa05e35341066541893e60c52a9cdfa222561d611",
+      "file_sha256": "14e5b579b9e0b78c42f8244a4ad0b0375796affdd61c46d2c7ba74543e11f1bb"
+    }
+  ],
+  "schema": "sonol.code-rationale.v1",
+  "source": {
+    "commit": "a209fd4d64aabdba052e9e9496e61da80f980389",
+    "dirty": true
+  },
+  "assessment_status": "assessed"
+}

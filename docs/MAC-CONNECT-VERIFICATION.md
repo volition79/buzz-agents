@@ -35,3 +35,13 @@
 GitHub push, stable 이미지 교체, 운영 VPS, 공개 매뉴얼, zooo.kr은 변경하지 않았다.
 기존 고정 설치 URL과 Compose 파일도 수정하지 않았다.
 배포 전 Mac 실기 검증과 임시 설치에서 업데이트/롤백 검증이 필요하다.
+
+## 후속 배포 준비 중 갱신
+
+위 기록 이후 후보 소스를 별도 GitHub 브랜치에 올렸다. 운영 main/stable 및
+VPS·공개 매뉴얼은 변경하지 않았다. CI 42472261491에서 실제 Docker 이미지와
+Apple Silicon macOS의 연결기/provider 테스트가 통과했다. Finder에서 다운로드
+파일 열기·Gatekeeper·실제 Buzz 연결은 여전히 미검증이다.
+직접 다운로드의 504 오류는 GitHub CLI 경로로 해결했고, 과거 provider 10종의
+파일 해시를 확인해 갱신·재연결 테스트에 공급했다. 최신 상태는
+`docs/MAC-DEPLOY-STATUS.md`와 해당 CI 기록을 함께 확인한다.

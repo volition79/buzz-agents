@@ -1,10 +1,18 @@
-name: Mac connection candidate checks (no promotion)
+name: Mac connection checks and explicit management release
 on:
   workflow_dispatch:
+    inputs:
+      promote:
+        description: Publish management-only stable images after checks and rollback test
+        type: boolean
+        default: false
   push:
     branches: [mac-connect-review-20261108]
 permissions:
   contents: read
+concurrency:
+  group: portal-candidate-publication
+  cancel-in-progress: false
 jobs:
   package:
     runs-on: ubuntu-24.04
@@ -71,3 +79,79 @@ jobs:
           (cd connect && go test -race -v ./... && go vet ./...)
           (cd web-provider && go test -race -v ./... && go vet ./...)
           echo 'Native macOS test fixtures passed. Browser quarantine, Finder launch, official Buzz and real VPS acceptance are NOT covered.' >> "$GITHUB_STEP_SUMMARY"
+  release:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.promote }}
+    needs: [package, native-mac]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    permissions:
+      contents: write
+      packages: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff
+        with:
+          go-version: '1.26.5'
+          cache: false
+      - name: Package and record rollback references
+        run: |
+          python3 scripts/build-portal.py --with-macos
+          python3 scripts/verify-mac-candidate.py dist/portal-v0.4
+          for role in broker portal; do
+            docker pull "ghcr.io/volition79/buzz-agents-$role:stable"
+          done
+          python3 - <<'PY'
+          import json,subprocess,os
+          from buzz_agents.release_contract import validate
+          old={r:json.loads(subprocess.check_output(['docker','image','inspect','ghcr.io/volition79/buzz-agents-'+r+':stable']))[0]['RepoDigests'][0] for r in ('broker','portal')}
+          contract=validate(json.loads(subprocess.check_output(['docker','run','--rm','--network','none','--entrypoint','cat',old['broker'],'/app/buzz-release.json'])))
+          json.dump({'previous':old,'contract':contract},open('dist/rollback.json','w'),indent=2)
+          with open(os.environ['GITHUB_ENV'],'a') as f:
+            f.write('BUZZ_PREVIOUS_BROKER='+old['broker']+'\nBUZZ_PREVIOUS_PORTAL='+old['portal']+'\nBUZZ_RUNTIME_IMAGE='+contract['runtime']+'\n')
+          PY
+      - name: Publish immutable candidates retaining existing runtime
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          printf '%s' "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          PREFIX=ghcr.io/volition79/buzz-agents
+          docker build -f Dockerfile.portal --target portal -t "$PREFIX-portal:mac-$GITHUB_SHA" .
+          docker push "$PREFIX-portal:mac-$GITHUB_SHA"
+          PORTAL=$(docker image inspect "$PREFIX-portal:mac-$GITHUB_SHA" --format '{{index .RepoDigests 0}}')
+          docker build -f Dockerfile.portal --target broker -t "$PREFIX-broker:mac-$GITHUB_SHA" \
+            --build-arg "BUZZ_RELEASE=$GITHUB_SHA" --build-arg "BUZZ_RELEASE_RUNTIME=$BUZZ_RUNTIME_IMAGE" \
+            --build-arg "BUZZ_RELEASE_PORTAL=$PORTAL" --build-arg BUZZ_RELEASE_MANAGEMENT_ONLY=true .
+          docker push "$PREFIX-broker:mac-$GITHUB_SHA"
+          BROKER=$(docker image inspect "$PREFIX-broker:mac-$GITHUB_SHA" --format '{{index .RepoDigests 0}}')
+          echo "BUZZ_PORTAL_IMAGE=$PORTAL" >> "$GITHUB_ENV"
+          echo "BUZZ_BROKER_IMAGE=$BROKER" >> "$GITHUB_ENV"
+          python3 scripts/render-portal-release.py --unified --runtime "$BUZZ_RUNTIME_IMAGE" --broker "$BROKER" --portal "$PORTAL" --output dist/portal-v0.4/compose.install.yaml
+      - name: Actual management upgrade and rollback preserve existing access
+        run: |
+          python3 scripts/verify-bootstrap-docker.py --compose dist/portal-v0.4/compose.install.yaml --host-proxy --portal-upgrade --contract --rollback
+      - name: Require anonymous candidate pulls and record exact release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          docker logout ghcr.io
+          docker --config /tmp/buzz-anonymous pull "$BUZZ_PORTAL_IMAGE"
+          docker --config /tmp/buzz-anonymous pull "$BUZZ_BROKER_IMAGE"
+          python3 - <<'PY'
+          import json,os
+          p='dist/rollback.json';x=json.load(open(p));x['current']={k:os.environ['BUZZ_'+k.upper()+'_IMAGE'] for k in ('broker','portal','runtime')};x['management_only']=True
+          json.dump(x,open(p,'w'),indent=2)
+          PY
+          python3 scripts/render-portal-release.py --list-assets --output dist/portal-v0.4/compose.install.yaml > /tmp/assets.txt
+          mapfile -t ASSETS < /tmp/assets.txt
+          gh release create "mac-connect-${GITHUB_SHA:0:12}-${GITHUB_RUN_ID}" --target "$GITHUB_SHA" --prerelease \
+            --title "Mac connector management update" --notes-file docs/MAC-RELEASE.md "${ASSETS[@]}" dist/rollback.json
+      - name: Promote management images only
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          printf '%s' "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          docker tag "$BUZZ_PORTAL_IMAGE" ghcr.io/volition79/buzz-agents-portal:stable
+          docker tag "$BUZZ_BROKER_IMAGE" ghcr.io/volition79/buzz-agents-broker:stable
+          docker push ghcr.io/volition79/buzz-agents-portal:stable
+          docker push ghcr.io/volition79/buzz-agents-broker:stable
+          echo 'Published management-only stable. Runtime tag and digest unchanged. Mac native tests passed; Finder/Gatekeeper/Buzz live journey remains unverified.' >> "$GITHUB_STEP_SUMMARY"

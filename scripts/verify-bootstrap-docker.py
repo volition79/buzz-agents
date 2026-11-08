@@ -33,7 +33,10 @@ def main():
     parser.add_argument('--contract',action='store_true')
     parser.add_argument('--legacy-upgrade',action='store_true')
     parser.add_argument('--portal-upgrade',action='store_true')
+    parser.add_argument('--rollback',action='store_true')
     args=parser.parse_args()
+    if args.rollback and not args.portal_upgrade:
+        parser.error('--rollback requires --portal-upgrade')
     assert os.environ.get('GITHUB_ACTIONS')=='true', 'CI fixture only'
     project='buzz-auto-ci'
     route='buzz-setup-'+hashlib.sha256(project.encode()).hexdigest()[:12]
@@ -53,8 +56,9 @@ def main():
         target_broker=config['services']['broker']['image']
         target_portal=config['services']['portal']['image']
         if args.portal_upgrade:
-            config['services']['broker']['image']='ghcr.io/volition79/buzz-agents-broker@sha256:56d45e699381baf6e79bc16934d24f64713be6b6e6a3bf21fef52f7a82df73c8'
-            config['services']['portal']['image']='ghcr.io/volition79/buzz-agents-portal@sha256:844f142608f887dc314c4c810a40136d031a087d6619a7363b624966dd42bc81'
+            config['services']['broker']['image']=os.environ.get('BUZZ_PREVIOUS_BROKER','ghcr.io/volition79/buzz-agents-broker@sha256:56d45e699381baf6e79bc16934d24f64713be6b6e6a3bf21fef52f7a82df73c8')
+            config['services']['portal']['image']=os.environ.get('BUZZ_PREVIOUS_PORTAL','ghcr.io/volition79/buzz-agents-portal@sha256:844f142608f887dc314c4c810a40136d031a087d6619a7363b624966dd42bc81')
+            previous_images={role:config['services'][role]['image'] for role in ('broker','portal')}
             for role in ('broker','portal'): run(['docker','pull',config['services'][role]['image']])
         config['services']['portal'].setdefault('environment',{})['BUZZ_FIXTURE_LITERAL']='a$$b'
         if args.legacy_upgrade:
@@ -197,6 +201,21 @@ assert b.rollout.status()['state']=='current', b.rollout.status()
 print('embedded release contract Docker verification passed')
 """
                 run(cmd+['exec','-T','broker','python','-c',probe],env=env)
+            if args.rollback:
+                # Preserve the live rewritten route/volumes; replace management images only.
+                rollback_config=json.loads(actual.read_text())
+                for role,image in previous_images.items():
+                    rollback_config['services'][role]['image']=image
+                actual.unlink()
+                actual.write_text(json.dumps(rollback_config))
+                run(cmd+['up','-d','--no-deps','broker','portal'],env=env)
+                for attempt in range(40):
+                    result=subprocess.run(cmd+['exec','-T','portal','python','-c',verify],env=env,capture_output=True)
+                    if result.returncode==0:break
+                    time.sleep(2)
+                assert result.returncode==0, 'rollback failed to preserve account/device access'
+                assert json.loads(run(['docker','inspect',route]))[0]['Id']==route_state['Id']
+                print('management rollback preserved account, device authentication and route')
             after=json.loads(run(['docker','inspect',relay]))[0]
             assert before['Id']==after['Id'] and before['Config']==after['Config'] and after['State']['Running']
             proxy_after=json.loads(run(['docker','inspect',proxy]))[0]

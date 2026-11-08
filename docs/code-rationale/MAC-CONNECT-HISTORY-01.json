@@ -1,0 +1,83 @@
+{
+  "status": "active",
+  "importance_score": 850,
+  "importance_reason": "Privileged lifecycle and persistent data across mixed release and external restart",
+  "decision_context": {
+    "schema": "sonol.code-rationale-context.v1",
+    "authoring_environment": {
+      "os": "Linux WSL",
+      "provider": "Codex",
+      "execution_environment": "local repository"
+    },
+    "targets": [
+      {
+        "os": "linux",
+        "provider": "local test fixtures",
+        "execution_environment": "Python unittest",
+        "applicability": "affected",
+        "reason": "Local fixtures; native Mac and production acceptance pending"
+      }
+    ],
+    "conditions": [
+      {
+        "condition": "Existing owned installation with optional embedded release contract",
+        "relevance": "applies",
+        "reason": "Legacy immutable installs stay explicit; candidate not promoted"
+      }
+    ],
+    "boundaries": [
+      {
+        "path": "connect/provider-history.json",
+        "logical_owner": "provider-history",
+        "role": "helper",
+        "review": "Refresh missing public release tag only after manifest and bytes verification; executable hash already exists in the approved catalog. Preserve all previous releases and reject changed bytes."
+      }
+    ],
+    "verification": [
+      {
+        "assertion_id": "mac-connect-01",
+        "test_reference": "connect/released_provider_test.go",
+        "environment": {
+          "os": "linux",
+          "provider": "local test fixtures",
+          "execution_environment": "Python unittest"
+        },
+        "status": "passed",
+        "evidence_kind": "fixture",
+        "evidence": [
+          "docs/MAC-DEPLOY-STATUS.md"
+        ]
+      }
+    ]
+  },
+  "id": "MAC-CONNECT-HISTORY-01",
+  "reason": "Refresh missing public release tag only after manifest and bytes verification; executable hash already exists in the approved catalog. Preserve all previous releases and reject changed bytes.",
+  "evidence_level": "documented",
+  "evidence": [
+    "docs/MAC-DEPLOY-STATUS.md",
+    "connect/released_provider_test.go"
+  ],
+  "invariants": [
+    "Existing Windows credentials and bot identities persist",
+    "No automatic bot update for management_only true",
+    "Native macOS and live deployment are not verified"
+  ],
+  "anchors": [
+    {
+      "path": "connect/provider-history.json",
+      "start_line": 1,
+      "end_line": 15,
+      "module": "provider-history",
+      "role": "helper",
+      "code": "{\n  \"schema\": 1,\n  \"releases\": [\n    {\n      \"tag\": \"portal-candidate-06c848475608-33-1\",\n      \"sha256\": \"85cbd502d01dec01999a68809a3e8458d85ef382f560fe4565fdb4eb02575510\",\n      \"size\": 6565376\n    },\n    {\n      \"tag\": \"portal-candidate-0ab0849a7f6d-25-1\",\n      \"sha256\": \"852b9a6501fcfb219a33295cd4600aac3cb8a02bdaf481068ad7795f18d2409f\",\n      \"size\": 6564864\n    },\n    {\n      \"tag\": \"portal-candidate-25672286bcee-14-1\",\n",
+      "code_sha256": "0e2b50cb09f5d4f39afba0084539bec0ebb6cdfae1ffd914dd644d60d95ad54d",
+      "file_sha256": "1707a9501a8746fb8c1257863d4c57a390f1a406803d8dda9104d986e42070e9"
+    }
+  ],
+  "schema": "sonol.code-rationale.v1",
+  "source": {
+    "commit": "a209fd4d64aabdba052e9e9496e61da80f980389",
+    "dirty": true
+  },
+  "assessment_status": "assessed"
+}
