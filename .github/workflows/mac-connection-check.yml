@@ -150,8 +150,16 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           printf '%s' "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          restore_management() {
+            docker tag "$BUZZ_PREVIOUS_PORTAL" ghcr.io/volition79/buzz-agents-portal:stable
+            docker tag "$BUZZ_PREVIOUS_BROKER" ghcr.io/volition79/buzz-agents-broker:stable
+            docker push ghcr.io/volition79/buzz-agents-portal:stable
+            docker push ghcr.io/volition79/buzz-agents-broker:stable
+          }
+          trap restore_management ERR
           docker tag "$BUZZ_PORTAL_IMAGE" ghcr.io/volition79/buzz-agents-portal:stable
           docker tag "$BUZZ_BROKER_IMAGE" ghcr.io/volition79/buzz-agents-broker:stable
           docker push ghcr.io/volition79/buzz-agents-portal:stable
           docker push ghcr.io/volition79/buzz-agents-broker:stable
+          trap - ERR
           echo 'Published management-only stable. Runtime tag and digest unchanged. Mac native tests passed; Finder/Gatekeeper/Buzz live journey remains unverified.' >> "$GITHUB_STEP_SUMMARY"
