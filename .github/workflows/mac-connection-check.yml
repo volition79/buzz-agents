@@ -1,0 +1,56 @@
+name: Mac connection candidate checks (no promotion)
+on:
+  workflow_dispatch:
+  push:
+    branches: [mac-connect-review-20261108]
+permissions:
+  contents: read
+jobs:
+  package:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff
+        with:
+          go-version: '1.26.5'
+          cache: false
+      - name: Build candidate and test Windows compatibility and Mac bundle
+        run: |
+          python3 scripts/build-portal.py --with-macos
+          python3 scripts/verify-mac-candidate.py dist/portal-v0.4
+          PYTHONPATH=.:tests python3 -m unittest test_portal test_release_update test_connection_bundle test_provider_history test_portal_release -v
+          (cd connect && go test -race ./...)
+          (cd web-provider && go test -race ./...)
+      - name: Build actual Docker context and inspect embedded Mac bytes
+        run: |
+          docker build -f Dockerfile.portal --target portal -t buzz-mac-check:portal .
+          docker run --rm --network none --entrypoint python buzz-mac-check:portal -c 'import hashlib,pathlib; p=pathlib.Path("/artifacts/macos/Buzz-VPS-Connect-macos-arm64"); b=p.read_bytes(); assert b[:4]==bytes.fromhex("cffaedfe"); print(hashlib.sha256(b).hexdigest())' > /tmp/container-mac.sha
+          python3 - <<'PY'
+          import hashlib,pathlib
+          expected=hashlib.sha256(pathlib.Path('dist/portal-v0.4/Buzz-VPS-Connect-macos-arm64').read_bytes()).hexdigest()
+          assert pathlib.Path('/tmp/container-mac.sha').read_text().strip()==expected
+          print('PASS: actual Docker image has exact Mac connector bytes')
+          PY
+      - name: Verify management-only contract in built broker
+        run: |
+          # Public existing images are read only; no registry credentials or tag writes.
+          docker pull ghcr.io/volition79/buzz-agents-broker:stable
+          docker run --rm --network none --entrypoint cat ghcr.io/volition79/buzz-agents-broker:stable /app/buzz-release.json > /tmp/prior-contract.json
+          python3 - <<'PY'
+          import json,os,subprocess
+          from buzz_agents.release_contract import validate
+          prior=validate(json.load(open('/tmp/prior-contract.json')))
+          subprocess.run(['docker','build','-f','Dockerfile.portal','--target','broker','-t','buzz-mac-check:broker',
+            '--build-arg','BUZZ_RELEASE='+os.environ['GITHUB_SHA'],
+            '--build-arg','BUZZ_RELEASE_RUNTIME='+prior['runtime'],
+            '--build-arg','BUZZ_RELEASE_PORTAL='+prior['portal'],
+            '--build-arg','BUZZ_RELEASE_MANAGEMENT_ONLY=true','.'],check=True)
+          actual=validate(json.loads(subprocess.check_output(['docker','run','--rm','--network','none','--entrypoint','cat','buzz-mac-check:broker','/app/buzz-release.json'])))
+          assert actual['management_only'] is True and actual['runtime']==prior['runtime']
+          print('PASS: real broker build embeds management-only and unchanged runtime digest')
+          PY
+      - name: Report remaining acceptance
+        run: |
+          echo 'Candidate image build only. No push of images, stable promotion, VPS update or manual publication.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Native Mac Finder/Gatekeeper/Buzz, actual update/rollback and live acceptance remain required.' >> "$GITHUB_STEP_SUMMARY"

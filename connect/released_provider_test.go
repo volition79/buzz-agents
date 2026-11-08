@@ -13,6 +13,9 @@ import (
 
 // CI supplies independently verified public executable bytes, never fake hashes.
 func TestAllReleasedProvidersUpgrade(t *testing.T) {
+	if desktopName != "Windows" {
+		t.Skip("Windows predecessor fixtures only")
+	}
 	directory := os.Getenv("BUZZ_PROVIDER_HISTORY_DIR")
 	if directory == "" {
 		t.Skip("public release fixtures not supplied")
@@ -37,7 +40,7 @@ func TestAllReleasedProvidersUpgrade(t *testing.T) {
 					dir := filepath.Join(home, ".buzz-agents-web")
 					os.MkdirAll(bin, 0700)
 					os.MkdirAll(dir, 0700)
-					target := filepath.Join(bin, "buzz-backend-hostinger-https.exe")
+					target := filepath.Join(bin, providerFilename)
 					os.WriteFile(target, old, 0600)
 					config := filepath.Join(dir, "connection.json")
 					before, _ := json.Marshal(Connection{Endpoint: "https://previous.example.com", Token: strings.Repeat("o", 43), DeviceID: strings.Repeat("a", 24)})

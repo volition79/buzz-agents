@@ -1,6 +1,6 @@
 """HTTPS-terminated first-run portal. No Docker socket, root password or human nsec.
 
-Browser administrator and Windows deploy credentials are distinct. Only the
+Browser administrator and desktop deploy credentials are distinct. Only the
 administrator can see interactive official-login output or configure schedules.
 """
 from collections import deque
@@ -8,7 +8,6 @@ import hashlib
 import hmac
 from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-import io
 import json
 import os
 from pathlib import Path
@@ -18,7 +17,7 @@ import socket
 import threading
 import time
 from urllib.parse import urlsplit
-import zipfile
+from . import connection_bundle
 from .common import ToolError
 from .policy import atomic_json, read_json
 
@@ -165,26 +164,18 @@ class Portal:
         fingerprint = digest(token)
         return any(hmac.compare_digest(fingerprint, d['hash']) for d in self.devices.values())
 
-    def bundle(self):
+    def bundle(self, platform="windows-amd64"):
+        connection_bundle.target(platform)
         with self.lock:
             self.grants = {k: v for k, v in self.grants.items() if v > self.clock()}
             if len(self.grants) >= 8 or len(self.devices) >= 16:
                 raise ToolError('pairing_limit_revoke_old_connections')
-            executable = self.artifacts / 'Buzz-VPS-Connect.exe'
-            if not executable.is_file():
-                raise ToolError('connection_program_not_packaged')
             token = secrets.token_urlsafe(32)
-            self.grants[digest(token)] = self.clock() + 600
             data = {'schema': 1, 'endpoint': self.url, 'pairing_code': token}
-            out = io.BytesIO()
-            with zipfile.ZipFile(out, 'w', zipfile.ZIP_DEFLATED) as archive:
-                archive.write(executable, executable.name)
-                archive.writestr('buzz-pairing.json', json.dumps(data))
-                archive.writestr('시작하기.txt', '압축을 모두 풀고 Buzz-VPS-Connect.exe를 실행하세요. 연결 파일은 10분간 한 번만 사용할 수 있습니다.\n'
-                                 '만료·실패 시 설정 화면에서 새 연결 파일을 받으세요. 정상 연결 후에는 파일의 만료와 무관하게 연결이 유지됩니다.\n'
-                                 '다시 실행하면 기존 연결을 확인합니다. 재연결은 직접 선택할 때만 진행하며 Buzz를 먼저 종료하세요.\n'
-                                 '저장 실패 시 표시된 장치 ID를 설정 화면에서 찾아 해제하고 새 파일로 재시도하세요.\n')
-            return out.getvalue()
+            # Only consume grant capacity after a complete bundle was built.
+            result = connection_bundle.build(self.artifacts, platform, data)
+            self.grants[digest(token)] = self.clock() + 600
+            return result
 
     def exchange(self, data):
         with self.lock:
@@ -335,9 +326,11 @@ class Handler(BaseHTTPRequestHandler):
             app.sessions.pop(digest(jar['buzz_session'].value), None)
             return self.respond(200, {'ok': True}, cookie='buzz_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0; Secure')
         if self.path == '/api/pair/bundle':
-            return self.respond(200, app.bundle(), 'application/zip', attachment='Buzz-Windows-Connect.zip')
+            platform = data.get('platform', 'windows-amd64')
+            _, filename = connection_bundle.target(platform)
+            return self.respond(200, app.bundle(platform), 'application/zip', attachment=filename)
         if self.path == '/api/devices':
-            return self.respond(200, {'ok': True, 'devices': [{'id': k, 'name': v['name']} for k, v in app.devices.items()]})
+            return self.respond(200, {'ok': True, 'platforms': connection_bundle.available(app.artifacts), 'devices': [{'id': k, 'name': v['name']} for k, v in app.devices.items()]})
         if self.path == '/api/revoke':
             return self.respond(200, app.revoke(data.get('id')))
         operations = {'/api/release/status': 'release-status', '/api/release/retry': 'release-retry', '/api/status': 'status', '/api/discover': 'discover', '/api/configure': 'configure',

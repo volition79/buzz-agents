@@ -19,6 +19,11 @@ class ContractTests(unittest.TestCase):
         self.assertEqual(rc.validate(CONTRACT),CONTRACT)
         for change in ({'runtime':rc.PREFIX+'runtime:stable'},{'portal':'evil@sha256:'+'a'*64},{'schema':2},{'extra':1}):
             with self.assertRaises(ToolError):rc.validate({**CONTRACT,**change})
+    def test_management_only_contract_is_explicit_boolean(self):
+        self.assertEqual(rc.validate({**CONTRACT,'management_only':True})['management_only'],True)
+        self.assertEqual(rc.validate(CONTRACT),CONTRACT)
+        for value in ('true',1,None,[],{}):
+            with self.assertRaises(ToolError):rc.validate({**CONTRACT,'management_only':value})
     def test_contract_overrides_legacy_environment(self):
         with tempfile.TemporaryDirectory() as tmp:
             b=Broker('runtime:old',Path(tmp),Path(tmp),CONTRACT)
@@ -160,6 +165,44 @@ class CoordinatorTests(unittest.TestCase):
     def tearDown(self):
         for p in reversed(self.patches):p.stop()
         self.f.tearDown()
+    def test_connector_release_preserves_old_bots_and_never_enters_runtime_update(self):
+        self.r.contract = {**CONTRACT, 'management_only':True}
+        for status in ('running','stopped','held','needs_login'):
+            with self.subTest(status=status):
+                atomic_json(self.f.root/'bots'/PUBKEY/'state/runtime.json', {'status':status})
+                before = {p:p.read_bytes() for p in self.f.root.rglob('*') if p.is_file() and p != self.r.path}
+                with patch.object(self.b,'settings') as settings, patch.object(rc,'image') as image, patch('buzz_agents.rollout.ExistingBotUpdater.apply') as apply:
+                    self.r.tick()
+                    self.r.retry()
+                    self.r.tick()
+                    settings.assert_not_called(); image.assert_not_called(); apply.assert_not_called()
+                self.assertEqual(self.r.status()['state'],'current')
+                self.assertTrue(self.r.status()['management_only'])
+                self.assertEqual({p:p.read_bytes() for p in before},before)
+                self.assertFalse(any('stop' in a or 'up' in a for a in self.f.commands))
+
+    def test_management_only_still_checks_management_compatibility(self):
+        self.r.contract = {**CONTRACT, 'management_only':True}
+        with patch.object(self.r,'verify_management',side_effect=ToolError('release_management_mismatch')):
+            self.r.tick()
+        self.assertEqual(self.r.status()['state'],'waiting')
+        self.assertEqual(self.r.status()['error'],'release_management_mismatch')
+        self.assertFalse(any('stop' in a or 'up' in a for a in self.f.commands))
+
+    def test_management_only_release_matching_runtime_never_updates_bots(self):
+        self.f.current['Image'] = self.f.settings['image_id']
+        for running, status in ((True,'running'), (False,'stopped'), (False,'held')):
+            with self.subTest(status=status):
+                self.f.current['State']['Running'] = running
+                atomic_json(self.f.root/'bots'/PUBKEY/'state/runtime.json', {'status':status})
+                before = {p:p.read_bytes() for p in self.f.root.rglob('*') if p.is_file() and p != self.r.path}
+                with patch('buzz_agents.rollout.ExistingBotUpdater.apply') as apply:
+                    self.r.tick()
+                    apply.assert_not_called()
+                self.assertEqual(self.r.status()['bots'][PUBKEY]['state'], 'current')
+                self.assertEqual({p:p.read_bytes() for p in before}, before)
+                self.assertFalse(any('stop' in a or 'up' in a for a in self.f.commands))
+
     def test_running_runtime_waits_without_stop(self):
         atomic_json(self.f.root/'bots'/PUBKEY/'state/runtime.json',{'status':'running'})
         self.r.tick()

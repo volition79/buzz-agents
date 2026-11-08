@@ -64,6 +64,14 @@ class Rollout:
             job={'target':self.contract['release'],'runtime':self.contract['runtime'],'state':'checking','bots':{}}
         try:
             self.verify_management()
+            if self.contract.get('management_only') is True:
+                # Connector-only releases must not reconcile even old/stopped
+                # bots. Do not call settings(), pull a runtime, or inspect/apply
+                # bot configuration. Explicit administrator updates stay separate.
+                job.update(state='current', management_only=True)
+                job.pop('error', None)
+                self.save(job)
+                return
             release_contract.image(self.run,self.contract['runtime'],pull=True)
             with self.broker.lock:
                 if self.broker.update_running or self.broker.reauth.running:

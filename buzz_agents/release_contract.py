@@ -8,7 +8,10 @@ PATH = Path('/app/buzz-release.json')
 PREFIX = 'ghcr.io/volition79/buzz-agents-'
 
 def validate(value):
-    if not isinstance(value, dict) or set(value) != {'schema', 'release', 'runtime', 'portal', 'api'}:
+    required = {'schema', 'release', 'runtime', 'portal', 'api'}
+    if not isinstance(value, dict) or set(value) not in (required, required | {'management_only'}):
+        raise ToolError('invalid_release_contract')
+    if 'management_only' in value and type(value['management_only']) is not bool:
         raise ToolError('invalid_release_contract')
     if value['schema'] != 1 or value['api'] != 1 or not re.fullmatch('[0-9a-f]{40}', str(value['release'])):
         raise ToolError('invalid_release_contract')

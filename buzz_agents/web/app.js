@@ -42,7 +42,8 @@ const errors = {
   try_again_in_one_minute: t('요청이 많습니다. 1분 후 다시 시도해 주세요.'),
   configure_relay_first: t('먼저 내 Relay를 연결해 주세요.'),
   existing_relay_configuration_preserved: t('이미 연결된 Relay 설정은 자동으로 변경하지 않습니다.'),
-  connection_program_not_packaged: t('Windows 연결 프로그램이 아직 이미지에 포함되지 않았습니다.'),
+  connection_program_not_packaged: t('선택한 연결 프로그램이 아직 이미지에 포함되지 않았습니다.'),
+  unsupported_connection_platform: t('지원하지 않는 연결 프로그램입니다.'),
   stop_bot_before_authentication: t('실행 중인 봇을 Buzz에서 중지한 뒤 로그인해 주세요.'),
   existing_installation_requires_migration: t('이전 설치 데이터가 있습니다. 자동으로 덮어쓰지 않습니다.'),
   login_session_expired: t('로그인 시간이 만료되었습니다. 해당 봇의 로그인 버튼을 다시 눌러 주세요.'),
@@ -181,7 +182,7 @@ async function refreshRelease(){
     const reply=await api('release/status');const job=reply.release_update;
     if(!job)return;
     box.replaceChildren();
-    const title=document.createElement('p');title.textContent=t(job.state==='current'?'업데이트 적용 완료':job.state==='legacy'?'기존 설치 방식입니다. 통합 업데이트로 전환하려면 업데이트 안내를 확인하세요.':'업데이트 상태')+(job.target?' · '+job.target.slice(0,12):'');box.append(title);
+    const title=document.createElement('p');title.textContent=t(job.state==='current'?(job.management_only?'관리 기능 업데이트 완료 · 기존 봇 실행 환경 유지':'업데이트 적용 완료'):job.state==='legacy'?'기존 설치 방식입니다. 통합 업데이트로 전환하려면 업데이트 안내를 확인하세요.':'업데이트 상태')+(job.target?' · '+job.target.slice(0,12):'');box.append(title);
     if(job.error){const p=document.createElement('p');p.textContent=releaseMessage(job.error);box.append(p);}
     for(const item of Object.values(job.bots||{})){
       const p=document.createElement('p');p.textContent=(item.name||'AI')+' · '+t(({current:'적용 완료',pending:'대기 중',waiting:'확인 필요',applying:'적용 중',failed:'실패',interrupted:'확인 필요'})[item.state]||'확인 필요')+(item.error?' — '+releaseMessage(item.error):'');box.append(p);
@@ -236,7 +237,7 @@ async function refresh(){
   const data=await api('status');configured=data.configured;renderSwap(data.swap);
   await refreshReauth();
   await refreshRelease();
-  $('download').disabled=!configured;$('relayBadge').textContent=configured?t('연결됨'):t('연결 대기');$('step1').classList.toggle('done',configured);
+  $('download').disabled=!configured;$('downloadMac').disabled=!configured;$('relayBadge').textContent=configured?t('연결됨'):t('연결 대기');$('step1').classList.toggle('done',configured);
   if(configured){$('relay').value=data.relay;$('owner').value=data.owner;}
   $('communityRelay').value=configured?data.relay:'';
   $('mobilePairingStatus').textContent=t(data.mobile_pairing?.state==='available'?"페어링 연결 경로를 확인했습니다. 휴대폰 연결 완료는 직접 확인해 주세요.":configured?"페어링 자동 설정을 확인해야 합니다. 먼저 Try again을 누르고, 계속 실패하면 위의 다시 시작 안내를 따라 주세요. 반복되면 broker 로그의 Mobile pairing 항목을 확인하세요.":"내 Relay 설정을 저장하면 휴대폰 페어링을 자동으로 준비합니다.");
@@ -249,12 +250,12 @@ async function refresh(){
   for(const bot of data.bots){const card=document.createElement('div');card.className='bot';const details=document.createElement('div');const name=document.createElement('strong');name.textContent=bot.name;const sub=document.createElement('small');sub.textContent=(bot.provider==='codex'?'Codex':'Claude Code')+' · '+bot.pubkey.slice(0,12)+'…';details.append(name,sub);const health=botHealth(bot);if(health){const info=document.createElement('small');info.textContent=health;details.append(info);}const state=document.createElement('span');state.className='state';state.textContent=statusName(bot.status);const button=document.createElement('button');button.className='secondary';button.textContent=t('계정 로그인');button.disabled=bot.status==='running'||!bot.container_running||Boolean(authSession);button.onclick=async()=>{button.disabled=true;try{await startLogin(bot);}catch(e){message(e.message,true);button.disabled=false;}};const actions=document.createElement('div');actions.className='bot-actions';const updateButton=document.createElement('button');updateButton.className='secondary update-bot';updateButton.textContent=t('업데이트·다시 시작');updateButton.disabled=Boolean(authSession)||data.update?.state==='running';updateButton.onclick=()=>openUpdate(bot).catch(e=>message(e.message,true));button.disabled=button.disabled||data.update?.state==='running';const reauthButton=document.createElement('button');reauthButton.className='secondary reauth-bot';reauthButton.textContent=t('재로그인');reauthButton.disabled=Boolean(authSession)||reauthBusy||data.update?.state==='running';reauthButton.onclick=()=>startReauth(bot).catch(e=>message(e.message,true));button.disabled=button.disabled||reauthBusy;updateButton.disabled=updateButton.disabled||reauthBusy;const ram=memoryControl(bot,Boolean(authSession)||reauthBusy||updateBusy||data.update?.state==='running');if(ram)details.append(ram);actions.append(button,reauthButton,updateButton);card.append(details,state,actions);$('bots').append(card);const option=document.createElement('option');option.value=bot.pubkey;option.textContent=bot.name;$('scheduleBot').append(option);}
   if(selected)$('scheduleBot').value=selected;
   renderUpdateStatus(data.update);
-  const devices=await api('devices');$('devices').replaceChildren();$('step2').classList.toggle('done',devices.devices.length>0);
+  const devices=await api('devices');$('macConnect').hidden=!(devices.platforms||[]).includes('macos-arm64');$('devices').replaceChildren();$('step2').classList.toggle('done',devices.devices.length>0);
   knownDevices=new Set(devices.devices.map(d=>d.id));
-  if(pendingPairing && devices.devices.some(d=>!pendingPairing.ids.has(d.id))){pendingPairing=null;$('connectionHint').textContent=t('서버에 Windows 연결이 등록되었습니다. 연결 프로그램의 저장 완료 메시지도 확인하세요. 연결 완료 후에는 파일의 10분 제한이 적용되지 않습니다.');message(t('Windows 연결이 서버에 등록되었습니다. 프로그램에서 저장 완료를 확인한 뒤 Buzz를 다시 실행하세요.'));}
+  if(pendingPairing && devices.devices.some(d=>!pendingPairing.ids.has(d.id))){pendingPairing=null;$('connectionHint').textContent=t('서버에 PC 연결이 등록되었습니다. 연결 프로그램의 저장 완료 메시지도 확인하세요. 연결 완료 후에는 파일의 10분 제한이 적용되지 않습니다.');message(t('PC 연결이 서버에 등록되었습니다. 프로그램에서 저장 완료를 확인한 뒤 Buzz를 다시 실행하세요.'));}
   else if(pendingPairing && Date.now()>=pendingPairing.deadline){pendingPairing=null;message(t('연결 파일의 10분 유효시간이 지났습니다. 아직 연결하지 못했다면 새 연결 파일을 받으세요.'),true);}
   $('download').textContent=devices.devices.length||pendingPairing?t('새 Windows 연결 파일 받기 ↓'):t('Windows 연결 파일 받기 ↓');
-  for(const device of devices.devices){const row=document.createElement('div'),name=document.createElement('span'),button=document.createElement('button');name.textContent=device.name+' · ID '+device.id;button.className='quiet';button.textContent=t('연결 해제');button.onclick=async()=>{if(!confirm(t('이 Windows 연결 권한을 해제할까요? VPS의 실행 중인 봇은 유지됩니다.')))return;try{await api('revoke',{id:device.id});await refresh();}catch(e){message(e.message,true);}};row.append(name,button);$('devices').append(row);}
+  for(const device of devices.devices){const row=document.createElement('div'),name=document.createElement('span'),button=document.createElement('button');name.textContent=device.name+' · ID '+device.id;button.className='quiet';button.textContent=t('연결 해제');button.onclick=async()=>{if(!confirm(t('이 PC 연결 권한을 해제할까요? VPS의 실행 중인 봇은 유지됩니다.')))return;try{await api('revoke',{id:device.id});await refresh();}catch(e){message(e.message,true);}};row.append(name,button);$('devices').append(row);}
 }
 function showLogin(bot, session){
   authSession=session;$('authTitle').textContent=bot.name+t(' · 공식 로그인');
@@ -343,7 +344,18 @@ action('recoveryForm',async()=>{await api('recover',{recovery_code:$('recoveryCo
 action('relayForm',async()=>{await api('configure',{relay:$('relay').value.trim(),owner:$('owner').value.trim()});message(t('Relay 연결 설정을 저장했습니다. 이제 Windows 연결 파일을 받으세요.'));await refresh();},'submit');
 action('discover',discover);action('refresh',refresh);
 action('retryStartup',enter);
-action('download',async()=>{const ids=new Set(knownDevices),blob=await api('pair/bundle');pendingPairing={ids,deadline:Date.now()+600000};const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='Buzz-Windows-Connect.zip';a.click();setTimeout(()=>URL.revokeObjectURL(url),10000);message(t('압축을 풀고 Buzz-VPS-Connect.exe를 실행해 주세요. 연결 파일은 10분 후 만료됩니다.'));});
+async function downloadConnection(platform) {
+  const ids=new Set(knownDevices);
+  const mac=platform==='macos-arm64';
+  const blob=await api('pair/bundle',mac?{platform}:{});
+  pendingPairing={ids,deadline:Date.now()+600000};
+  const url=URL.createObjectURL(blob),a=document.createElement('a');
+  a.href=url;a.download=mac?'Buzz-Mac-AppleSilicon-Connect.zip':'Buzz-Windows-Connect.zip';
+  a.click();setTimeout(()=>URL.revokeObjectURL(url),10000);
+  message(mac?t('압축을 모두 풀고 Buzz-VPS-Connect.command를 실행하세요. 연결 파일은 10분 후 만료됩니다.'):t('압축을 풀고 Buzz-VPS-Connect.exe를 실행해 주세요. 연결 파일은 10분 후 만료됩니다.'));
+}
+action('download',()=>downloadConnection('windows-amd64'));
+action('downloadMac',()=>downloadConnection('macos-arm64'));
 action('authForm',async()=>{if(!authSession)return;const input=$('authInput').value;$('authInput').value='';await api('auth/input',{session:authSession,text:input});},'submit');
 action('cancelAuth',async()=>{const result=authSession?await api('auth/cancel',{session:authSession}):null;authSession=null;$('authForm').hidden=true;$('cancelAuth').hidden=true;$('authInput').value='';$('terminal').textContent='';$('authLinks').replaceChildren();$('authStatus').textContent=result?.expired?errors.login_session_expired:t('로그인 세션을 중지했습니다.');await refresh();});
 action('scheduleInit',async()=>{const result=await api('schedule/init');$('schedulerKey').textContent=result.pubkey;});

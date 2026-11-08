@@ -22,11 +22,15 @@ def compose(broker):
 if __name__=='__main__':
     p=argparse.ArgumentParser()
     for key in ('release','runtime','portal','output'):p.add_argument('--'+key,required=True)
+    p.add_argument('--management-only', action='store_true', help='Preserve all existing bots; use the reviewed existing runtime digest')
     args=p.parse_args()
     contract=validate(dict(schema=1,api=1,release=args.release,runtime=args.runtime,portal=args.portal))
+    if args.management_only:
+        contract=validate({**contract,'management_only':True})
     out=Path(args.output);out.mkdir(parents=True,exist_ok=True)
     (out/'buzz-release.json').write_text(json.dumps(contract,indent=2)+'\n')
     (out/'compose.stable.yaml').write_text(compose(PREFIX+'broker:stable'))
     (out/'BUILD-ARGS.json').write_text(json.dumps({
-        'BUZZ_RELEASE':args.release,'BUZZ_RELEASE_RUNTIME':args.runtime,'BUZZ_RELEASE_PORTAL':args.portal},indent=2)+'\n')
+        'BUZZ_RELEASE':args.release,'BUZZ_RELEASE_RUNTIME':args.runtime,'BUZZ_RELEASE_PORTAL':args.portal,
+        'BUZZ_RELEASE_MANAGEMENT_ONLY':'true' if args.management_only else 'false'},indent=2)+'\n')
     print('Candidate prepared only. Do not publish stable before Docker/portal/rollout acceptance.')

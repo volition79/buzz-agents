@@ -1,0 +1,131 @@
+{
+  "status": "active",
+  "importance_score": 850,
+  "importance_reason": "Privileged lifecycle and persistent data across mixed release and external restart",
+  "decision_context": {
+    "schema": "sonol.code-rationale-context.v1",
+    "authoring_environment": {
+      "os": "Linux WSL",
+      "provider": "Codex",
+      "execution_environment": "local repository"
+    },
+    "targets": [
+      {
+        "os": "linux",
+        "provider": "local test fixtures",
+        "execution_environment": "Python unittest",
+        "applicability": "affected",
+        "reason": "Local fixtures; native Mac and production acceptance pending"
+      }
+    ],
+    "conditions": [
+      {
+        "condition": "Existing owned installation with optional embedded release contract",
+        "relevance": "applies",
+        "reason": "Legacy immutable installs stay explicit; candidate not promoted"
+      }
+    ],
+    "boundaries": [
+      {
+        "path": "buzz_agents/release_contract.py",
+        "logical_owner": "release_contract",
+        "role": "helper",
+        "review": "Preserve UNIFIED-UPDATE lifecycle invariants: management-only connector release must skip automatic updates even for old stopped bots. Default releases retain existing behavior."
+      },
+      {
+        "path": "buzz_agents/rollout.py",
+        "logical_owner": "rollout",
+        "role": "helper",
+        "review": "Preserve UNIFIED-UPDATE lifecycle invariants: management-only connector release must skip automatic updates even for old stopped bots. Default releases retain existing behavior."
+      },
+      {
+        "path": "Dockerfile.portal",
+        "logical_owner": "Dockerfile",
+        "role": "helper",
+        "review": "Preserve UNIFIED-UPDATE lifecycle invariants: management-only connector release must skip automatic updates even for old stopped bots. Default releases retain existing behavior."
+      },
+      {
+        "path": "scripts/render-unified-release.py",
+        "logical_owner": "render-unified-release",
+        "role": "helper",
+        "review": "Preserve UNIFIED-UPDATE lifecycle invariants: management-only connector release must skip automatic updates even for old stopped bots. Default releases retain existing behavior."
+      }
+    ],
+    "verification": [
+      {
+        "assertion_id": "mac-connect-preserve-01",
+        "test_reference": "tests/test_release_update.py",
+        "environment": {
+          "os": "linux",
+          "provider": "local test fixtures",
+          "execution_environment": "Python unittest"
+        },
+        "status": "passed",
+        "evidence_kind": "fixture",
+        "evidence": [
+          "docs/MAC-CONNECT-VERIFICATION.md"
+        ]
+      }
+    ]
+  },
+  "id": "MAC-CONNECT-PRESERVE-01",
+  "reason": "Preserve UNIFIED-UPDATE lifecycle invariants: management-only connector release must skip automatic updates even for old stopped bots. Default releases retain existing behavior.",
+  "evidence_level": "documented",
+  "evidence": [
+    "docs/MAC-CONNECT.md",
+    "tests/test_release_update.py"
+  ],
+  "invariants": [
+    "Existing Windows credentials and bot identities persist",
+    "No automatic bot update for management_only true",
+    "Native macOS and live deployment are not verified"
+  ],
+  "anchors": [
+    {
+      "path": "buzz_agents/release_contract.py",
+      "start_line": 1,
+      "end_line": 30,
+      "module": "release_contract",
+      "role": "helper",
+      "code": "\"\"\"A management image selects a reviewed, immutable release, never a task URL.\"\"\"\nimport json\nfrom pathlib import Path\nimport re\nfrom .common import ToolError\n\nPATH = Path('/app/buzz-release.json')\nPREFIX = 'ghcr.io/volition79/buzz-agents-'\n\ndef validate(value):\n    required = {'schema', 'release', 'runtime', 'portal', 'api'}\n    if not isinstance(value, dict) or set(value) not in (required, required | {'management_only'}):\n        raise ToolError('invalid_release_contract')\n    if 'management_only' in value and type(value['management_only']) is not bool:\n        raise ToolError('invalid_release_contract')\n    if value['schema'] != 1 or value['api'] != 1 or not re.fullmatch('[0-9a-f]{40}', str(value['release'])):\n        raise ToolError('invalid_release_contract')\n    for role in ('runtime', 'portal'):\n        if not re.fullmatch(re.escape(PREFIX + role) + r'@sha256:[0-9a-f]{64}', str(value[role])):\n            raise ToolError('invalid_release_contract')\n    return value\n\ndef load(path=PATH):\n    if not path.exists():\n        return None  # Legacy immutable candidates keep their original explicit flow.\n    return validate(json.loads(path.read_text()))\n\ndef image(runner, ref, pull=False):\n    try:\n        record = json.loads(runner(['docker', 'image', 'inspect', ref]))[0]\n",
+      "code_sha256": "4c9965d223701167ce972927178b9d2e0c290dc688cc0259ead4f83f4dd94f60",
+      "file_sha256": "b57cb6b409bb6b0dd8596203433bf9d0b2deb55abae5d8f7417bc292b3f73e75"
+    },
+    {
+      "path": "buzz_agents/rollout.py",
+      "start_line": 1,
+      "end_line": 30,
+      "module": "rollout",
+      "role": "helper",
+      "code": "\"\"\"Durable per-bot release reconciliation. Uncertain work is never replayed.\"\"\"\nimport json\nimport os\nimport re\nimport threading\nimport time\nfrom pathlib import Path\nfrom .common import ToolError\nfrom .host import Deployer, execute, container_name\nfrom .bot_update import ExistingBotUpdater\nfrom .policy import atomic_json, read_json\nfrom . import release_contract, memory_settings\n\nclass Rollout:\n    def __init__(self, broker, contract=None, runner=execute):\n        self.broker, self.contract, self.run = broker, contract, runner\n        self.path = broker.control / 'release-update.json'\n        self.lock = threading.RLock()\n\n    def status(self):\n        with self.lock:\n            return read_json(self.path, {'state':'legacy', 'bots':{}})\n\n    def save(self, job):\n        with self.lock:\n            atomic_json(self.path, job)\n\n    def retry(self):\n        # A separate durable request avoids racing a background snapshot write.\n        with self.lock:\n",
+      "code_sha256": "c74e9a2b95235304268c11c0c98aebc7644010a8fdb8a6068bf4508d527b6dc8",
+      "file_sha256": "74da379a5c26ebbff4232c0c72fe9bbde29685314f582e770962bbf6e5462344"
+    },
+    {
+      "path": "Dockerfile.portal",
+      "start_line": 1,
+      "end_line": 30,
+      "module": "Dockerfile",
+      "role": "helper",
+      "code": "# syntax=docker/dockerfile:1.7\nARG PYTHON_IMAGE=python:3.12.15-slim-bookworm@sha256:34386ef0cb081344d7ec1c103ba398e6e9f64e9ab3a1509accc92a4e24a07258\nFROM docker:28.5.1-cli@sha256:9190b0613792e658a7783cf14b2d5ace5941bb68ede7276922ea36ee457d76ad AS docker-cli\nFROM ${PYTHON_IMAGE} AS base\nENV PYTHONPATH=/app PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1\nWORKDIR /app\nCOPY LICENSE /usr/local/share/licenses/buzz-agents/LICENSE\nCOPY buzz_agents /app/buzz_agents\nRUN chmod -R a+rX,go-w /app\n\nFROM base AS broker\nRUN apt-get update && apt-get install -y --no-install-recommends util-linux && rm -rf /var/lib/apt/lists/*\nARG BUZZ_RELEASE\nARG BUZZ_RELEASE_RUNTIME\nARG BUZZ_RELEASE_PORTAL\nARG BUZZ_RELEASE_MANAGEMENT_ONLY=false\nRUN if [ -n \"$BUZZ_RELEASE\" ]; then python -c 'import json,sys; from buzz_agents.release_contract import validate; v=dict(schema=1,api=1,release=sys.argv[1],runtime=sys.argv[2],portal=sys.argv[3]); flag=json.loads(sys.argv[4]); assert type(flag) is bool; v.update(management_only=True) if flag else None; v=validate(v); open(\"/app/buzz-release.json\",\"w\").write(json.dumps(v))' \"$BUZZ_RELEASE\" \"$BUZZ_RELEASE_RUNTIME\" \"$BUZZ_RELEASE_PORTAL\" \"$BUZZ_RELEASE_MANAGEMENT_ONLY\"; fi\nCOPY --from=docker-cli /usr/local/bin/docker /usr/local/bin/docker\nCOPY --from=docker-cli /usr/local/libexec/docker/cli-plugins/docker-compose /usr/local/libexec/docker/cli-plugins/docker-compose\nRUN mkdir -p /control /rpc /var/lib/buzz-agents-v2 /var/lib/buzz-agents-easy-scheduler\nUSER 0:0\nCMD [\"python\", \"-m\", \"buzz_agents.portal_broker\"]\n\nFROM base AS portal\nCOPY connect/assets/Buzz-VPS-Connect.exe /artifacts/Buzz-VPS-Connect.exe\nCOPY connect/assets/macos/ /artifacts/macos/\nRUN groupadd --gid 10002 portal \\\n    && useradd --uid 10002 --gid 10002 --no-create-home portal \\\n    && mkdir /portal && chown 10002:10002 /portal \\\n    && chmod 0700 /portal && chmod -R a+rX,go-w /artifacts && chmod 0444 /artifacts/Buzz-VPS-Connect.exe\n",
+      "code_sha256": "6fd1b2d67c6f8fad3e4f275eee732da40867338d431804004b7eb48c5eeba407",
+      "file_sha256": "b945a74c0a1d81d7f46a4830faab3ae6f7eff6237557f4e152e66bb53c75c910"
+    },
+    {
+      "path": "scripts/render-unified-release.py",
+      "start_line": 1,
+      "end_line": 30,
+      "module": "render-unified-release",
+      "role": "helper",
+      "code": "\"\"\"Prepare a unified candidate from reviewed immutable images; never publish tags.\"\"\"\nimport argparse\nimport json\nfrom pathlib import Path\nimport sys\nsys.path.insert(0,str(Path(__file__).resolve().parents[1]))\nfrom buzz_agents.release_contract import validate, PREFIX\n\n\ndef compose(broker):\n    # Bootstrap has no variable or domain discovery requirements. The broker\n    # pulls its embedded immutable runtime via Docker, not via container network.\n    source=(Path(__file__).resolve().parents[1]/'compose.portal.yaml').read_text()\n    a=source.index('  runtime-image:');b=source.index('  broker:',a)\n    source=source[:a]+source[b:]\n    a=source.index('    depends_on:\\n      runtime-image:');b=source.index('    network_mode: none',a)\n    source=source[:a]+source[b:]\n    source=source.replace('${BUZZ_BROKER_IMAGE:?Set the published broker image digest}',broker)\n    source=source.replace('${BUZZ_PORTAL_IMAGE:?Set the published portal image digest}',PREFIX+'portal:stable')\n    return source\n\nif __name__=='__main__':\n    p=argparse.ArgumentParser()\n    for key in ('release','runtime','portal','output'):p.add_argument('--'+key,required=True)\n    p.add_argument('--management-only', action='store_true', help='Preserve all existing bots; use the reviewed existing runtime digest')\n    args=p.parse_args()\n    contract=validate(dict(schema=1,api=1,release=args.release,runtime=args.runtime,portal=args.portal))\n    if args.management_only:\n        contract=validate({**contract,'management_only':True})\n    out=Path(args.output);out.mkdir(parents=True,exist_ok=True)\n",
+      "code_sha256": "50d27c51aa315ab56b88938613fc9b94157996e6dd3c8e9324d33d2fd66b3086",
+      "file_sha256": "8aa92a995f9b66da585e836aa0e2360cac0410b6c27012439022eb3a9ab14a44"
+    }
+  ],
+  "schema": "sonol.code-rationale.v1",
+  "source": {
+    "commit": "8de6b0e72277a62adb8103bf3fc7497736a9c3aa",
+    "dirty": true
+  },
+  "assessment_status": "assessed"
+}

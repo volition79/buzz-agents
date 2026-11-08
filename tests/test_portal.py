@@ -74,6 +74,72 @@ class PortalHTTPTests(unittest.TestCase):
             self.assertIn('Buzz-VPS-Connect.exe', archive.namelist())
             return json.loads(archive.read('buzz-pairing.json'))
 
+    def test_mac_selection_missing_artifact_and_invalid_platform_do_not_issue_grants(self):
+        self.login()
+        before = dict(self.app.grants)
+        for platform in ('macos-arm64', 'macos-amd64', '../Buzz-VPS-Connect.exe', None, [], {}):
+            with self.subTest(platform=platform):
+                status, _, _ = self.call('/api/pair/bundle', {'platform': platform})
+                self.assertEqual(status, 400)
+                self.assertEqual(self.app.grants, before)
+        _, devices, _ = self.call('/api/devices', {})
+        self.assertEqual(devices['platforms'], ['windows-amd64'])
+        self.assertEqual(self.calls, [])
+
+    def test_mac_zip_executable_modes_and_auth_boundary(self):
+        mac = self.root/'macos'/'Buzz-VPS-Connect-macos-arm64'
+        mac.parent.mkdir(); mac.write_bytes(b'\xcf\xfa\xed\xfe-fixture')
+        self.assertEqual(self.call('/api/pair/bundle', {'platform':'macos-arm64'})[0], 401)
+        self.login()
+        self.assertEqual(self.call('/api/pair/bundle', {'platform':'macos-arm64'}, origin=False)[0], 403)
+        status, raw, headers = self.call('/api/pair/bundle', {'platform':'macos-arm64'})
+        self.assertEqual(status, 200)
+        self.assertIn('Buzz-Mac-AppleSilicon-Connect.zip', headers['Content-Disposition'])
+        self.assertEqual(headers['Cache-Control'], 'no-store')
+        with zipfile.ZipFile(io.BytesIO(raw)) as archive:
+            self.assertEqual(set(archive.namelist()), {'Buzz-VPS-Connect', 'Buzz-VPS-Connect.command', 'buzz-pairing.json', '시작하기.txt'})
+            for name in ('Buzz-VPS-Connect', 'Buzz-VPS-Connect.command'):
+                self.assertEqual(archive.getinfo(name).create_system, 3)
+                self.assertEqual((archive.getinfo(name).external_attr >> 16) & 0o777, 0o755)
+            pairing = json.loads(archive.read('buzz-pairing.json'))
+            self.assertEqual(pairing['schema'], 1)
+            self.assertNotIn(pairing['pairing_code'].encode(), archive.read('Buzz-VPS-Connect.command'))
+        self.now[0] += 601
+        self.assertEqual(self.call('/api/pair/exchange', {'pairing_code':pairing['pairing_code']}, origin=False)[0], 400)
+        self.assertEqual(self.calls, [])
+
+    def test_existing_windows_credential_survives_mac_pair_and_revoke(self):
+        windows = self.pair()
+        _, win, _ = self.call('/api/pair/exchange', {'pairing_code':windows['pairing_code']}, cookie='', origin=False)
+        persisted = (self.root/'portal/devices.json').read_bytes()
+        self.app = Portal(self.root/'portal', self.url, rpc=self.app.rpc,
+                          clock=lambda:self.now[0], local=True, artifacts=self.root)
+        self.server.app = self.app
+        self.assertEqual((self.root/'portal/devices.json').read_bytes(), persisted)
+        self.cookie = ''
+        _, _, headers = self.call('/api/login', {'password':'test-password-long'})
+        self.cookie = headers['Set-Cookie'].split(';')[0]
+        mac = self.root/'macos'/'Buzz-VPS-Connect-macos-arm64'
+        mac.parent.mkdir(); mac.write_bytes(b'\xcf\xfa\xed\xfe-fixture')
+        _, raw, _ = self.call('/api/pair/bundle', {'platform':'macos-arm64'})
+        with zipfile.ZipFile(io.BytesIO(raw)) as archive:
+            pairing = json.loads(archive.read('buzz-pairing.json'))
+        _, new, _ = self.call('/api/pair/exchange', {'pairing_code':pairing['pairing_code'],'name':'Mac'}, cookie='', origin=False)
+        self.assertEqual(self.call('/api/pair/exchange', {'pairing_code':pairing['pairing_code']}, cookie='', origin=False)[0], 400)
+        wh = {'Authorization':'Bearer '+win['token']}
+        mh = {'Authorization':'Bearer '+new['token']}
+        self.assertEqual(self.call('/api/device/check', {}, cookie='', headers=wh, origin=False)[0], 200)
+        self.assertEqual(self.call('/api/release/retry', {}, cookie='', headers=mh)[0], 401)
+        self.assertEqual(self.call('/api/device/revoke-self', {}, cookie='', headers=mh, origin=False)[0], 200)
+        self.assertEqual(self.call('/api/device/check', {}, cookie='', headers=mh, origin=False)[0], 401)
+        self.assertEqual(self.call('/api/device/deploy', {'op':'deploy','agent':{'test':True}}, cookie='', headers=wh, origin=False)[0], 200)
+        self.assertEqual(self.calls, [{'op':'deploy','request':{'op':'deploy','agent':{'test':True}}}])
+        _, raw, headers = self.call('/api/pair/bundle', {})
+        self.assertIn('Buzz-Windows-Connect.zip', headers['Content-Disposition'])
+        with zipfile.ZipFile(io.BytesIO(raw)) as archive:
+            self.assertIn('Buzz-VPS-Connect.exe', archive.namelist())
+            self.assertNotIn('Buzz-VPS-Connect.command', archive.namelist())
+
     def test_bot_updates_require_admin_not_device_and_same_origin(self):
         for path in ('/api/bot/memory', '/api/bot/update-preview', '/api/bot/update', '/api/auth/reauth/start', '/api/auth/reauth/status', '/api/release/status', '/api/release/retry'):
             self.assertEqual(self.call(path, {'pubkey':PUBKEY})[0], 401)

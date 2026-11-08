@@ -2,6 +2,15 @@
 // Korean source copy is the message key. Add another catalog to support another locale.
 (() => {
   const catalogs = {en: {
+"관리 기능 업데이트 완료 · 기존 봇 실행 환경 유지": "Management updated · existing bot runtimes preserved",
+"선택한 연결 프로그램이 아직 이미지에 포함되지 않았습니다.": "The selected connector is not included in this server image.",
+"지원하지 않는 연결 프로그램입니다.": "This connector platform is not supported.",
+"Mac 연결 파일 받기 · Apple Silicon ↓": "Download Mac connection bundle \u00b7 Apple Silicon \u2193",
+"Apple Silicon Mac용입니다. 압축을 모두 풀고 Buzz를 종료한 뒤 Buzz-VPS-Connect.command를 실행하세요. Intel Mac은 지원하지 않습니다.": "For Apple Silicon Macs. Extract all files, close Buzz, then open Buzz-VPS-Connect.command. Intel Macs are not supported.",
+"압축을 모두 풀고 Buzz-VPS-Connect.command를 실행하세요. 연결 파일은 10분 후 만료됩니다.": "Extract all files and open Buzz-VPS-Connect.command. The pairing bundle expires in 10 minutes.",
+"이 PC 연결 권한을 해제할까요? VPS의 실행 중인 봇은 유지됩니다.": "Revoke this computer connection? Running VPS bots are preserved.",
+"서버에 PC 연결이 등록되었습니다. 연결 프로그램의 저장 완료 메시지도 확인하세요. 연결 완료 후에는 파일의 10분 제한이 적용되지 않습니다.": "A computer connection was registered on the server. Also confirm the connector saved it successfully. The 10-minute limit does not apply after connection.",
+"PC 연결이 서버에 등록되었습니다. 프로그램에서 저장 완료를 확인한 뒤 Buzz를 다시 실행하세요.": "A computer connection was registered. Confirm the connector saved it, then restart Buzz.",
 "공유 스왑 사용 가능": "Shared swap available",
 "공유 스왑 준비 중": "Preparing shared swap",
 "공유 스왑 용량 제한": "Shared swap capacity limited",

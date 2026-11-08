@@ -19,3 +19,5 @@ connect/*
 !connect/assets
 connect/assets/*
 !connect/assets/Buzz-VPS-Connect.exe
+!connect/assets/macos/
+!connect/assets/macos/**

@@ -5,7 +5,6 @@ import (
 	"bufio"
 	"bytes"
 	"crypto/sha256"
-	_ "embed"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -22,9 +21,6 @@ import (
 	"time"
 )
 
-//go:embed assets/buzz-backend-hostinger-https.exe
-var provider []byte
-
 type Pairing struct {
 	Schema   int    `json:"schema"`
 	Endpoint string `json:"endpoint"`
@@ -40,9 +36,6 @@ var tokenPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{32,100}$`)
 
 // Offline catalog of verified official releases. CI checks completeness against
 // published manifests and hashes every distinct executable before publication.
-//
-//go:embed provider-history.json
-var providerHistory []byte
 
 var compatibleProviders = loadProviderHistory()
 
@@ -55,7 +48,7 @@ func loadProviderHistory() map[string]bool {
 			Size   int64  `json:"size"`
 		} `json:"releases"`
 	}
-	if json.Unmarshal(providerHistory, &history) != nil || history.Schema != 1 || len(history.Releases) == 0 {
+	if json.Unmarshal(providerHistory, &history) != nil || history.Schema != 1 || (requireProviderHistory && len(history.Releases) == 0) {
 		panic("invalid embedded provider history")
 	}
 	result := map[string]bool{}
@@ -168,7 +161,7 @@ func installProvider(home string, commit func(string, string, bool) error) error
 	if err := os.MkdirAll(bin, 0755); err != nil {
 		return err
 	}
-	target := filepath.Join(bin, "buzz-backend-hostinger-https.exe")
+	target := filepath.Join(bin, providerFilename)
 	info, err := os.Lstat(target)
 	existed := err == nil
 	if err != nil && !os.IsNotExist(err) {
@@ -259,7 +252,7 @@ func installConnection(p Pairing, home string, client *http.Client, replace bool
 	old, before, readErr := readConnection(home)
 	existed := !os.IsNotExist(readErr)
 	if existed && !replace {
-		return errors.New("이미 Windows 연결 정보가 있습니다. 기존 연결을 보존했습니다. 프로그램에서 재연결을 직접 선택하세요.")
+		return errors.New("이미 연결 정보가 있습니다. 기존 연결을 보존했습니다. 프로그램에서 재연결을 직접 선택하세요.")
 	}
 	if readErr != nil && before == nil && existed {
 		return errors.New("기존 연결 파일에 접근하지 못했습니다. 파일을 변경하지 않았습니다.")
@@ -276,7 +269,7 @@ func installConnection(p Pairing, home string, client *http.Client, replace bool
 	defer f.Close()
 	name, _ := os.Hostname()
 	if name == "" {
-		name = "Windows Buzz"
+		name = desktopName + " Buzz"
 	}
 	if len(name) > 80 {
 		name = name[:80]
@@ -320,7 +313,7 @@ func installConnection(p Pairing, home string, client *http.Client, replace bool
 }
 
 func main() {
-	fmt.Println("Buzz VPS · Windows 연결\nroot 비밀번호나 SSH는 필요하지 않습니다.")
+	fmt.Println("Buzz VPS · " + desktopName + " 연결\nroot 비밀번호나 SSH는 필요하지 않습니다.")
 	in := bufio.NewReader(os.Stdin)
 	defer func() { fmt.Println("\nEnter를 누르면 닫힙니다."); in.ReadString('\n') }()
 	exe, err := os.Executable()
@@ -391,5 +384,5 @@ func main() {
 	if replace && oldErr == nil {
 		fmt.Println("이전 장치 ID: " + old.DeviceID + " — 이전 서버 목록에 남아 있다면 이 ID의 연결만 해제하세요.")
 	}
-	fmt.Println("\nWindows 연결을 저장했습니다.\n1. Buzz를 다시 실행하세요.\n2. 봇 실행 위치에서 Hostinger VPS — HTTPS를 선택하고 배포하세요.\n3. 서버 설정 화면에서 해당 봇의 Codex·Claude 계정에 로그인하세요.")
+	fmt.Println("\n" + desktopName + " 연결을 저장했습니다.\n1. Buzz를 다시 실행하세요.\n2. 봇 실행 위치에서 Hostinger VPS — HTTPS를 선택하고 배포하세요.\n3. 서버 설정 화면에서 해당 봇의 Codex·Claude 계정에 로그인하세요.")
 }

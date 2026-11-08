@@ -1,0 +1,84 @@
+{
+  "status": "active",
+  "importance_score": 850,
+  "importance_reason": "Privileged lifecycle and persistent data across mixed release and external restart",
+  "decision_context": {
+    "schema": "sonol.code-rationale-context.v1",
+    "authoring_environment": {
+      "os": "Linux WSL",
+      "provider": "Codex",
+      "execution_environment": "local repository"
+    },
+    "targets": [
+      {
+        "os": "linux",
+        "provider": "local test fixtures",
+        "execution_environment": "Python unittest",
+        "applicability": "affected",
+        "reason": "Local fixtures; native Mac and production acceptance pending"
+      }
+    ],
+    "conditions": [
+      {
+        "condition": "Existing owned installation with optional embedded release contract",
+        "relevance": "applies",
+        "reason": "Legacy immutable installs stay explicit; candidate not promoted"
+      }
+    ],
+    "boundaries": [
+      {
+        "path": ".dockerignore",
+        "logical_owner": "docker-context",
+        "role": "helper",
+        "review": "Docker build excluded the macos assets directory despite archive membership. Reinclude only connector macos assets so COPY succeeds; keep other connector source and private artifacts excluded."
+      }
+    ],
+    "verification": [
+      {
+        "assertion_id": "mac-connect-01",
+        "test_reference": "Dockerfile.portal",
+        "environment": {
+          "os": "linux",
+          "provider": "local test fixtures",
+          "execution_environment": "Python unittest"
+        },
+        "status": "not_run",
+        "evidence_kind": "fixture",
+        "evidence": [
+          "docs/MAC-DEPLOY-STATUS.md"
+        ]
+      }
+    ]
+  },
+  "id": "MAC-CONNECT-DOCKER-CONTEXT-01",
+  "reason": "Docker build excluded the macos assets directory despite archive membership. Reinclude only connector macos assets so COPY succeeds; keep other connector source and private artifacts excluded.",
+  "evidence_level": "documented",
+  "evidence": [
+    "docs/MAC-DEPLOY-STATUS.md",
+    "Dockerfile.portal",
+    "scripts/build-portal.py"
+  ],
+  "invariants": [
+    "Existing Windows credentials and bot identities persist",
+    "No automatic bot update for management_only true",
+    "Native macOS and live deployment are not verified"
+  ],
+  "anchors": [
+    {
+      "path": ".dockerignore",
+      "start_line": 1,
+      "end_line": 23,
+      "module": "docker-context",
+      "role": "helper",
+      "code": ".git\n.env\n**/__pycache__\n**/*.pyc\nbin\nprovider\ndocs\nexamples\n**/*.sqlite*\n**/secrets\n**/node_modules\n*.zip\nsetup\ndist\ntests\n.sonol-test\n!connect\nconnect/*\n!connect/assets\nconnect/assets/*\n!connect/assets/Buzz-VPS-Connect.exe\n!connect/assets/macos/\n!connect/assets/macos/**\n",
+      "code_sha256": "049d3fb6a879def0c0dbcb42b221763a3554401f4bfaba30678bc7171e2a24f8",
+      "file_sha256": "049d3fb6a879def0c0dbcb42b221763a3554401f4bfaba30678bc7171e2a24f8"
+    }
+  ],
+  "schema": "sonol.code-rationale.v1",
+  "source": {
+    "commit": "8de6b0e72277a62adb8103bf3fc7497736a9c3aa",
+    "dirty": true
+  },
+  "assessment_status": "assessed"
+}

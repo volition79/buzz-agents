@@ -58,7 +58,7 @@ func TestPairExchangeAndInstallPersistsOnlyScopedConnection(t *testing.T) {
 	if calls != 1 {
 		t.Fatal("replayed one-use pairing")
 	}
-	if _, err := os.Stat(filepath.Join(home, ".local", "bin", "buzz-backend-hostinger-https.exe")); err != nil {
+	if _, err := os.Stat(filepath.Join(home, ".local", "bin", providerFilename)); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -66,7 +66,7 @@ func TestExistingDifferentProviderPreservedBeforeExchange(t *testing.T) {
 	home := t.TempDir()
 	bin := filepath.Join(home, ".local", "bin")
 	os.MkdirAll(bin, 0700)
-	target := filepath.Join(bin, "buzz-backend-hostinger-https.exe")
+	target := filepath.Join(bin, providerFilename)
 	os.WriteFile(target, []byte("original"), 0600)
 	err := install(Pairing{Schema: 1, Endpoint: "https://example.com", Code: strings.Repeat("a", 43)}, home, &http.Client{})
 	if err == nil {
@@ -230,7 +230,7 @@ func TestReviewedCompatibleProviderIsUpgraded(t *testing.T) {
 	hash := fmt.Sprintf("%x", sha256.Sum256(old))
 	compatibleProviders[hash] = true
 	defer delete(compatibleProviders, hash)
-	target := filepath.Join(bin, "buzz-backend-hostinger-https.exe")
+	target := filepath.Join(bin, providerFilename)
 	os.WriteFile(target, old, 0600)
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		io.WriteString(w, `{"ok":true,"token":"`+strings.Repeat("t", 43)+`","device_id":"aaaaaaaaaaaaaaaaaaaaaaaa"}`)
@@ -258,7 +258,7 @@ func TestProviderUpgradeFailurePreservesExecutableAndCredentials(t *testing.T) {
 	hash := fmt.Sprintf("%x", sha256.Sum256(old))
 	compatibleProviders[hash] = true
 	defer delete(compatibleProviders, hash)
-	target := filepath.Join(bin, "buzz-backend-hostinger-https.exe")
+	target := filepath.Join(bin, providerFilename)
 	os.WriteFile(target, old, 0755)
 	config := filepath.Join(dir, "connection.json")
 	credential := []byte(`{"credential":"do-not-change"}`)
@@ -296,7 +296,7 @@ func TestProviderUpgradeFailurePreservesExecutableAndCredentials(t *testing.T) {
 
 func TestNonRegularProviderTargetPreserved(t *testing.T) {
 	home := t.TempDir()
-	target := filepath.Join(home, ".local", "bin", "buzz-backend-hostinger-https.exe")
+	target := filepath.Join(home, ".local", "bin", providerFilename)
 	if err := os.MkdirAll(target, 0700); err != nil {
 		t.Fatal(err)
 	}

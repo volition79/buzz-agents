@@ -1,0 +1,181 @@
+{
+  "status": "active",
+  "importance_score": 850,
+  "importance_reason": "Privileged lifecycle and persistent data across mixed release and external restart",
+  "decision_context": {
+    "schema": "sonol.code-rationale-context.v1",
+    "authoring_environment": {
+      "os": "Linux WSL",
+      "provider": "Codex",
+      "execution_environment": "local repository"
+    },
+    "targets": [
+      {
+        "os": "linux",
+        "provider": "local test fixtures",
+        "execution_environment": "Python unittest",
+        "applicability": "affected",
+        "reason": "Local fixtures; native Mac and production acceptance pending"
+      }
+    ],
+    "conditions": [
+      {
+        "condition": "Existing owned installation with optional embedded release contract",
+        "relevance": "applies",
+        "reason": "Legacy immutable installs stay explicit; candidate not promoted"
+      }
+    ],
+    "boundaries": [
+      {
+        "path": "buzz_agents/connection_bundle.py",
+        "logical_owner": "connection_bundle",
+        "role": "helper",
+        "review": "Add opt-in Apple Silicon connection bundle while retaining Windows default, scoped one-use pairing and transactional credential preservation. Native Mac acceptance remains pending."
+      },
+      {
+        "path": "buzz_agents/portal.py",
+        "logical_owner": "portal",
+        "role": "helper",
+        "review": "Add opt-in Apple Silicon connection bundle while retaining Windows default, scoped one-use pairing and transactional credential preservation. Native Mac acceptance remains pending."
+      },
+      {
+        "path": "connect/main.go",
+        "logical_owner": "main",
+        "role": "helper",
+        "review": "Add opt-in Apple Silicon connection bundle while retaining Windows default, scoped one-use pairing and transactional credential preservation. Native Mac acceptance remains pending."
+      },
+      {
+        "path": "connect/platform_darwin_arm64.go",
+        "logical_owner": "platform_darwin_arm64",
+        "role": "helper",
+        "review": "Add opt-in Apple Silicon connection bundle while retaining Windows default, scoped one-use pairing and transactional credential preservation. Native Mac acceptance remains pending."
+      },
+      {
+        "path": "connect/platform_default.go",
+        "logical_owner": "platform_default",
+        "role": "helper",
+        "review": "Add opt-in Apple Silicon connection bundle while retaining Windows default, scoped one-use pairing and transactional credential preservation. Native Mac acceptance remains pending."
+      },
+      {
+        "path": "scripts/build-portal.py",
+        "logical_owner": "build-portal",
+        "role": "helper",
+        "review": "Add opt-in Apple Silicon connection bundle while retaining Windows default, scoped one-use pairing and transactional credential preservation. Native Mac acceptance remains pending."
+      },
+      {
+        "path": "buzz_agents/web/app.js",
+        "logical_owner": "app",
+        "role": "helper",
+        "review": "Add opt-in Apple Silicon connection bundle while retaining Windows default, scoped one-use pairing and transactional credential preservation. Native Mac acceptance remains pending."
+      }
+    ],
+    "verification": [
+      {
+        "assertion_id": "mac-connect-01",
+        "test_reference": "tests/test_portal.py",
+        "environment": {
+          "os": "linux",
+          "provider": "local test fixtures",
+          "execution_environment": "Python unittest"
+        },
+        "status": "passed",
+        "evidence_kind": "fixture",
+        "evidence": [
+          "docs/MAC-CONNECT-VERIFICATION.md"
+        ]
+      }
+    ]
+  },
+  "id": "MAC-CONNECT-01",
+  "reason": "Add opt-in Apple Silicon connection bundle while retaining Windows default, scoped one-use pairing and transactional credential preservation. Native Mac acceptance remains pending.",
+  "evidence_level": "documented",
+  "evidence": [
+    "docs/MAC-CONNECT.md",
+    "tests/test_portal.py",
+    "tests/test_connection_bundle.py",
+    "connect/main_test.go"
+  ],
+  "invariants": [
+    "Existing Windows credentials and bot identities persist",
+    "No automatic bot update for management_only true",
+    "Native macOS and live deployment are not verified"
+  ],
+  "anchors": [
+    {
+      "path": "buzz_agents/connection_bundle.py",
+      "start_line": 1,
+      "end_line": 30,
+      "module": "connection_bundle",
+      "role": "helper",
+      "code": "\"\"\"Desktop bundles only: no broker RPC, bot mutation or credential migration.\"\"\"\nimport io\nimport json\nfrom pathlib import Path\nimport zipfile\n\nfrom .common import ToolError\n\n# Never derive a filesystem path from client input. Old callers select Windows.\nTARGETS = {\n    'windows-amd64': ('Buzz-VPS-Connect.exe', 'Buzz-Windows-Connect.zip'),\n    'macos-arm64': ('macos/Buzz-VPS-Connect-macos-arm64', 'Buzz-Mac-AppleSilicon-Connect.zip'),\n}\nMAC_LAUNCHER = '''#!/bin/sh\nset -eu\ncd -- \"$(dirname -- \"$0\")\"\nexec ./Buzz-VPS-Connect\n'''\n\n\ndef target(value):\n    if not isinstance(value, str) or value not in TARGETS:\n        raise ToolError('unsupported_connection_platform')\n    return TARGETS[value]\n\n\ndef available(artifacts):\n    return [name for name, (path, _) in TARGETS.items()\n            if (Path(artifacts) / path).is_file()]\n\n",
+      "code_sha256": "4b265f8460ced01e26a5714c01b9e89d727a4060c082b85f0df759317e302873",
+      "file_sha256": "e36f1de48bb303e8b2e04bb585ec506d81f54b0b25e5ab9e822ff4d02f0e73df"
+    },
+    {
+      "path": "buzz_agents/portal.py",
+      "start_line": 1,
+      "end_line": 30,
+      "module": "portal",
+      "role": "helper",
+      "code": "\"\"\"HTTPS-terminated first-run portal. No Docker socket, root password or human nsec.\n\nBrowser administrator and desktop deploy credentials are distinct. Only the\nadministrator can see interactive official-login output or configure schedules.\n\"\"\"\nfrom collections import deque\nimport hashlib\nimport hmac\nfrom http.cookies import SimpleCookie\nfrom http.server import BaseHTTPRequestHandler, ThreadingHTTPServer\nimport json\nimport os\nfrom pathlib import Path\nimport re\nimport secrets\nimport socket\nimport threading\nimport time\nfrom urllib.parse import urlsplit\nfrom . import connection_bundle\nfrom .common import ToolError\nfrom .policy import atomic_json, read_json\n\nLIMIT = 512 * 1024\nTOKEN = re.compile(r'[a-zA-Z0-9_-]{32,100}\\Z')\nWEB = Path(__file__).with_name('web')\n\n\ndef digest(value):\n    return hashlib.sha256(value.encode()).hexdigest()\n",
+      "code_sha256": "6012c7c691c4f2b76e223eadb8869b7ab6a95475e88c70470718d1bc781a3e92",
+      "file_sha256": "dfdedfe0e8926e93e651aa725ee8cd905ce63f867feaa4a7b26a3db166ab834a"
+    },
+    {
+      "path": "connect/main.go",
+      "start_line": 1,
+      "end_line": 30,
+      "module": "main",
+      "role": "helper",
+      "code": "// Installs a scoped HTTPS backend from a one-use pairing bundle. Never SSHs.\npackage main\n\nimport (\n\t\"bufio\"\n\t\"bytes\"\n\t\"crypto/sha256\"\n\t\"encoding/json\"\n\t\"errors\"\n\t\"fmt\"\n\t\"io\"\n\t\"net/http\"\n\t\"net/url\"\n\t\"os\"\n\t\"os/exec\"\n\t\"os/user\"\n\t\"path/filepath\"\n\t\"regexp\"\n\t\"runtime\"\n\t\"strings\"\n\t\"time\"\n)\n\ntype Pairing struct {\n\tSchema   int    `json:\"schema\"`\n\tEndpoint string `json:\"endpoint\"`\n\tCode     string `json:\"pairing_code\"`\n}\ntype Connection struct {\n\tEndpoint string `json:\"endpoint\"`\n",
+      "code_sha256": "a8c8c3654673fbfc4da9566b56d462d5aafa346469f4bbe7a96ba6fd3c576f06",
+      "file_sha256": "026929240d994c26d5f9796740189ef2fc5926f872b284ff39223152f7d15328"
+    },
+    {
+      "path": "connect/platform_darwin_arm64.go",
+      "start_line": 1,
+      "end_line": 17,
+      "module": "platform_darwin_arm64",
+      "role": "helper",
+      "code": "//go:build darwin && arm64\n\npackage main\n\nimport _ \"embed\"\n\n//go:embed assets/buzz-backend-hostinger-https-macos-arm64\nvar provider []byte\n\n//go:embed provider-history-macos-arm64.json\nvar providerHistory []byte\n\nconst providerFilename = \"buzz-backend-hostinger-https\"\nconst desktopName = \"Mac\"\n\n// First release has no approved predecessors. Unknown bytes remain rejected.\nconst requireProviderHistory = false\n",
+      "code_sha256": "aec04c160228f28fba984f18ffc9c901eada8adaa18bf22000a023ec40622f8f",
+      "file_sha256": "aec04c160228f28fba984f18ffc9c901eada8adaa18bf22000a023ec40622f8f"
+    },
+    {
+      "path": "connect/platform_default.go",
+      "start_line": 1,
+      "end_line": 15,
+      "module": "platform_default",
+      "role": "helper",
+      "code": "//go:build !darwin\n\npackage main\n\nimport _ \"embed\"\n\n//go:embed assets/buzz-backend-hostinger-https.exe\nvar provider []byte\n\n//go:embed provider-history.json\nvar providerHistory []byte\n\nconst providerFilename = \"buzz-backend-hostinger-https.exe\"\nconst desktopName = \"Windows\"\nconst requireProviderHistory = true\n",
+      "code_sha256": "de5f736ab2631e8aca9fad88f221d456dc461d0a02dcdae17b02910bdd992794",
+      "file_sha256": "de5f736ab2631e8aca9fad88f221d456dc461d0a02dcdae17b02910bdd992794"
+    },
+    {
+      "path": "scripts/build-portal.py",
+      "start_line": 1,
+      "end_line": 30,
+      "module": "build-portal",
+      "role": "helper",
+      "code": "\"\"\"Local candidate packaging. Does not upload, publish, deploy, or embed credentials.\"\"\"\nimport argparse\nimport hashlib\nimport json\nimport os\nfrom pathlib import Path\nimport shutil\nimport subprocess\nimport zipfile\n\nROOT = Path(__file__).resolve().parents[1]\n\n\ndef main():\n    parser = argparse.ArgumentParser()\n    parser.add_argument('--with-macos', action='store_true',\n                        help='Build unsigned Apple Silicon candidates; not native acceptance or publication')\n    args = parser.parse_args()\n    output = Path(os.environ.get('BUZZ_BUILD_OUTPUT', str(ROOT / 'dist/portal-v0.4')))\n    output.mkdir(parents=True, exist_ok=True)\n    assets = ROOT / 'connect/assets'\n    assets.mkdir(parents=True, exist_ok=True)\n    mac_assets = assets / 'macos'\n    mac_assets.mkdir(exist_ok=True)\n    (mac_assets / '.keep').write_text('Candidate assets only. No personal pairing codes.\\n')\n    # Default publication cannot accidentally include a previous Mac candidate.\n    mac_connector = mac_assets / 'Buzz-VPS-Connect-macos-arm64'\n    if not args.with_macos:\n        mac_connector.unlink(missing_ok=True)\n        for name in ('Buzz-VPS-Connect-macos-arm64', 'buzz-backend-hostinger-https-macos-arm64'):\n",
+      "code_sha256": "7d2b142c331012be26073bb0cc625c91815f6181046645b7fb6ab91f3b9d1c35",
+      "file_sha256": "2e412a8532598cb2260bec15a84f9a109598489423dbe0fa0e6cc2e42b9a68ee"
+    },
+    {
+      "path": "buzz_agents/web/app.js",
+      "start_line": 1,
+      "end_line": 30,
+      "module": "app",
+      "role": "helper",
+      "code": "'use strict';\nconst {t} = window.BuzzI18n;\nwindow.BuzzI18n.translatePage();\nconst $ = id => document.getElementById(id);\nlet configured = false, authSession = null, pollBusy = false, tick = 0;\nlet reauthBusy = false, showReauthResult = true;\nlet updatePlan = null, updateBusy = false;\nlet pendingPairing = null, knownDevices = new Set();\nlet requestQueue = Promise.resolve(), initializing = false;\nfunction queuedRequest(fn) {\n  const result=requestQueue.then(fn);requestQueue=result.catch(()=>{});return result;\n}\nconst errors = {\n  invalid_memory: t('RAM 값이 올바르지 않습니다.'),\n  aggregate_memory_budget_exceeded: t('다른 봇과 서버에 필요한 RAM을 제외하면 용량이 부족합니다. 더 작은 값을 선택하세요.'),\n  memory_apply_recovery_required: t('이전 RAM 적용을 확인해야 합니다. 업데이트·다시 시작으로 재시도하세요.'),\n  memory_change_pending: t('저장된 RAM 변경이 있습니다. 이 봇의 업데이트·다시 시작을 눌러 적용하세요.'),\n  deployment_memory_limit_mismatch: t('실제 RAM 한도가 저장한 값과 다릅니다. 업데이트·다시 시작으로 재시도하세요.'),\n  unsafe_memory_settings: t('저장된 RAM 설정을 확인할 수 없습니다. 설정 파일을 임의로 수정하지 마세요.'),\n  invalid_memory_settings: t('저장된 RAM 설정을 확인할 수 없습니다. 설정 파일을 임의로 수정하지 마세요.'),\n  bot_update_busy: t('다른 업데이트나 배포가 진행 중입니다. 완료 후 다시 시도하세요.'),\n  bot_update_preview_changed: t('봇 설정이 변경되었습니다. 업데이트 창을 닫고 다시 열어 확인하세요.'),\n  bot_reauthentication_pending: t('이 봇은 재로그인을 기다리고 있습니다. 재로그인 버튼으로 다시 시도하세요.'),\n  reauth_runtime_update_required: t('먼저 이 봇의 업데이트·다시 시작을 눌러 최신 실행 버전을 적용한 뒤 재로그인하세요.'),\n  reauth_interrupted: t('관리 서비스가 재시작되었습니다. 재로그인을 다시 눌러 안전하게 처음부터 시도하세요.'),\n  reauth_failed: t('재로그인을 준비하지 못했습니다. 봇을 삭제하지 말고 상태와 로그를 확인한 뒤 다시 시도하세요.'),\n  reauth_login_incomplete: t('로그인이 완료되지 않았습니다. 봇은 대기 상태로 유지됩니다. 재로그인을 다시 시도하세요.'),\n  reauth_stop_unconfirmed: t('봇 종료를 확인하지 못해 로그인을 시작하지 않았습니다. 상태와 로그를 확인하세요.'),\n  reauth_cleanup_unconfirmed: t('이전 프로세스 정리를 확인하지 못해 로그인을 시작하지 않았습니다. 다시 시도하세요.'),\n  reauth_start_unconfirmed: t('로그인 대기 컨테이너를 시작하지 못했습니다. 재로그인을 다시 시도하세요.'),\n",
+      "code_sha256": "4cfb2575ef3d84b26d83fb9e7461dc6d3a4e75a884737709876d083c2670ac6d",
+      "file_sha256": "9de9056cbb2c9492e0043d7c08ef50c4854e1f938b6f793a160039e8e2b37ee5"
+    }
+  ],
+  "schema": "sonol.code-rationale.v1",
+  "source": {
+    "commit": "8de6b0e72277a62adb8103bf3fc7497736a9c3aa",
+    "dirty": true
+  },
+  "assessment_status": "assessed"
+}
