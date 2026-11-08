@@ -19,7 +19,7 @@ jobs:
         run: |
           python3 scripts/build-portal.py --with-macos
           python3 scripts/verify-mac-candidate.py dist/portal-v0.4
-          PYTHONPATH=.:tests python3 -m unittest test_portal test_release_update test_connection_bundle test_provider_history test_portal_release -v
+          sudo env PYTHONPATH=.:tests python3 -m unittest test_portal test_release_update test_connection_bundle test_provider_history test_portal_release -v
           (cd connect && go test -race ./...)
           (cd web-provider && go test -race ./...)
       - name: Build actual Docker context and inspect embedded Mac bytes
@@ -54,3 +54,20 @@ jobs:
         run: |
           echo 'Candidate image build only. No push of images, stable promotion, VPS update or manual publication.' >> "$GITHUB_STEP_SUMMARY"
           echo 'Native Mac Finder/Gatekeeper/Buzz, actual update/rollback and live acceptance remain required.' >> "$GITHUB_STEP_SUMMARY"
+  native-mac:
+    runs-on: macos-15
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff
+        with:
+          go-version: '1.26.5'
+          cache: false
+      - name: Execute connector tests on Apple Silicon
+        run: |
+          test "$(uname -m)" = arm64
+          python3 scripts/build-portal.py --with-macos
+          python3 scripts/verify-mac-candidate.py dist/portal-v0.4
+          (cd connect && go test -race -v ./... && go vet ./...)
+          (cd web-provider && go test -race -v ./... && go vet ./...)
+          echo 'Native macOS test fixtures passed. Browser quarantine, Finder launch, official Buzz and real VPS acceptance are NOT covered.' >> "$GITHUB_STEP_SUMMARY"
